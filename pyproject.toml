@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "factorlab"
+version = "0.1.0"
+description = "python library which enables the transformation of raw data into informative alpha and risk factors used in the investment algorithm development process"
+authors = ["Systamental"]
+license = "Apache License 2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
