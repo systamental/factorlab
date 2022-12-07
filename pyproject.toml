@@ -7,7 +7,14 @@ license = "Apache License 2.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9"
+numpy = ">=1.23.3"
+pandas = ">=1.5.0"
+matplotlib = ">=3.6.0"
+scipy = {version = "^1.9.1", python = ">=3.9, <3.12"}
+sklearn = "^0.0"
+statsmodels = "^0.13.2"
+seaborn = "^0.12.1"
 
 [tool.poetry.dev-dependencies]
 
