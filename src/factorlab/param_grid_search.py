@@ -8,8 +8,8 @@ import seaborn as sns
 from PIL import Image
 from importlib import resources
 
-from factor_analysis import Factor
-from performance import Performance
+from factorlab.factor_analysis import Factor
+from factorlab.performance import Performance
 
 
 def feat_partial(feature: Callable,
@@ -388,9 +388,8 @@ def param_heatmap(
     fig, ax = plt.subplots(figsize=(param_matrix.shape[0] * 5, param_matrix.shape[1] * 5))
     sns.set(font_scale=min(param_matrix.shape[0], param_matrix.shape[1]) / 3)
     # plot heatmap
-    heatmap = sns.heatmap(param_matrix, cmap="vlag_r", center=0, cbar=False, annot=True,
-                          annot_kws={"fontsize": min(param_matrix.shape[0], param_matrix.shape[1]) * 5},
-                          square=True)
+    sns.heatmap(param_matrix, cmap="vlag_r", center=0, cbar=False, annot=True,
+                annot_kws={"fontsize": min(param_matrix.shape[0], param_matrix.shape[1]) * 5}, square=True)
 
     # add systamental logo
     with resources.path("factorlab", "systamental_logo.png") as f:

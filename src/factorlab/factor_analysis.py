@@ -7,8 +7,8 @@ from typing import Optional, Union
 from scipy.stats import chi2_contingency, spearmanr, kendalltau, contingency
 from sklearn.feature_selection import mutual_info_classif
 
-from time_series_analysis import linear_reg, fm_summary
-from transform import Transform
+from factorlab.time_series_analysis import linear_reg, fm_summary
+from factorlab.transform import Transform
 
 
 class Factor:
@@ -351,7 +351,8 @@ class Factor:
             Information coefficient between factor and forward returns over time.
         """
         # create df
-        df = pd.concat([self.factors[factor].groupby('ticker').shift(1), self.ret.to_frame('ret')], join='inner', axis=1)
+        df = pd.concat([self.factors[factor].groupby('ticker').shift(1), self.ret.to_frame('ret')], join='inner',
+                       axis=1)
         df = df.unstack().dropna(thresh=10).stack()  # set time series min nobs thresh
 
         def spearman_r(data):
@@ -1000,8 +1001,6 @@ class Factor:
 
         Parameters
         ----------
-        factors: DataFrame - MultiIndex
-            DataFrame with DatetimeIndex (level 0), tickers index (level 1) and factor values (columns).
         method: str, {'sign', 'stdev', 'skew', 'range'}
             Method used to compute factor dispersion.
 
@@ -1010,6 +1009,7 @@ class Factor:
         disp: Series
             Series with DatetimeIndex and dispersion measure.
         """
+        disp = None
         if method == 'sign':
             pos, neg = np.sign(self.factors[self.factors > 0]).groupby(level=0).sum(), abs(
                 np.sign(self.factors[self.factors < 0]).groupby(level=0).sum())

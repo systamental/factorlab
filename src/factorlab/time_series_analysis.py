@@ -4,9 +4,7 @@ from typing import Optional, Union, Any
 from statsmodels.tsa.tsatools import add_trend
 from statsmodels.api import OLS, RecursiveLS
 from statsmodels.regression.rolling import RollingOLS
-from statsmodels.tools.tools import add_constant
 from statsmodels.tsa.stattools import adfuller, grangercausalitytests
-
 
 
 def linear_reg(target: Union[pd.Series, pd.DataFrame],
@@ -147,6 +145,7 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
             return
 
     return out
+
 
 def granger_causality(
         target: pd.Series,
@@ -307,10 +306,11 @@ def ols_betas(data):
 
     return betas
 
+
 def fm_reg(returns: Union[pd.Series, pd.DataFrame],
            factors: Union[pd.Series, pd.DataFrame],
-           nobs: int = 5,
-          ) -> pd.DataFrame:
+           nobs: int = 5
+           ) -> pd.DataFrame:
     """
     Runs cross-sectional Fama Macbeth regressions for each time period to compute factor/characteristic betas.
 
@@ -347,7 +347,7 @@ def fm_reg(returns: Union[pd.Series, pd.DataFrame],
 def fm_summary(returns: Union[pd.Series, pd.DataFrame],
                factors: Union[pd.Series, pd.DataFrame],
                nobs: int = 5
-              ) -> pd.DataFrame:
+               ) -> pd.DataFrame:
     """
     Computes test statistics for betas from Fama Macbeth cross sectional regressions.
 
