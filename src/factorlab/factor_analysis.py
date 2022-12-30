@@ -1,18 +1,14 @@
 import pandas as pd
 import numpy as np
-from functools import partial
-from itertools import product
-from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
 from PIL import Image
-from typing import Optional, Union, Callable, Dict, Iterable, Any
+from importlib import resources
+from typing import Optional, Union
 from scipy.stats import chi2_contingency, spearmanr, kendalltau, contingency
 from sklearn.feature_selection import mutual_info_classif
 
-
 from time_series_analysis import linear_reg, fm_summary
 from transform import Transform
-from performance import Performance
 
 
 class Factor:
@@ -21,7 +17,7 @@ class Factor:
     """
     def __init__(self,
                  factors: pd.DataFrame,
-                 fwd_ret: pd.Series,
+                 ret: pd.Series,
                  strategy: str = 'ts_ls',
                  factor_bins: int = 5,
                  target_bins: int = 2,
@@ -35,8 +31,8 @@ class Factor:
         ----------
         factors: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
-        fwd_ret: pd.Series or pd.DataFrame - Single or MultiIndex
-            Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and forward returns (cols).
+        ret: pd.Series or pd.DataFrame - Single or MultiIndex
+            Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
         strategy: str, {'ts_ls' 'ts_l', 'cs_ls', 'cs_l', default 'ts_ls'
             Time series or cross-sectional strategy, long/short or long-only.
         factor_bins: int, default 5
@@ -49,7 +45,7 @@ class Factor:
             Minimal number of observations to include in moving window (rolling or expanding).
         """
         self.factors = factors.astype(float)
-        self.fwd_ret = fwd_ret.astype(float)
+        self.ret = ret.astype(float)
         self.strategy = strategy
         self.factor_bins = factor_bins
         self.target_bins = target_bins
@@ -126,6 +122,10 @@ class Factor:
         quantiles: pd.Series or pd.DataFrame - MultiIndex
             Dataframe with DatetimeIndex (level 0), tickers (level 1) and quantiles (cols).
         """
+        # convert to df
+        if isinstance(df, pd.Series):
+            df = df.to_frame()
+
         # quantize features and fwd ret
         if self.strategy[:2] == 'ts':
             quantiles = Transform(df).quantize_ts(bins=bins, window_type=self.window_type, lookback=self.window_size)
@@ -247,13 +247,14 @@ class Factor:
 
         return signal_quantiles
 
-    def compute_stats(self,
-                      cs_norm: bool = False,
-                      metrics: str = 'all',
-                      rank_on: Optional[str] = 'spearman_r'
-                      ) -> pd.DataFrame:
+    def filter(
+            self,
+            cs_norm: bool = False,
+            metrics: Union[str, list] = 'all',
+            rank_on: Optional[str] = 'spearman_r'
+    ) -> pd.DataFrame:
         """
-        Computes measures of correlation and association.
+        Computes measures of dependence for factor/target pairs.
 
         The information coefficient (IC) is often used to assess the predictive power of a factor.
         It measures the degree of correlation between factor quantiles and forward returns. The higher (lower) the IC,
@@ -279,59 +280,53 @@ class Factor:
         metrics_df: pd.DataFrame
             Dataframe with factors (rows) and stats (cols), ranked by metric.
         """
-        # get factors, fwd ret and quantiles
-        df = pd.concat([self.factors, self.fwd_ret], join='inner', axis=1)
         # quantize factors and fwd ret
         factor_quantiles = self.quantize(self.factors, bins=self.factor_bins, cs_norm=cs_norm)
-        target_quantiles = self.quantize(self.fwd_ret, bins=self.target_bins)
+        target_quantiles = self.quantize(self.ret, bins=self.target_bins, cs_norm=cs_norm)
         # merge
-        quantiles_df = pd.concat([factor_quantiles, target_quantiles], axis=1, join='inner')
-
-        # keep same length array by finding index intersection
-        df.dropna(inplace=True), quantiles_df.dropna(inplace=True)
-        idx = df.index.intersection(quantiles_df.index)
-        df, quantiles_df = df.loc[idx, :], quantiles_df.loc[idx, :]
+        quantiles_df = pd.concat([factor_quantiles.groupby('ticker').shift(1), target_quantiles], axis=1, join='inner')
 
         # create empty df for correlation measures
         metrics_df = pd.DataFrame(index=self.factors.columns)
         # metrics list
-        metrics_list = ['spearman_r', 'p-val',  'autocorrelation', 'kendall_tau', 'cramer_v', 'tschuprow', 'pearson_cc',
-                        'chi2', 'mutual_info']
+        metrics_list = ['spearman_r', 'p-val', 'cramer_v', 'chi2', 'mutual_info', 'kendall_tau', 'tschuprow',
+                        'pearson_cc', 'autocorrelation']
         if metrics == 'all':
             metrics = metrics_list
 
         # loop through factors
         for col in self.factors.columns:
+            data = pd.concat([quantiles_df[col], quantiles_df.iloc[:, -1]], axis=1, join='inner').dropna()
             # add metrics
             if 'spearman_r' in metrics:
-                metrics_df.loc[col, 'spearman_r'] = spearmanr(df[col], df.iloc[:, -1])[0]
+                metrics_df.loc[col, 'spearman_r'] = spearmanr(data[col], data.iloc[:, -1])[0]
             if 'p-val' in metrics:
-                metrics_df.loc[col, 'p-val'] = spearmanr(df[col], df.iloc[:, -1])[1]
+                metrics_df.loc[col, 'p-val'] = spearmanr(data[col], data.iloc[:, -1])[1]
             if 'kendall_tau' in metrics:
-                metrics_df.loc[col, 'kendall_tau'] = kendalltau(quantiles_df[col], df.iloc[:, -1])[0]
+                metrics_df.loc[col, 'kendall_tau'] = kendalltau(data[col], data.iloc[:, -1])[0]
             if 'cramer_v' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(quantiles_df[col], quantiles_df.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
                 metrics_df.loc[col, 'cramer_v'] = contingency.association(cont_table, method='cramer')
             if 'tschuprow_t' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(quantiles_df[col], quantiles_df.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
                 metrics_df.loc[col, 'tschuprow_t'] = contingency.association(cont_table, method='tschuprow')
             if 'pearson_cc' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(quantiles_df[col], quantiles_df.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
                 metrics_df.loc[col, 'pearson_cc'] = contingency.association(cont_table, method='pearson')
             if 'chi2' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(quantiles_df[col], quantiles_df.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
                 metrics_df.loc[col, 'chi2'] = chi2_contingency(cont_table)[0]
             if 'mutual_info' in metrics:
-                metrics_df.loc[col, 'mutual_info'] = mutual_info_classif(quantiles_df[[col]], quantiles_df.iloc[:, -1])
+                metrics_df.loc[col, 'mutual_info'] = mutual_info_classif(data[[col]], data.iloc[:, -1])
             if 'autocorrelation' in metrics:
-                idx = df.groupby(level=1, group_keys=False).shift(1).dropna().index
-                metrics_df.loc[col, 'autocorrelation'] = spearmanr(df[col].reindex(idx),
-                                                                   df.groupby(level=1, group_keys=False).shift(1).
-                                                                   dropna()[col])[0]
+                idx = self.factors.groupby(level=1, group_keys=False).shift(1).index
+                metrics_df.loc[col, 'autocorrelation'] = spearmanr(self.factors[col].reindex(idx),
+                                                                   self.factors.groupby(level=1, group_keys=False).
+                                                                   shift(1)[col], nan_policy='omit')[0]
 
         # sort by IC and round values to 2 decimals
         if rank_on is not None:
@@ -339,22 +334,29 @@ class Factor:
 
         return metrics_df
 
-    def ic(self):
+    def ic(self,
+           factor: str,
+           ):
         """
-        Computes the Information Coefficient (IC) for factors and forward returns over time.
+        Computes the Information Coefficient (IC) for factor and forward returns over time.
+
+        Parameters
+        ----------
+        factor: str
+            Name of factor (column) for which compute IC.
 
         Returns
         -------
         ic : pd.DataFrame
             Information coefficient between factor and forward returns over time.
         """
-        df = pd.concat([self.factors, self.fwd_ret], join='inner', axis=1)
-        # keep same length array by finding index intersection
-        df.dropna(inplace=True)
+        # create df
+        df = pd.concat([self.factors[factor].groupby('ticker').shift(1), self.ret.to_frame('ret')], join='inner', axis=1)
+        df = df.unstack().dropna(thresh=10).stack()  # set time series min nobs thresh
 
         def spearman_r(data):
-            f = data['fwd_ret']
-            stat = data.apply(lambda x: spearmanr(x, f)[0])
+            f = data['ret']
+            stat = data.apply(lambda x: spearmanr(x, f, nan_policy='omit')[0])
             return stat
 
         # cs strategy
@@ -374,6 +376,7 @@ class Factor:
         return ic_df
 
     def plot_ic(self,
+                factor: str,
                 source: str = None,
                 colors: Optional[str] = None,
                 ):
@@ -382,12 +385,14 @@ class Factor:
 
         Parameters
         ----------
+        factor: str
+            Name of factor (column) for which to compute IC.
         source: str, default None
             Adds source info to bottom of plot.
         colors: str, {'colors_dark', 'colors_mid', 'colors_light'}, default None
             Color scheme to use.
         """
-        df = self.ic().dropna(how='all')
+        df = self.ic(factor=factor).dropna(how='all')
 
         # line plot in Systamental style
         # plot size
@@ -423,7 +428,9 @@ class Factor:
         ax.yaxis.tick_right()
 
         # add systamental logo
-        img = Image.open('systamental_logo.png')
+        with resources.path("factorlab", "systamental_logo.png") as f:
+            img_path = f
+        img = Image.open(img_path)
         plt.figimage(img, origin='upper')
 
         # Add in title and subtitle
@@ -439,17 +446,24 @@ class Factor:
                     alpha=.8, fontdict=None)
 
     def regression(self,
-                   factor: Optional[str] = None,
-                   method: str = 'pooled'
+                   method: str = 'pooled',
+                   multivariate: bool = False,
+                   norm: Optional[bool] = False,
+                   nobs: int = 10
                    ):
         """
+        Regression of forward returns on factors.
 
         Parameters
         ----------
-        factor: str, optional, default None
-            Name of factor to regress forward returns on. If none, regression on all factors.
         method: str, {'pooled', 'fama-macbeth'}, default 'pooled'
             Regression method.
+        multivariate: bool, default False
+            Runs a multivariate regression on all factors. Otherwise, runs univariate regressions on each factor.
+        norm: bool, optional, default False
+            Normalizes factors using z-score method before regressing on forward returns.
+        nobs: int, default 10
+            Minimum number of observations in the cross-section for Fama Macbeth regression.
 
         Returns
         -------
@@ -459,18 +473,47 @@ class Factor:
         # factors
         factors = self.factors
 
-        # factor
-        if factor is not None:
-            factors = self.factors[factor]
+        # convert to df
+        if isinstance(factors, pd.Series):
+            factors = factors.to_frame()
+
+        # normalization
+        if norm:
+            factors = Transform(self.factors).normalize_ts(centering=True, method='z-score',
+                                                           window_type=self.window_type, lookback=self.window_size)
 
         # pooled reg
         if method == 'pooled':
-            res = linear_reg(self.fwd_ret, factors, window_type='fixed', output='summary', cov_type='HAC',
-                             cov_kwds={'maxlags': 1})
-        else:
-            res = fm_summary(self.fwd_ret, factors)
+            if not multivariate:
+                # compute beta, t-stat and rsq for multiple factors
+                stats_df = pd.DataFrame(index=factors.columns, columns=['coef', 'pval', 'rsq'])
+                for col in factors.columns:
+                    for stat in ['coef', 'pval', 'rsq']:
+                        res = linear_reg(self.ret, factors[col], window_type='fixed', output=stat, cov_type='HAC',
+                                         cov_kwds={'maxlags': 1})
+                        if stat != 'rsq':
+                            stats_df.loc[col, stat] = res[0]
+                        else:
+                            stats_df.loc[col, stat] = res
 
-        return res
+                table = stats_df.sort_values(by='coef', ascending=False).rename(columns={'coef': 'beta'})
+
+            else:
+                table = linear_reg(self.ret, factors, window_type='fixed', output='summary', cov_type='HAC',
+                                   cov_kwds={'maxlags': 1})
+
+        else:  # Fama Macbeth
+            if not multivariate:
+                # compute beta, std error and t-stat
+                table = pd.DataFrame()
+                for col in factors.columns:
+                    res = fm_summary(self.ret, factors[col], nobs=nobs)
+                    table = pd.concat([table, res.loc[col].to_frame().T])
+                table = table.sort_values(by='beta', ascending=False)
+            else:
+                table = fm_summary(self.ret, factors, nobs=nobs)
+
+        return table.round(decimals=4)
 
     def compute_factors(self, signal_type: Optional[str] = None, centering: bool = True, norm_method: str = 'cdf',
                         cs_norm: bool = False, clip: int = 3, leverage: Optional[int] = None,
@@ -515,8 +558,8 @@ class Factor:
         factors: pd.DataFrame or pd.Series
             Series or dataframe with DatetimeIndex (level 0), tickers (level 1) and computed factors (cols).
         """
-        # make a copy of factors and drop NaNs
-        factors = self.factors.copy().dropna()
+        # make a copy of factors
+        factors = self.factors.copy()
 
         # raw factors, signal_type None
         if signal_type is None:
@@ -596,15 +639,15 @@ class Factor:
         """
         # std
         if method == 'ewm':
-            std_df = self.fwd_ret.groupby(level=1).ewm(self.window_size, min_periods=self.window_size).\
+            std_df = self.ret.groupby(level=1).ewm(self.window_size, min_periods=self.window_size).\
                 std().droplevel(0)
         else:
-            std_df = self.fwd_ret.groupby(level=1).rolling(self.window_size).std().droplevel(0)
+            std_df = self.ret.groupby(level=1).rolling(self.window_size).std().droplevel(0)
 
         # inv vol factor
         inv_vol_df = vol_target / (std_df * np.sqrt(ann_factor))
 
-        return inv_vol_df
+        return inv_vol_df.sort_index()
 
     @staticmethod
     def tcosts(factors: pd.DataFrame,
@@ -629,7 +672,7 @@ class Factor:
         if isinstance(factors, pd.Series):
             factors = factors.to_frame()
         # compute t-costs
-        tcost_df = abs(factors.groupby(level=1).diff()).groupby(level=0).mean() * t_cost
+        tcost_df = abs(factors.groupby(level=1).diff().shift(1)).groupby(level=0).mean() * t_cost
 
         return tcost_df
 
@@ -681,7 +724,7 @@ class Factor:
             Keeps only tail bins and ignores middle bins, 'two' for both tails, 'left' for left, 'right' for right
         t_cost: float, optional, default None
             Per transaction cost.
-        weighting: str, {'ew', 'vol'}, default 'ew'
+        weighting: str, {'ew', 'iv'}, default 'ew'
             Weights used to compute portfolio returns.
         vol_target: float, default 0.10
             Target annualized volatility.
@@ -698,21 +741,22 @@ class Factor:
                                        cs_norm=cs_norm, leverage=leverage, tails=tails, rebalancing=rebalancing)
 
         # compute weights
-        if weighting == 'vol':  # vol-adj weights
+        if weighting == 'iv':  # vol-adj weights
             inv_vol_df = self.compute_inv_vol_weights(vol_target=vol_target, ann_factor=ann_factor)  # inv vol weights
             # scale factors
             scaled_factors_df = pd.concat([factors, inv_vol_df], axis=1)
             factors = scaled_factors_df.iloc[:, :-1].mul(scaled_factors_df.iloc[:, -1], axis=0)
 
         # compute factor ret
-        df = pd.concat([factors, self.fwd_ret], axis=1)
+        df = pd.concat([factors.groupby('ticker').shift(1), self.ret], axis=1)
         ret_df = df.iloc[:, :-1].mul(df.iloc[:, -1], axis=0)
         ret_df = ret_df.groupby(level=0).mean()
 
         # compute net ret
-        tcost_df = self.tcosts(factors, t_cost=t_cost)  # t-costs
-        net_ret_df = ret_df.subtract(tcost_df, axis=0).dropna()
-        # make start 0
+        tcost_df = self.tcosts(factors.groupby('ticker').shift(1), t_cost=t_cost)  # t-costs
+        net_ret_df = ret_df.subtract(tcost_df, axis=0).dropna(how='all')
+        # replace NaNs with 0s
+        net_ret_df.fillna(0, inplace=True)
         net_ret_df.iloc[0] = 0
 
         return net_ret_df
@@ -766,6 +810,12 @@ class Factor:
             Rebalancing frequency.
         tails: str, {'two', 'left', 'right'}, optional, default None
             Keeps only tail bins and ignores middle bins, 'two' for both tails, 'left' for left, 'right' for right
+        weighting: str, {'ew', 'iv'}, default 'ew'
+            Weights used to compute portfolio returns.
+        vol_target: float, default 0.10
+            Target annualized volatility.
+        ann_factor: int, {12, 52, 252, 365}, default 365
+            Annualization factor.
         plot_tcosts: bool, default False
             Plots breakeven transaction costs, sorted by values.
         source: str, default None
@@ -784,21 +834,21 @@ class Factor:
             factors = factors.to_frame()
 
         # compute weights
-        if weighting == 'vol':  # vol-adj weights
+        if weighting == 'iv':  # vol-adj weights
             inv_vol_df = self.compute_inv_vol_weights(vol_target=vol_target, ann_factor=ann_factor)  # inv vol weights
             # scale factors
             scaled_factors_df = pd.concat([factors, inv_vol_df], axis=1)
             factors = scaled_factors_df.iloc[:, :-1].mul(scaled_factors_df.iloc[:, -1], axis=0)
 
         # gross factor ret
-        df = pd.concat([factors, self.fwd_ret], axis=1, join='inner')
+        df = pd.concat([factors.groupby(level=1).shift(1), self.ret], axis=1, join='inner')
         ret_df = df.iloc[:, :-1].mul(df.iloc[:, -1], axis=0).groupby(level=0).mean()
         cum_ret = ret_df.dropna().cumsum().iloc[-1]
 
         # compute turnover
-        turn = abs(factors.groupby(level=1).diff()).groupby(level=0).mean().dropna().cumsum().iloc[-1]
+        turn = abs(factors.groupby(level=1).diff().shift(1)).groupby(level=0).mean().dropna().cumsum().iloc[-1]
 
-        # breakeven transaction costs
+        # breakeven transaction costs, bps
         be_tcosts = (cum_ret / turn) * 10000
 
         # plot
@@ -826,7 +876,9 @@ class Factor:
             ax.yaxis.tick_right()
 
             # add systamental logo
-            img = Image.open('systamental_logo.png')
+            with resources.path("factorlab", "systamental_logo.png") as f:
+                img_path = f
+            img = Image.open(img_path)
             plt.figimage(img, origin='upper')
 
             # Add in title and subtitle
@@ -850,7 +902,6 @@ class Factor:
                       clip: int = 3,
                       cs_norm: bool = False,
                       plot_rets: bool = False,
-                      color: Optional[int] = 0,
                       source: Optional[str] = None
                       ):
         """
@@ -874,8 +925,6 @@ class Factor:
             Normalizes factors over the time series before quantization over the cross section.
         plot_rets: bool, default None
             Plots mean quantile forward returns by factor quantiles.
-        color: int, default 0
-            Number of color to use from colors list.
         source: str, default None
             Adds source info to bottom of plot.
         """
@@ -884,7 +933,7 @@ class Factor:
         # quantize signals
         quantiles = self.quantize(factors[[factor]], bins=self.factor_bins)
         # merge
-        quant_ret_df = pd.concat([quantiles, self.fwd_ret], axis=1, join='inner')
+        quant_ret_df = pd.concat([quantiles.groupby('ticker').shift(1), self.ret], axis=1, join='inner')
 
         # bins ret df
         bins_ret = quant_ret_df.groupby(factor).mean()
@@ -924,7 +973,9 @@ class Factor:
             ax.yaxis.tick_right()
 
             # add systamental logo
-            img = Image.open('systamental_logo.png')
+            with resources.path("factorlab", "systamental_logo.png") as f:
+                img_path = f
+            img = Image.open(img_path)
             plt.figimage(img, origin='upper')
 
             # Add in title and subtitle
@@ -933,8 +984,8 @@ class Factor:
             plt.rcParams['font.family'] = 'georgia'
             ax.text(x=0.13, y=.92, s="Forward Returns (mean) by Factor Quantile", transform=fig.transFigure, ha='left',
                     fontsize=14, weight='bold', alpha=.8, fontdict=None)
-            ax.text(x=0.13, y=.89, s=f"{strategy_name[self.strategy]}", transform=fig.transFigure, ha='left',
-                    fontsize=12, alpha=.8, fontdict=None)
+            ax.text(x=0.13, y=.89, s=f"{strategy_name[self.strategy]} - {factor}",
+                    transform=fig.transFigure, ha='left', fontsize=12, alpha=.8, fontdict=None)
 
             # Set source text
             if source is not None:
@@ -943,208 +994,31 @@ class Factor:
 
         return bins_ret
 
-    @staticmethod
-    def feat_partial(df, factor, **kwargs) -> Union[pd.Series, pd.DataFrame]:
+    def factor_dispersion(self, method: str = 'sign'):
+        """
+        Computes dispersion in the cross-section of factor values.
 
-        feat_partial = partial(factor, df, **kwargs)()
+        Parameters
+        ----------
+        factors: DataFrame - MultiIndex
+            DataFrame with DatetimeIndex (level 0), tickers index (level 1) and factor values (columns).
+        method: str, {'sign', 'stdev', 'skew', 'range'}
+            Method used to compute factor dispersion.
 
-        return feat_partial
+        Returns
+        -------
+        disp: Series
+            Series with DatetimeIndex and dispersion measure.
+        """
+        if method == 'sign':
+            pos, neg = np.sign(self.factors[self.factors > 0]).groupby(level=0).sum(), abs(
+                np.sign(self.factors[self.factors < 0]).groupby(level=0).sum())
+            disp = pos - neg
+        elif method == 'stdev':
+            disp = self.factors.groupby(level=0).std()
+        elif method == 'skew':
+            disp = self.factors.groupby(level=0).skew()
+        elif method == 'range':
+            disp = self.factors.groupby(level=0).max() - self.factors.groupby(level=0).min()
 
-    @staticmethod
-    def algo_partial(feat_part, algo, **kwargs) -> Union[pd.Series, pd.DataFrame]:
-
-        feat = getattr(feat_part, algo)(**kwargs)
-
-        return feat
-
-    def feat(self, df, factor, algo, feat_args, algo_args) -> Union[pd.Series, pd.DataFrame]:
-
-        feat_part = self.feat_partial(df, factor, **feat_args)
-        feat = self.algo_partial(feat_part, algo, **algo_args)
-
-        return feat
-
-    @staticmethod
-    def factor_partial(*args, **kwargs) -> Callable:
-
-        factor_partial = partial(Factor, *args)
-        factor = factor_partial(**kwargs)
-
-        return factor
-
-    @staticmethod
-    def ret_partial(factor_part, **kwargs) -> Union[pd.Series, pd.DataFrame]:
-
-        ret = getattr(factor_part, 'returns')(**kwargs)
-
-        return ret
-
-    def factor_ret_partial(self, factor_args, ret_args) -> Union[pd.Series, pd.DataFrame]:
-
-        factor_part = self.factor_partial(self.factors, self.fwd_ret, **factor_args)
-        ret = self.ret_partial(factor_part, **ret_args)
-
-        return ret
-
-    @staticmethod
-    def grid_parameters(parameters: dict[str, Iterable[Any]]) -> Iterable[dict[str, Any]]:
-
-        for params in product(*parameters.values()):
-            yield dict(zip(parameters.keys(), params))
-
-    def compute_metric(self, factor_param, ret_param, metric):
-
-        val = getattr(Performance(self.factor_ret_partial(factor_param, ret_param)), metric)()
-
-        return val
-
-    def factor_grid_search(self,
-                           df: pd.DataFrame,
-                           feature: Callable,
-                           algo: str,
-                           metric: str,
-                           feat_args: Dict[str, list],
-                           algo_args: Dict[str, list],
-                           strategy_args: Dict[str, Union[str, int, float, bool]],
-                           ret_args: Dict[str, Union[str, int, float, bool]],
-                           ):
-
-        # iterate through params and compute metrics
-        metrics = Parallel(n_jobs=8)(delayed(self.compute_metric)(strategy_args,
-                                                                  ret_args,
-                                                                  metric)
-                                     for feat_param in self.grid_parameters(feat_args) for algo_param in
-                                     self.grid_parameters(algo_args))
-
-        # convert vals to list
-        metrics = [i[0] for i in metrics]
-
-        # create param values
-        params = [(feat_param | algo_param) for feat_param in self.grid_parameters(feat_args) for algo_param in
-                  self.grid_parameters(algo_args)]
-        df = pd.DataFrame(params, metrics).reset_index().rename(columns={'index': metric})
-
-        return df
-
-    def strategy_grid_search(self,
-                             metric,
-                             factor_args: Dict[str, list],
-                             ret_args: Dict[str, list],
-                             ):
-
-        if not isinstance(self.factors, pd.Series):
-            raise TypeError("Factor must be a series for parameter grid search.")
-
-        metrics = Parallel(n_jobs=8)(delayed(self.compute_metric)(self.factors, self.fwd_ret, factor_param, ret_param,
-                                                                  metric) for factor_param in
-                                     self.grid_parameters(factor_args) for ret_param in self.grid_parameters(ret_args))
-        metrics = [i[0] for i in metrics]
-
-        params = [(factor_param | ret_param) for factor_param in self.grid_parameters(factor_args) for ret_param in
-                  self.grid_parameters(ret_args)]
-        df = pd.DataFrame(params, metrics).reset_index().rename(columns={'index': metric})
-
-        return df
-
-    def factor_dispersion(self):
-
-        pass
-
-#     def factor_dispersion(factors, method='sign'):
-#         """
-#         Computes dispersion in the cross-section of factor values.
-#
-#         Parameters
-#         ----------
-#
-#         factors: DataFrame - MultiIndex
-#             DataFrame with DatetimeIndex (level 0), tickers index (level 1) and factor values (columns).
-#         method: str, {'sign', 'stdev', 'skew', 'range'}
-#             Method used to compute factor dispersion.
-#
-#         Returns
-#         -------
-#         disp: Series
-#             Series with DatetimeIndex and dispersion measure.
-#
-#         """
-#
-#         if method == 'sign':
-#             pos, neg = np.sign(factors[factors > 0]).groupby(level=0).sum(), abs(
-#                 np.sign(factors[factors < 0]).groupby(level=0).sum())
-#             disp = pos / neg
-#         elif method == 'stdev':
-#             disp = factors.groupby(level=0).std()
-#         elif method == 'skew':
-#             disp = factors.groupby(level=0).skew()
-#         elif method == 'range':
-#             disp = factors.groupby(level=0).max() - factors.groupby(level=0).min()
-#
-#         return disp
-
-    def signal_decay(self):
-
-        pass
-
-    # def signal_decay(factor, returns, bins=3, fwd_ret=[1, 5, 10]):
-    #     """
-    #     Compares quantized factor signals across forward returns by varying the lookahead window. This allows us to assess
-    #     the signal's decay or half-life. Factor values are split into quantiles and the mean of forward returns is computed
-    #     for each quantile over the specified period/lookahead window.
-    #
-    #     Parameters
-    #     ----------
-    #     factors: Series or Dataframe
-    #         Series or DataFrame with DatetimeIndex and factors.
-    #     returns: Series
-    #         Target returns series.
-    #     bins: int, default 5
-    #         Number of desired quantiles/bins for discretization.
-    #     fwd_ret: list, default [1, 5, 10]
-    #         List of values for the lookahead window used to compute forward returns.
-    #
-    #     Returns
-    #     -------
-    #     bins_ret: DataFrame
-    #         DataFrame with mean forward returns grouped by quantile.
-    #     """
-    #
-    #     # convert to df if series
-    #     if isinstance(factor, pd.Series):
-    #         factor = factor.to_frame()
-    #
-    #     # convert to signal
-    #     signal = normalize(factor, method='percentile', window_type='expanding')
-    #     # create quantiles for mean return by quantile plot
-    #     factor_quantiles_df = (discretize(signal, bins=bins) + 1).astype(int)
-    #
-    #     # create df for forward ret
-    #     cum_ret = returns.cumsum()
-    #     fwd_ret_df = pd.DataFrame(index=returns.index, columns=([str(d) + 'd' for d in fwd_ret]))
-    #     for i in fwd_ret:
-    #         fwd_ret_df[str(i) + 'd'] = (cum_ret.shift(i * -1) - cum_ret) / i
-    #     fwd_ret_df = fwd_ret_df.merge(factor_quantiles_df, how='inner', left_index=True, right_index=True)
-    #
-    #     # compute IR for each bin
-    #     bins_ret = pd.DataFrame(index=range(1, bins + 1), columns=([str(d) + 'd' for d in fwd_ret]))
-    #     for col in fwd_ret_df.columns:
-    #         bins_ret[col] = fwd_ret_df[col].groupby(fwd_ret_df[factor.iloc[:, 0].name]).mean()
-    #     # name index quantile
-    #     bins_ret.index.name = 'quantile'
-    #     # add top vs bottom quantile bin in index
-    #     bins_ret.loc['top vs. bottom', :] = bins_ret.iloc[-1] - bins_ret.iloc[0]
-    #     # drop factor quantile col
-    #     bins_ret.drop(columns=[factor.iloc[:, 0].name], inplace=True)
-    #
-    #     # set plot style, font and colors
-    #     plt.style.use('seaborn')
-    #     plt.rcParams['font.family'] = 'serif'
-    #     colors_seaborn = ['#4C72B0', '#55A868', '#C44E52', '#8172B2', '#CCB974', '#64B5CD']
-    #
-    #     # plot the mean returns by quantile of the best performing factor
-    #     bins_ret.plot(kind='bar', color=colors_seaborn, figsize=(15, 7), legend=True, rot=0,
-    #                   ylabel='mean returns (gross) by factor quantile',
-    #                   title='{} Factor Signal Decay'.format(factor.iloc[:, 0].name));
-    #
-    #     return bins_ret
-    #
+        return disp

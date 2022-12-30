@@ -46,7 +46,9 @@ class Value:
 
     def nvt(self,
             nv: str = 'mkt_cap',
-            trans_val: str = 'tfr_val_usd'
+            trans_val: str = 'tfr_val_usd',
+            norm: bool = False,
+            norm_method: str = 'z-score',
             ) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes the network value to transactions value factor.
@@ -57,6 +59,10 @@ class Value:
             Name of the column to use for network value.
         trans_val: str
             Name of the column to use for transactions value/volume.
+        norm: bool, default True
+            Normalize factor over the time series.
+        norm_method: str, default 'z-score'
+            Method to use for normalization.
 
         Returns
         -------
@@ -97,16 +103,27 @@ class Value:
         else:
             # fit linear regression
             if isinstance(df.index, pd.MultiIndex):  # multiindex
-                resid = df.groupby(level=1, group_keys=False).apply(
+                nvt = df.groupby(level=1, group_keys=False).apply(
                     lambda x: linear_reg(x[nv], x[trans_val], window_type=self.window_type, output='resid', log=False,
                                          trend='c', lookback=self.window_size)) * -1
             else:  # single index
-                resid = linear_reg(df[nv], df[trans_val], window_type=self.window_type, output='resid', log=False,
-                                   trend='c', lookback=self.window_size) * -1
+                nvt = linear_reg(df[nv], df[trans_val], window_type=self.window_type, output='resid', log=False,
+                                 trend='c', lookback=self.window_size) * -1
 
-            # z-score residual
-            nvt = Transform(resid).normalize_ts(method='z-score', window_type=self.window_type).\
-                rename(columns={'resid': 'nvt_resid_' + str(self.window_size)})
+        # normalize
+        if norm:
+            nvt = Transform(nvt).normalize_ts(method=norm_method, window_type=self.window_type)
+            # rename
+            if self.method == 'ratio':
+                nvt.columns = ['nvt_ratio_z_' + str(self.window_size)]
+            else:
+                nvt.columns = ['nvt_resid_z_' + str(self.window_size)]
+        else:
+            # rename
+            if self.method == 'ratio':
+                nvt.columns = ['nvt_ratio_' + str(self.window_size)]
+            else:
+                nvt.columns = ['nvt_resid_' + str(self.window_size)]
 
         return nvt
 
@@ -114,6 +131,8 @@ class Value:
             nv: str = 'mkt_cap',
             act_users: str = 'add_act',
             law: Optional[str] = 'Metcalfe',
+            norm: bool = False,
+            norm_method: str = 'z-score',
             ) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes the network value to Metcalfe value factor.
@@ -126,6 +145,10 @@ class Value:
             Name of the column to use as a proxy for active users.
         law: str, {'Metcalfe', 'Zipf', 'Metcalfe_gen, 'Metcalfe_sqrt', 'Sardoff'}, default 'Metcalfe'
             Law to use for network growth function. Defaults to Sardoff, or active users (n).
+        norm: bool, default True
+            Normalize factor over the time series.
+        norm_method: str, default 'z-score'
+            Method to use for normalization.
 
         Returns
         -------
@@ -182,26 +205,35 @@ class Value:
         else:
             # fit linear regression
             if isinstance(df.index, pd.MultiIndex):  # multiindex
-                resid = df.groupby(level=1, group_keys=False).apply(
+                nvm = df.groupby(level=1, group_keys=False).apply(
                     lambda x: linear_reg(x[nv], x[act_users], window_type=self.window_type, output='resid', log=False,
                                          trend='c', lookback=self.window_size)) * -1
             else:  # single index
-                resid = linear_reg(df[nv], df[act_users], window_type=self.window_type, output='resid', log=False,
-                                   trend='c', lookback=self.window_size) * -1
+                nvm = linear_reg(df[nv], df[act_users], window_type=self.window_type, output='resid', log=False,
+                                 trend='c', lookback=self.window_size) * -1
 
-            # z-score residual
-            if self.smoothing is not None:
-                nvm = Transform(resid).normalize_ts(method='z-score', window_type=self.window_type). \
-                    rename(columns={'resid': 'nvm_resid_' + str(self.window_size)})
+        # normalize
+        if norm:
+            nvm = Transform(nvm).normalize_ts(method=norm_method, window_type=self.window_type)
+            # rename
+            if self.method == 'ratio':
+                nvm.columns = ['nvm_ratio_z_' + str(self.window_size)]
             else:
-                nvm = Transform(resid).normalize_ts(method='z-score', window_type=self.window_type). \
-                    rename(columns={'resid': 'nvm_resid'})
+                nvm.columns = ['nvm_resid_z_' + str(self.window_size)]
+        else:
+            # rename
+            if self.method == 'ratio':
+                nvm.columns = ['nvm_ratio_' + str(self.window_size)]
+            else:
+                nvm.columns = ['nvm_resid_' + str(self.window_size)]
 
         return nvm
 
     def nvsf(self,
              nv: str = 'mkt_cap',
-             supply: str = 'supply_circ'
+             supply: str = 'supply_circ',
+             norm: bool = False,
+             norm_method: str = 'z-score',
              ) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes the Stocks to Flow ratio.
@@ -212,6 +244,10 @@ class Value:
             Name of the column to use for network value.
         supply: str
             Name of the column to use as a proxy for supply.
+        norm: bool, default True
+            Normalize factor over the time series.
+        norm_method: str, default 'z-score'
+            Method to use for normalization.
 
         Returns
         -------
@@ -240,34 +276,49 @@ class Value:
 
         # sf ratio
         if isinstance(df.index, pd.MultiIndex):  # multiindex
-            df['sf'] = (1 / (df[supply].unstack().diff(periods=self.window_size) / df[supply].unstack())).stack()
+            df['sf'] = (df[supply].unstack() / (df[supply].unstack().diff(periods=self.window_size))).stack()
         else:
-            df['sf'] = 1 / (df[supply].diff(periods=self.window_size) / df[supply])
+            df['sf'] = df[supply] / df[supply].diff(periods=self.window_size)
+        # log
+        if self.log:
+            df = Transform(df).log()
 
         # method
         if self.method == 'ratio':  # ratio
-            psf = (1 / df['sf']) * -1
-            psf = psf.to_frame('iss_rate_' + str(self.window_size))
-
+            nvsf = df['sf'].divide(df[nv]).to_frame('nvsf_ratio')
         else:  # lin reg
-            df = Transform(df).log()
+            if self.log is False:
+                df = Transform(df).log()
             if isinstance(df.index, pd.MultiIndex):  # multiindex
-                resid = df.groupby(level=1, group_keys=False).apply(
+                nvsf = df.groupby(level=1, group_keys=False).apply(
                     lambda x: linear_reg(x[nv], x['sf'], window_type=self.window_type, output='resid', log=False,
                                          trend='c')) * -1
             else:  # single index
-                resid = linear_reg(df[nv], df['sf'], window_type=self.window_type, output='resid', log=False,
-                                   trend='c') * -1
+                nvsf = linear_reg(df[nv], df['sf'], window_type=self.window_type, output='resid', log=False,
+                                  trend='c') * -1
 
-            # z-score residual
-            psf = Transform(resid).normalize_ts(method='z-score', window_type=self.window_type).\
-                rename(columns={'resid': 'nvsf_resid_' + str(self.window_size)})
+        # normalize
+        if norm:
+            nvsf = Transform(nvsf).normalize_ts(method=norm_method, window_type=self.window_type)
+            # rename
+            if self.method == 'ratio':
+                nvsf.columns = ['nvsf_ratio_z_' + str(self.window_size)]
+            else:
+                nvsf.columns = ['nvsf_resid_z_' + str(self.window_size)]
+        else:
+            # rename
+            if self.method == 'ratio':
+                nvsf.columns = ['nvsf_ratio_' + str(self.window_size)]
+            else:
+                nvsf.columns = ['nvsf_resid_' + str(self.window_size)]
 
-        return psf
+        return nvsf
 
     def nvc(self,
             nv: str = 'mkt_cap',
-            cost: str = 'hashrate'
+            cost: str = 'hashrate',
+            norm: bool = False,
+            norm_method: str = 'z-score',
             ) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes the Network Value to Production Costs ratio.
@@ -278,6 +329,10 @@ class Value:
             Name of the column to use for network value.
         cost: str
             Name of the column to use as a proxy for production costs.
+        norm: bool, default True
+            Normalize factor over the time series.
+        norm_method: str, default 'z-score'
+            Method to use for normalization.
 
         Returns
         -------
@@ -318,15 +373,26 @@ class Value:
         else:
             # fit linear regression
             if isinstance(df.index, pd.MultiIndex):  # multiindex
-                resid = df.groupby(level=1, group_keys=False).apply(
+                nvc = df.groupby(level=1, group_keys=False).apply(
                     lambda x: linear_reg(x[nv], x[cost], window_type=self.window_type, output='resid', log=False,
                                          trend='c', lookback=self.window_size)) * -1
             else:  # single index
-                resid = linear_reg(df[nv], df[cost], window_type=self.window_type, output='resid', log=False, trend='c',
-                                   lookback=self.window_size) * -1
+                nvc = linear_reg(df[nv], df[cost], window_type=self.window_type, output='resid', log=False, trend='c',
+                                 lookback=self.window_size) * -1
 
-            # z-score residual
-            nvc = Transform(resid).normalize_ts(method='z-score', window_type=self.window_type).\
-                rename(columns={'resid': 'nvc_resid_' + str(self.window_size)})
+        # normalize
+        if norm:
+            nvc = Transform(nvc).normalize_ts(method=norm_method, window_type=self.window_type)
+            # rename
+            if self.method == 'ratio':
+                nvc.columns = ['nvc_ratio_z_' + str(self.window_size)]
+            else:
+                nvc.columns = ['nvc_resid_z_' + str(self.window_size)]
+        else:
+            # rename
+            if self.method == 'ratio':
+                nvc.columns = ['nvc_ratio_' + str(self.window_size)]
+            else:
+                nvc.columns = ['nvc_resid_' + str(self.window_size)]
 
         return nvc

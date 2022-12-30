@@ -382,7 +382,9 @@ class Transform:
                  bins: int = 5,
                  window_type: str = 'fixed',
                  lookback: int = 10,
-                 _min_periods: int = 2) -> pd.DataFrame:
+                 _min_periods: int = 2,
+                 axis: int = 0,
+                 ) -> pd.DataFrame:
         """
         Quantizes factors or targets. Quantization is the process of transforming a continuous variable
         into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
@@ -402,6 +404,8 @@ class Transform:
             expanding statistic.
         _min_periods: int, default 2
             Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        axis: int, default 0
+            Axis along which to quantize. Defaults to each column.
 
         Returns
         -------
@@ -426,7 +430,7 @@ class Transform:
         elif window_type == 'expanding':
             quant_df = getattr(df, window_type)(min_periods=_min_periods).apply(quant_mw)
         else:
-            quant_df = df.apply(quantize)
+            quant_df = df.apply(quantize, axis=axis)
 
         return quant_df
 
@@ -455,20 +459,20 @@ class Transform:
         quant_df: DataFrame
             Series or DataFrame with DatetimeIndex (level 0), tickers (level 1) and quantized features (columns).
         """
-        # drop empty cols
-        if isinstance(self.df, pd.DataFrame):
-            df = self.df.dropna(how='all', axis=1)
-        else:
-            df = self.df
+        # # drop empty cols
+        # if isinstance(self.df, pd.DataFrame):
+        #     df = self.df.dropna(how='all', axis=1)
+        # else:
+        #     df = self.df
 
         if isinstance(self.df.index, pd.MultiIndex):
-            quant_df = self.quantize(df.unstack(),
+            quant_df = self.quantize(self.df.unstack().dropna(how='all', axis=1),
                                      bins=bins,
                                      window_type=window_type,
                                      lookback=lookback,
                                      _min_periods=_min_periods).stack()
         else:
-            quant_df = self.quantize(df,
+            quant_df = self.quantize(self.df.dropna(how='all', axis=1),
                                      bins=bins,
                                      window_type=window_type,
                                      lookback=lookback,
@@ -490,13 +494,14 @@ class Transform:
         quant_df: DataFrame
             Series or DataFrame with DatetimeIndex (level 0), tickers (level 1), and quantized features (columns).
         """
-        # drop empty cols
-        df = self.df.dropna()
+        # df to store quantized cols
+        quant_df = pd.DataFrame()
+        # loop through cols
+        for col in self.df.columns:
+            df = self.quantize(self.df[col].unstack().dropna(thresh=bins, axis=0), axis=1).stack().to_frame(col)
+            quant_df = pd.concat([quant_df, df], axis=1)
 
-        quant_df = df.groupby(level=0, group_keys=False).apply(
-            lambda x: self.quantize(x, bins=bins))
-
-        return quant_df
+        return quant_df.sort_index()
 
     @staticmethod
     def discretize(df: Union[pd.Series, pd.DataFrame],

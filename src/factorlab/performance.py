@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
+from importlib import resources
 from typing import Union, Optional, Dict, List
 
 from time_series_analysis import linear_reg
@@ -60,8 +61,6 @@ class Performance:
             Dataframe or series with DatetimeIndex and cumulative returns.
         """
         ret = self.returns
-        # fill NaNs
-        ret.fillna(0, inplace=True)
 
         if self.ret_type == 'simple':
             cum_ret = (1 + ret).cumprod().astype(float)
@@ -74,7 +73,7 @@ class Performance:
         else:
             cum_ret = cum_ret * start_val
 
-        return cum_ret
+        return cum_ret.ffill()
 
     def ann_ret(self) -> float:
         """
@@ -88,7 +87,8 @@ class Performance:
         # cum return
         cum_ret = self.cumulative_ret(start_val=1).iloc[-1]
         # number of years of returns
-        num_years = len(self.returns) / self.ann_factor
+        num_years = self.returns.count() / self.ann_factor
+        # num_years = len(self.returns) / self.ann_factor
         # annualized returns
         ann_ret = cum_ret ** (1 / num_years) - 1
 
@@ -491,14 +491,14 @@ class Performance:
         if metrics == 'ret':
             metrics = ['Cumulative return', 'Annual return']
         elif metrics == 'risk':
-            metrics = ['Annual volatility', 'Skewness', 'Kurtosis', 'Max Drawdown', 'VaR', 'Tail ratio']
+            metrics = ['Annual volatility', 'Skewness', 'Kurtosis', 'Max drawdown', 'VaR', 'Tail ratio']
         elif metrics == 'risk_adj_ret':
             metrics = ['Sharpe ratio', 'Sortino ratio', 'Calmar ratio', 'Omega ratio', 'Stability']
         elif metrics == 'alpha':
             metrics = ['Annual alpha', 'Alpha p-val', 'Beta', 'Beta p-val']
         elif metrics == 'key_metrics':
-            metrics = ['Annual return', 'Annual volatility', 'Sharpe ratio', 'Max Drawdown',
-                       'Annual Alpha', 'Alpha p-val', 'Beta', 'Beta p-val']
+            metrics = ['Cumulative return', 'Annual return', 'Annual volatility', 'Max drawdown', 'Sharpe ratio',
+                       'Calmar ratio', 'Stability', 'Annual alpha', 'Alpha p-val', 'Beta', 'Beta p-val']
         elif metrics == 'all':
             metrics = ['Cumulative return', 'Annual return', 'Annual volatility', 'Skewness', 'Kurtosis',
                        'Max drawdown', 'VaR', 'Tail ratio', 'Sharpe ratio', 'Sortino ratio', 'Calmar ratio',
@@ -662,7 +662,9 @@ class Performance:
         ax.yaxis.tick_right()
 
         # add systamental logo
-        img = Image.open('systamental_logo.png')
+        with resources.path("factorlab", "systamental_logo.png") as f:
+            img_path = f
+        img = Image.open(img_path)
         plt.figimage(img, origin='upper')
 
         # Add in title and subtitle
@@ -716,9 +718,11 @@ class Performance:
         sns.heatmap(table, annot=True, cmap='RdYlGn', center=0, square=True, cbar=False, fmt='g')
 
         # add systamental logo
-        img = Image.open('systamental_logo.png')
+        with resources.path("factorlab", "systamental_logo.png") as f:
+            img_path = f
+        img = Image.open(img_path)
         plt.figimage(img, origin='upper')
 
         # Adding title
-        ax.set_title('Monthly Returns (%)', loc='left', weight='bold', pad=15, fontsize=14, family='georgia')
-        ax.text(x=0, y=0, s=f"{series.title()}", ha='left', fontsize=12, alpha=.8, fontdict=None, family='georgia')
+        ax.set_title('Monthly Returns (%)', loc='left', weight='bold', pad=20, fontsize=14, family='georgia')
+        ax.text(x=0, y=-0.05, s=f"{series.title()}", ha='left', fontsize=12, alpha=.8, fontdict=None, family='georgia')

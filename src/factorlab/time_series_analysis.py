@@ -5,7 +5,8 @@ from statsmodels.tsa.tsatools import add_trend
 from statsmodels.api import OLS, RecursiveLS
 from statsmodels.regression.rolling import RollingOLS
 from statsmodels.tools.tools import add_constant
-from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.stattools import adfuller, grangercausalitytests
+
 
 
 def linear_reg(target: Union[pd.Series, pd.DataFrame],
@@ -147,6 +148,52 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
 
     return out
 
+def granger_causality(
+        target: pd.Series,
+        factors: Union[pd.Series, pd.DataFrame],
+        lags: Optional[int] = None,
+        test: str = 'ssr_ftest',
+) -> pd.DataFrame:
+    """
+    Runs four tests for granger non causality of 2 time series (target, predictor).
+
+    Parameters
+    ----------
+    target: pd.Series
+        Target variable. Must be stationary, e.g. log returns.
+    factors: pd.Series or pd.DataFrame
+        Factors/features to test.
+    lags: int, optional, default None
+        Maximum number of lags to include in the vector autoregression. If none, uses log(n) where n is number of obs.
+    test: str, {'ssr_ftest', 'ssr_chi2test', 'lrtest', 'params_ftest'}, default 'ssr_ftest'
+        Type of test.
+
+    Returns
+    -------
+    gc_stats: pd.DataFrame
+        Dataframe with granger causality F-test statistic and p-value.
+    """
+    # convert to df
+    if isinstance(factors, pd.Series):
+        factors = factors.to_frame()
+    # lags
+    if lags is None:
+        lags = int(np.log(len(factors)))
+
+    # gc stats df
+    gc_stats = pd.DataFrame(columns=[test, 'p-val'])
+
+    for factor in factors.columns:  # loop through factors
+        # concat ret and feature
+        data = pd.concat([target, factors[factor]], axis=1).replace([-np.inf, np.inf], 0).dropna()
+        # granger causality
+        res = grangercausalitytests(data, maxlag=lags)
+        # add to df
+        gc_stats.loc[factor, test] = res[lags][0][test][0]
+        gc_stats.loc[factor, 'p-val'] = res[lags][0][test][1]
+
+    return gc_stats.astype(float).round(decimals=4).sort_values(by=test, ascending=False)
+
 
 def adf(df: Union[pd.Series, pd.DataFrame],
         lags: Optional[int] = None,
@@ -182,7 +229,7 @@ def adf(df: Union[pd.Series, pd.DataFrame],
         # adf test
         stats = adfuller(df[col].dropna(), maxlag=lags, regression=coef, autolag=autolag)
         # create dict for test stats
-        adf_dict = {'adf': stats[0], 'p-val': stats[1], 'lags': stats[2], 'nobs': stats[3], 'critical_vals': '',
+        adf_dict = {'adf': stats[0], 'p-val': stats[1], 'lags': stats[2], 'nobs': stats[3],
                     '1%': stats[4]['1%'].round(decimals=4), '5%': stats[4]['5%'], '10%': stats[4]['10%']}
         # create df
         adf_df = pd.DataFrame(adf_dict, index=[col]).round(decimals=4)
@@ -253,13 +300,17 @@ def ols_betas(data):
     betas: pd.Series
         Estimated betas for each factor.
     """
+    # convert type
+    data = data
+    # estimate beta
     betas = OLS(data.iloc[:, 0], data.iloc[:, 1:], missing='drop').fit(cov_type='HAC', cov_kwds={'maxlags': 1}).params
 
     return betas
 
-
 def fm_reg(returns: Union[pd.Series, pd.DataFrame],
-           factors: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+           factors: Union[pd.Series, pd.DataFrame],
+           nobs: int = 5,
+          ) -> pd.DataFrame:
     """
     Runs cross-sectional Fama Macbeth regressions for each time period to compute factor/characteristic betas.
 
@@ -269,25 +320,34 @@ def fm_reg(returns: Union[pd.Series, pd.DataFrame],
         Returns.
     factors: pd.Series or pd.DataFrame
         Factor values
+    nobs: int, default 5
+        Minimum number of observations in the cross section to run the Fama Macbeth regression.
 
     Returns
     -------
     betas: pd.DataFrame
         Dataframe with DatetimeIndex and estimated factor betas.
     """
+    # check n obs for factors in cross-section
+    if factors.groupby('date').count()[(factors.groupby('date').count() > nobs)].dropna(how='all').empty:
+        raise Exception(f"Cross-section does not meet minimum number of observations. Change nobs parameter or "
+                        f"increase asset universe.")
+    else:
+        start_idx = factors.groupby('date').count()[(factors.groupby('date').count() > nobs)].index[0]
     # y, X
-    y, X = returns, factors
+    y, X = returns, factors.loc[start_idx:]
     # add constant and join X, y
-    X = add_constant(X)
-    data = pd.concat([y, X], axis=1, join='inner').dropna().astype(float)
-    # estatime cross sectional betas
+    data = pd.concat([y, X], axis=1, join='inner').astype(float).dropna()
+    # estimate cross sectional betas
     betas = data.groupby(level=0).apply(ols_betas)
 
     return betas
 
 
 def fm_summary(returns: Union[pd.Series, pd.DataFrame],
-               factors: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+               factors: Union[pd.Series, pd.DataFrame],
+               nobs: int = 5
+              ) -> pd.DataFrame:
     """
     Computes test statistics for betas from Fama Macbeth cross sectional regressions.
 
@@ -297,6 +357,8 @@ def fm_summary(returns: Union[pd.Series, pd.DataFrame],
         Returns series.
     factors: pd.Series or pd.DataFrame
         Factors.
+    nobs: int, default 5
+        Minimum number of observations in the cross section to run the Fama Macbeth regression.
 
     Returns
     -------
@@ -304,7 +366,7 @@ def fm_summary(returns: Union[pd.Series, pd.DataFrame],
         DataFrame with mean estimated betas, std errors and t-stats.
     """
     # compute betas
-    betas = fm_reg(returns, factors)
+    betas = fm_reg(returns, factors, nobs=nobs)
     # get stats
     stats = betas.describe().T
     stats['std_error'] = stats['std'] / np.sqrt(stats['count'])
@@ -312,7 +374,5 @@ def fm_summary(returns: Union[pd.Series, pd.DataFrame],
     # keep mean, std error and t-stat
     stats = stats[['mean', 'std_error', 't-stat']]
     stats.columns = ['beta', 'std_error', 't-stat']
-
-    stats.index.name = 'Fama Macbeth'
 
     return stats
