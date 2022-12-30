@@ -2,8 +2,9 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 from typing import Union, Optional
-from time_series_analysis import linear_reg
-from transform import Transform
+
+from factorlab.time_series_analysis import linear_reg
+from factorlab.transform import Transform
 
 
 class Value:
