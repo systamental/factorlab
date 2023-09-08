@@ -37,6 +37,9 @@ class Value:
             Window type to use for regression.
         window_size: int, default 7
             Number of observations in moving window.
+        method: str, {ratio, residual}, default ratio
+            Method to use to compute valuation measure. Ratio computes a ratio of market cap to value metric.
+            Residual estimates a residual by regressing market cap on the value metric.
         """
         self.df = df.astype(float)
         self.log = log

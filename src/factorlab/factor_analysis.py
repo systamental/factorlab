@@ -9,6 +9,7 @@ from sklearn.feature_selection import mutual_info_classif
 
 from factorlab.time_series_analysis import linear_reg, fm_summary
 from factorlab.transform import Transform
+from factorlab.performance import Performance
 
 
 class Factor:
@@ -896,22 +897,27 @@ class Factor:
 
         return be_tcosts
 
-    def ret_quantiles(self,
-                      factor: str,
-                      signal_type: str = 'signal',
-                      norm_method: str = 'cdf',
-                      clip: int = 3,
-                      cs_norm: bool = False,
-                      plot_rets: bool = False,
-                      source: Optional[str] = None
-                      ):
+    def quantiles(self,
+                  factor: str,
+                  metric: str = 'mean_ret',
+                  mkt_ret: pd.Series = None,
+                  signal_type: str = 'signal',
+                  norm_method: str = 'cdf',
+                  clip: int = 3,
+                  cs_norm: bool = False,
+                  **kwargs
+                  ):
         """
-        Plots quantile returns for each factor quantile.
+        Computes quantile returns for each factor quantile.
 
         Parameters
         ----------
         factor: str,
-            Name of col/factor to group by quantiles.
+            Name of col/factor to group by quantile.
+        metric: str,
+            Metric to compute for each quantile.
+        mkt_ret: pd.Series, default None
+            Series with DatetimeIndex and market returns (cols).
         signal_type: str, {'norm', 'signal', 'signal_quantiles'}, default 'norm'
             norm: factor inputs are normalized into z-scores.
             signal: factor inputs are converted to signals between -1 and 1, and 0 and 2 for l/s and
@@ -924,78 +930,48 @@ class Factor:
             Winsorizes/clips values to between [clip *-1, clip].
         cs_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
-        plot_rets: bool, default None
-            Plots mean quantile forward returns by factor quantiles.
-        source: str, default None
-            Adds source info to bottom of plot.
         """
+        # metrics
+        metrics_dict = {'cumulative_ret': 'Cumulative returns', 'ann_ret': 'Annual return', 'mean_ret': 'Mean return',
+                        'ann_vol': 'Annual volatility', 'skewness': 'Skewness', 'kurtosis': 'Kurtosis',
+                        'drawdown': 'Drawdown', 'max_dd': 'Max Drawdown', 'value_at_risk': 'VaR', 'tail_ratio':
+                        'Tail ratio', 'sharpe_ratio': 'Sharpe ratio', 'sortino_ratio': 'Sortino ratio',
+                        'calmar_ratio': 'Calmar ratio', 'omega_ratio': 'Omega ratio'}
+
+        # check metric
+        if metric not in metrics_dict.keys():
+            raise ValueError(f"Metric not available. Available metrics are: {list(metrics_dict.keys())}")
+
         # compute factors
         factors = self.compute_factors(signal_type=signal_type, norm_method=norm_method, cs_norm=cs_norm, clip=clip)
         # quantize signals
         quantiles = self.quantize(factors[[factor]], bins=self.factor_bins)
         # merge
-        quant_ret_df = pd.concat([quantiles.groupby('ticker').shift(1), self.ret], axis=1, join='inner')
+        quant_ret_df = pd.concat([quantiles.groupby('ticker').shift(0).astype(int), self.ret], axis=1, join='inner')
 
-        # bins ret df
-        bins_ret = quant_ret_df.groupby(factor).mean()
-        # name index quantile
-        bins_ret.index.name = 'quantile'
-        # add top vs bottom quantile bin in index
-        bins_ret.loc['top vs. bottom', :] = bins_ret.iloc[-1] - bins_ret.iloc[0]
+        # quantile rets
+        quant_ret_ts_df = pd.DataFrame()
+        for quant in range(1, self.factor_bins + 1):
+            quant_ret_ts_df = pd.concat([quant_ret_ts_df,
+                                         quant_ret_df[quant_ret_df[factor] == quant]['fwd_ret_1'].groupby(
+                                             'date').mean().to_frame(quant)], axis=1)
+        quant_ret_ts_df['top_vs_bottom'] = quant_ret_ts_df[self.factor_bins] - quant_ret_ts_df[1]
 
-        # plot
-        if plot_rets:
-            # bar plot in Systamental style
-            # plot size
-            fig, ax = plt.subplots(figsize=(15, 7))
+        # quantile mean rets
+        if metric is None or metric is 'mean_ret':
+            df = quant_ret_df.groupby(factor).mean()
+            # add top vs bottom quantile bin in index
+            df.loc['top vs. bottom', :] = df.loc[5] - df.loc[1]
+        # compute performance metric
+        else:
+            df = getattr(Performance(quant_ret_ts_df, mkt_ret=mkt_ret, ret_type='log'), metric)(**kwargs)
+        # convert to df
+        if isinstance(df, pd.Series):
+            df = df.to_frame(metric)
 
-            # line colors
-            colors = ['#98DAFF', '#FFA39F', '#6FE4FB', '#86E5D4', '#FFCB4D', '#D7DB5A', '#FFC2E3', '#F2CF9A', '#BFD8E5']
+        return df
 
-            # plot
-            bins_ret.plot(kind='bar', color=colors, legend=False, rot=0, ax=ax)
-
-            # legend
-            plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-
-            # grid
-            ax.set_axisbelow(True)
-            ax.grid(which="major", axis='y', color='#758D99', alpha=0.6)
-            ax.set_facecolor("whitesmoke")
-
-            # y-axis
-            ax.set_xlabel('Quantile')
-
-            # remove splines
-            ax.spines[['top', 'right', 'left']].set_visible(False)
-
-            # Reformat y-axis tick labels
-            ax.set_ylabel('Forward returns (mean)')
-            ax.yaxis.tick_right()
-
-            # add systamental logo
-            with resources.path("factorlab", "systamental_logo.png") as f:
-                img_path = f
-            img = Image.open(img_path)
-            plt.figimage(img, origin='upper')
-
-            # Add in title and subtitle
-            strategy_name = {'ts_ls': 'Time Series Long/Short', 'ts_l': 'Time Series Long-only',
-                             'cs_ls': 'Cross-sectional Long/Short', 'cs_l': 'Cross-sectional Long-only'}
-            plt.rcParams['font.family'] = 'georgia'
-            ax.text(x=0.13, y=.92, s="Forward Returns (mean) by Factor Quantile", transform=fig.transFigure, ha='left',
-                    fontsize=14, weight='bold', alpha=.8, fontdict=None)
-            ax.text(x=0.13, y=.89, s=f"{strategy_name[self.strategy]} - {factor}",
-                    transform=fig.transFigure, ha='left', fontsize=12, alpha=.8, fontdict=None)
-
-            # Set source text
-            if source is not None:
-                ax.text(x=0.13, y=0.05, s=f"""Source: {source}""", transform=fig.transFigure, ha='left', fontsize=10,
-                        alpha=.8, fontdict=None)
-
-        return bins_ret
-
-    def factor_dispersion(self, method: str = 'sign'):
+    def dispersion(self, method: str = 'sign'):
         """
         Computes dispersion in the cross-section of factor values.
 

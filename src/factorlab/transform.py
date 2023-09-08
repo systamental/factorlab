@@ -56,9 +56,9 @@ class Transform:
         # MultiIndex
         if isinstance(df.index, pd.MultiIndex):
             rep_fcn = lambda x: np.log(x).replace([np.inf, -np.inf], np.nan)
-            df = df.groupby(level=1, group_keys=False).apply(rep_fcn).ffill()
+            df = df.groupby(level=1, group_keys=False).apply(rep_fcn)
         else:  # single
-            df = np.log(df).replace([np.inf, -np.inf], np.nan).ffill()
+            df = np.log(df).replace([np.inf, -np.inf], np.nan)  # removed forward fill
 
         return df
 

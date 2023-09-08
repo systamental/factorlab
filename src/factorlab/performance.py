@@ -566,6 +566,7 @@ class Performance:
                     metric: str = 'cumulative_ret',
                     window_type: str = 'expanding',
                     window_size: int = 365,
+                    logo: bool = True,
                     colors: Optional[str] = None,
                     source: Optional[str] = None,
                     **kwargs) -> None:
@@ -580,6 +581,8 @@ class Performance:
             Window type for calculation.
         window_size: int, default 365
             Minimum number of observations to include in moving window.
+        logo: bool, default True
+            Adds systamental logo to plot.
         colors: str, {'colors_dark', 'colors_mid', 'colors_light'}, default None
             Color scheme to use.
         source: str, default None
@@ -661,10 +664,11 @@ class Performance:
         ax.yaxis.tick_right()
 
         # add systamental logo
-        with resources.path("factorlab", "systamental_logo.png") as f:
-            img_path = f
-        img = Image.open(img_path)
-        plt.figimage(img, origin='upper')
+        if logo:
+            with resources.path("factorlab", "systamental_logo.png") as f:
+                img_path = f
+            img = Image.open(img_path)
+            plt.figimage(img, origin='upper')
 
         # Add in title and subtitle
         ax.text(x=0.13, y=.92, s=f"{metrics_dict[metric]}", transform=fig.transFigure, ha='left', fontsize=14,
@@ -681,6 +685,7 @@ class Performance:
 
     def returns_heatmap(self,
                         series: str = None,
+                        logo: bool = True,
                         ) -> None:
         """
         Creates a heatmap of monthly and yearly returns.
@@ -689,6 +694,8 @@ class Performance:
         ----------
         series: str, default None
             Name of the col/series to compute monthly returns.
+        logo: bool, default True
+            Adds systamental logo to plot.
 
         """
         fig, ax = plt.subplots(figsize=(15, 7))
@@ -717,10 +724,11 @@ class Performance:
         sns.heatmap(table, annot=True, cmap='RdYlGn', center=0, square=True, cbar=False, fmt='g')
 
         # add systamental logo
-        with resources.path("factorlab", "systamental_logo.png") as f:
-            img_path = f
-        img = Image.open(img_path)
-        plt.figimage(img, origin='upper')
+        if logo:
+            with resources.path("factorlab", "systamental_logo.png") as f:
+                img_path = f
+            img = Image.open(img_path)
+            plt.figimage(img, origin='upper')
 
         # Adding title
         ax.set_title('Monthly Returns (%)', loc='left', weight='bold', pad=20, fontsize=14, family='georgia')
