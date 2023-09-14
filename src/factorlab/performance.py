@@ -496,8 +496,7 @@ class Performance:
         elif metrics == 'alpha':
             metrics = ['Annual alpha', 'Alpha p-val', 'Beta', 'Beta p-val']
         elif metrics == 'key_metrics':
-            metrics = ['Cumulative return', 'Annual return', 'Annual volatility', 'Max drawdown', 'Sharpe ratio',
-                       'Calmar ratio', 'Stability', 'Annual alpha', 'Alpha p-val', 'Beta', 'Beta p-val']
+            metrics = ['Cumulative return', 'Annual return', 'Annual volatility', 'Sharpe ratio', 'Max drawdown']
         elif metrics == 'all':
             metrics = ['Cumulative return', 'Annual return', 'Annual volatility', 'Skewness', 'Kurtosis',
                        'Max drawdown', 'VaR', 'Tail ratio', 'Sharpe ratio', 'Sortino ratio', 'Calmar ratio',

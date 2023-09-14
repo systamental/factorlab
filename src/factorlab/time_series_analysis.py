@@ -37,6 +37,7 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
         'pred': predictions from linear regression fit (y_hat).
         'resid': residuals from linear regression fit (y - y_hat).
         'rsq': coefficient of determination, aka R-squared of linear regression. Measures goodness of fit.
+        'f_pval': The p-value of the F-statistic.
         'summary': summary results from linear regression estimation.
         Output values from fitting linear regression.
     log: bool, default False
@@ -106,6 +107,8 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
             out = model.resid
         elif output == 'rsq':
             out = model.rsquared
+        elif output == 'f_pval':
+            out = model.f_pvalue
         else:
             out = model.summary()
 
@@ -122,6 +125,8 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
             out = pd.DataFrame(model.resid_recursive, index=X.index, columns=['resid'])
         elif output == 'rsq':
             out = model.rsquared
+        elif output == 'f_pval':
+            out = model.f_pvalue
         else:
             out = model.summary()
 
@@ -140,6 +145,8 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
             out = y.sub(y_hat, axis=0).to_frame(name='resid')
         elif output == 'rsq':
             out = model.rsquared.to_frame(name='rsq')
+        elif output == 'f_pval':
+            out = model.f_pvalue.to_frame(name='f_pval')
         else:
             print('This model output is not available. Select another output.\n')
             return

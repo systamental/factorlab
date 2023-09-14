@@ -66,7 +66,7 @@ class Transform:
                 lags: int = 1,
                 forward: bool = False,
                 method: str = 'log',
-                market: Optional[bool] = None,
+                market: Optional[bool] = False,
                 mkt_weighting: Optional[str] = None
                 ) -> pd.DataFrame:
         """
@@ -80,7 +80,7 @@ class Transform:
             Shifts returns forward by number of periods specified in lags.
         method: str, {'simple', 'log'}, default 'log'
             Method to compute returns, continuous or simple
-        market: bool, Optional, default None
+        market: bool, Optional, default False
             Computes the returns of the entire universe of asset prices, or the market return.
         mkt_weighting: str, optional, default None
             Weighting method to use to compute market return.
@@ -119,7 +119,10 @@ class Transform:
 
         return ret
 
-    def target_vol(self, ann_vol: float = 0.15, ann_factor: float = 252) -> pd.DataFrame:
+    def target_vol(self,
+                   ann_vol: float = 0.15,
+                   ann_factor: float = 252
+                   ) -> pd.DataFrame:
         """
         Set volatility of returns to be equal to a specific vol target.
 

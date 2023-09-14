@@ -102,7 +102,7 @@ class Factor:
                  df: Union[pd.Series, pd.DataFrame],
                  bins: int = 5,
                  method: str = 'cdf',
-                 cs_norm: bool = False
+                 ts_norm: bool = False
                  ) -> Union[pd.Series, pd.DataFrame]:
         """
         Quantizes factors and/or targets.
@@ -115,7 +115,7 @@ class Factor:
             Number of quantiles or bins.
         method: str, {'z-score', 'cdf', iqr', 'mod_z', 'min-max', 'percentile'}, default 'z-score'
             Normalization method to use.
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
 
         Returns
@@ -131,7 +131,7 @@ class Factor:
         if self.strategy[:2] == 'ts':
             quantiles = Transform(df).quantize_ts(bins=bins, window_type=self.window_type, lookback=self.window_size)
         else:
-            if cs_norm:
+            if ts_norm:
                 norm_factors = Transform(df).normalize_ts(method=method, window_type=self.window_type,
                                                           lookback=self.window_size)
                 quantiles = Transform(norm_factors).quantize_cs(bins=bins)
@@ -143,7 +143,7 @@ class Factor:
     def signal(self,
                centering: bool = True,
                method: str = 'cdf',
-               cs_norm: bool = False,
+               ts_norm: bool = False,
                clip: int = 3,
                ) -> Union[pd.Series, pd.DataFrame]:
         """
@@ -158,7 +158,7 @@ class Factor:
             0 is used.
         method: str, {'min-max', 'percentile', 'cdf'}, default 'percentile'
             Method to convert raw factor values to signals between [-1,1]
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
         clip: int, default 3
             Winsorizes/clips values to between [clip *-1, clip].
@@ -173,7 +173,7 @@ class Factor:
             signals = Transform(self.factors).normalize_ts(centering=centering, window_type=self.window_type,
                                                            method=method, lookback=self.window_size, winsorize=clip)
         else:  # cross sectional
-            if cs_norm:
+            if ts_norm:
                 norm_factors = Transform(self.factors).normalize_ts(centering=centering, method=method,
                                                                     window_type=self.window_type,
                                                                     lookback=self.window_size)
@@ -199,7 +199,7 @@ class Factor:
                          centering: bool = True,
                          method: str = 'cdf',
                          clip: int = 3,
-                         cs_norm: bool = False,
+                         ts_norm: bool = False,
                          ) -> Union[pd.Series, pd.DataFrame]:
         """
         Converts factors to signal quantiles.
@@ -213,7 +213,7 @@ class Factor:
             Method to convert raw factor values to signals between [-1,1]
         clip: int, default 3
             Winsorizes/clips values to between [clip *-1, clip].
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
 
         Returns
@@ -226,7 +226,7 @@ class Factor:
             signals = self.signal(centering=centering, method=method, clip=clip)
             quantiles = self.quantize(signals, bins=self.factor_bins)
         else:
-            if cs_norm:
+            if ts_norm:
                 norm_factors = Transform(self.factors).normalize_ts(centering=centering, method=method,
                                                                     window_type=self.window_type,
                                                                     lookback=self.window_size)
@@ -250,7 +250,7 @@ class Factor:
 
     def filter(
             self,
-            cs_norm: bool = False,
+            ts_norm: bool = False,
             metrics: Union[str, list] = 'all',
             rank_on: Optional[str] = 'spearman_r'
     ) -> pd.DataFrame:
@@ -269,7 +269,7 @@ class Factor:
         two variables are related, whereas, association measures how related the variables are.
 
         Parameters
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
         metrics: str, default 'all'
             Metrics to compute.
@@ -282,8 +282,8 @@ class Factor:
             Dataframe with factors (rows) and stats (cols), ranked by metric.
         """
         # quantize factors and fwd ret
-        factor_quantiles = self.quantize(self.factors, bins=self.factor_bins, cs_norm=cs_norm)
-        target_quantiles = self.quantize(self.ret, bins=self.target_bins, cs_norm=cs_norm)
+        factor_quantiles = self.quantize(self.factors, bins=self.factor_bins, ts_norm=ts_norm)
+        target_quantiles = self.quantize(self.ret, bins=self.target_bins, ts_norm=ts_norm)
         # merge
         quantiles_df = pd.concat([factor_quantiles.groupby('ticker').shift(1), target_quantiles], axis=1, join='inner')
 
@@ -517,9 +517,14 @@ class Factor:
 
         return table.round(decimals=4)
 
-    def compute_factors(self, signal_type: Optional[str] = None, centering: bool = True, norm_method: str = 'cdf',
-                        cs_norm: bool = False, clip: int = 3, leverage: Optional[int] = None,
-                        tails: Optional[str] = None, rebalancing: Optional[Union[str, int]] = None,
+    def compute_factors(self, signal_type: Optional[str] = None,
+                        centering: bool = True,
+                        norm_method: str = 'cdf',
+                        ts_norm: bool = False,
+                        clip: int = 3,
+                        leverage: Optional[int] = None,
+                        tails: Optional[str] = None,
+                        rebalancing: Optional[Union[str, int]] = None,
                         ) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes alpha factors by converting raw data to normalized factors or signals.
@@ -543,7 +548,7 @@ class Factor:
                 min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
                 percentile: converts values to their percentile rank relative to the observations in the
                 defined window type.
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
         clip: int, default 3
             Max/min value to use for winsorization/clipping for signals when method is z-score, iqr or mod z.
@@ -574,11 +579,11 @@ class Factor:
 
         # signal factors, signal_type 'signal'
         if signal_type == 'signal':
-            factors = self.signal(centering=centering, method=norm_method,  cs_norm=cs_norm, clip=clip)
+            factors = self.signal(centering=centering, method=norm_method,  ts_norm=ts_norm, clip=clip)
 
         # quantized signal factors, signal_type 'signal_quantiles'
         if signal_type == 'signal_quantiles':
-            factors = self.signal_quantiles(centering=centering, method=norm_method, cs_norm=cs_norm, clip=clip)
+            factors = self.signal_quantiles(centering=centering, method=norm_method, ts_norm=ts_norm, clip=clip)
 
         # tails
         if tails is not None:
@@ -684,8 +689,8 @@ class Factor:
                 tails: Optional[str] = None,
                 leverage: Optional[int] = None,
                 norm_method: Optional[str] = 'z-score',
-                cs_norm: bool = False,
-                rebalancing: Optional[str] = None,
+                ts_norm: bool = False,
+                rebalancing: Optional[Union[str, int]] = None,
                 t_cost: Optional[float] = None,
                 weighting: str = 'ew',
                 vol_target: float = 0.1,
@@ -718,10 +723,11 @@ class Factor:
                 min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
                 percentile: converts values to their percentile rank relative to the observations in the
                 defined window type.
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
-        rebalancing: str, {None, 'daily', 'weekly', 'monthly'}, default None
-            Rebalancing frequency.
+        rebalancing: str or int, default None
+            Rebalancing frequency. Can be day of week, e.g. 'monday', 'tuesday', etc, start, middle or end of month,
+            e.g. 'month_end', '15th', or 'month_start', or an int for the number of days between rebalancing.
         tails: str, {'two', 'left', 'right'}, optional, default None
             Keeps only tail bins and ignores middle bins, 'two' for both tails, 'left' for left, 'right' for right
         t_cost: float, optional, default None
@@ -740,7 +746,7 @@ class Factor:
         """
         # compute factors
         factors = self.compute_factors(signal_type=signal_type, centering=centering, norm_method=norm_method,
-                                       cs_norm=cs_norm, leverage=leverage, tails=tails, rebalancing=rebalancing)
+                                       ts_norm=ts_norm, leverage=leverage, tails=tails, rebalancing=rebalancing)
 
         # compute weights
         if weighting == 'iv':  # vol-adj weights
@@ -769,8 +775,8 @@ class Factor:
                   leverage: Optional[int] = None,
                   norm_method: Optional[str] = 'z-score',
                   clip: int = 3,
-                  cs_norm: bool = False,
-                  rebalancing: Optional[str] = None,
+                  ts_norm: bool = False,
+                  rebalancing: Optional[Union[str, int]] = None,
                   tails: Optional[str] = None,
                   weighting: str = 'ew',
                   vol_target: float = 0.1,
@@ -806,10 +812,11 @@ class Factor:
                 defined window type.
         clip: int, default 3
             Max/min value to use for winsorization/clipping for signals when method is z-score, iqr or mod z.
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
-        rebalancing: str, {None, 'daily', 'weekly', 'monthly'}, default None
-            Rebalancing frequency.
+        rebalancing: str or int, default None
+            Rebalancing frequency. Can be day of week, e.g. 'monday', 'tuesday', etc, start, middle or end of month,
+            e.g. 'month_end', '15th', or 'month_start', or an int for the number of days between rebalancing.
         tails: str, {'two', 'left', 'right'}, optional, default None
             Keeps only tail bins and ignores middle bins, 'two' for both tails, 'left' for left, 'right' for right
         weighting: str, {'ew', 'iv'}, default 'ew'
@@ -830,7 +837,7 @@ class Factor:
         """
         # compute factors
         factors = self.compute_factors(signal_type=signal_type, centering=centering, leverage=leverage,
-                                       norm_method=norm_method, clip=clip, cs_norm=cs_norm, rebalancing=rebalancing,
+                                       norm_method=norm_method, clip=clip, ts_norm=ts_norm, rebalancing=rebalancing,
                                        tails=tails)
         if isinstance(factors, pd.Series):
             factors = factors.to_frame()
@@ -904,7 +911,8 @@ class Factor:
                   signal_type: str = 'signal',
                   norm_method: str = 'cdf',
                   clip: int = 3,
-                  cs_norm: bool = False,
+                  ts_norm: bool = False,
+                  rebalancing: Optional[Union[str, int]] = None,
                   **kwargs
                   ):
         """
@@ -928,11 +936,19 @@ class Factor:
             Method to convert raw factor values to signals between [-1,1]
         clip: int, default 3
             Winsorizes/clips values to between [clip *-1, clip].
-        cs_norm: bool, default False
+        ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
+        rebalancing: str or int, default None
+            Rebalancing frequency. Can be day of week, e.g. 'monday', 'tuesday', etc, start, middle or end of month,
+            e.g. 'month_end', '15th', or 'month_start', or an int for the number of days between rebalancing.
+
+        Returns
+        -------
+        df: pd.DataFrame
+            Dataframe with performance metrics by quantile.
         """
         # metrics
-        metrics_dict = {'cumulative_ret': 'Cumulative returns', 'ann_ret': 'Annual return', 'mean_ret': 'Mean return',
+        metrics_dict = {'ret': 'Return', 'cumulative_ret': 'Cumulative returns', 'ann_ret': 'Annual return',
                         'ann_vol': 'Annual volatility', 'skewness': 'Skewness', 'kurtosis': 'Kurtosis',
                         'drawdown': 'Drawdown', 'max_dd': 'Max Drawdown', 'value_at_risk': 'VaR', 'tail_ratio':
                         'Tail ratio', 'sharpe_ratio': 'Sharpe ratio', 'sortino_ratio': 'Sortino ratio',
@@ -943,7 +959,8 @@ class Factor:
             raise ValueError(f"Metric not available. Available metrics are: {list(metrics_dict.keys())}")
 
         # compute factors
-        factors = self.compute_factors(signal_type=signal_type, norm_method=norm_method, cs_norm=cs_norm, clip=clip)
+        factors = self.compute_factors(signal_type=signal_type, norm_method=norm_method, ts_norm=ts_norm, clip=clip,
+                                       rebalancing=rebalancing)
         # quantize signals
         quantiles = self.quantize(factors[[factor]], bins=self.factor_bins)
         # merge
@@ -956,13 +973,10 @@ class Factor:
                                          quant_ret_df[quant_ret_df[factor] == quant]['fwd_ret_1'].groupby(
                                              'date').mean().to_frame(quant)], axis=1)
         quant_ret_ts_df['top_vs_bottom'] = quant_ret_ts_df[self.factor_bins] - quant_ret_ts_df[1]
-
-        # quantile mean rets
-        if metric is None or metric is 'mean_ret':
-            df = quant_ret_df.groupby(factor).mean()
-            # add top vs bottom quantile bin in index
-            df.loc['top vs. bottom', :] = df.loc[5] - df.loc[1]
+        quant_ret_ts_df.iloc[0] = 0  # make first period ret 0
         # compute performance metric
+        if metric == 'ret':
+            df = quant_ret_ts_df
         else:
             df = getattr(Performance(quant_ret_ts_df, mkt_ret=mkt_ret, ret_type='log'), metric)(**kwargs)
         # convert to df
