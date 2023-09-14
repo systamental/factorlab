@@ -20,6 +20,7 @@ def add_fonts():
     for font_file in font_files:
         fm.fontManager.addfont(font_file)
 
+
 def plot_series(data: Union[pd.Series, pd.DataFrame],
                 fig_size: tuple = (15, 7),
                 color_lightness: Optional[str] = None,

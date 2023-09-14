@@ -125,8 +125,6 @@ def linear_reg(target: Union[pd.Series, pd.DataFrame],
             out = pd.DataFrame(model.resid_recursive, index=X.index, columns=['resid'])
         elif output == 'rsq':
             out = model.rsquared
-        elif output == 'f_pval':
-            out = model.f_pvalue
         else:
             out = model.summary()
 
