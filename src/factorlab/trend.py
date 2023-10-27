@@ -4,8 +4,8 @@ import numpy as np
 from typing import Union
 
 
-from time_series_analysis import linear_reg
-from transform import Transform
+from factorlab.time_series_analysis import linear_reg
+from factorlab.transform import Transform
 
 
 class Trend:
