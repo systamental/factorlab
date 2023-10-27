@@ -285,7 +285,7 @@ class Factor:
         factor_quantiles = self.quantize(self.factors, bins=self.factor_bins, ts_norm=ts_norm)
         target_quantiles = self.quantize(self.ret, bins=self.target_bins, ts_norm=ts_norm)
         # merge
-        quantiles_df = pd.concat([factor_quantiles.groupby('ticker').shift(1), target_quantiles], axis=1, join='inner')
+        quantiles_df = pd.concat([factor_quantiles.groupby('ticker').shift(0), target_quantiles], axis=1, join='inner')
 
         # create empty df for correlation measures
         metrics_df = pd.DataFrame(index=self.factors.columns)
@@ -297,7 +297,8 @@ class Factor:
 
         # loop through factors
         for col in self.factors.columns:
-            data = pd.concat([quantiles_df[col], quantiles_df.iloc[:, -1]], axis=1, join='inner').dropna()
+            data = pd.concat([quantiles_df[col], quantiles_df
+                              ], axis=1, join='inner').dropna()
             # add metrics
             if 'spearman_r' in metrics:
                 metrics_df.loc[col, 'spearman_r'] = spearmanr(data[col], data.iloc[:, -1])[0]
@@ -913,6 +914,7 @@ class Factor:
                   clip: int = 3,
                   ts_norm: bool = False,
                   rebalancing: Optional[Union[str, int]] = None,
+                  ann_factor: Optional[float] = 365,
                   **kwargs
                   ):
         """
@@ -941,6 +943,8 @@ class Factor:
         rebalancing: str or int, default None
             Rebalancing frequency. Can be day of week, e.g. 'monday', 'tuesday', etc, start, middle or end of month,
             e.g. 'month_end', '15th', or 'month_start', or an int for the number of days between rebalancing.
+        ann_factor: int
+            Annualization factor, e.g. 365 for daily, 52 for weekly, 12 for monthly, etc.
 
         Returns
         -------
@@ -964,13 +968,14 @@ class Factor:
         # quantize signals
         quantiles = self.quantize(factors[[factor]], bins=self.factor_bins)
         # merge
-        quant_ret_df = pd.concat([quantiles.groupby('ticker').shift(0).astype(int), self.ret], axis=1, join='inner')
+        quant_ret_df = pd.concat([quantiles.groupby('ticker').shift(1).dropna().astype(int), self.ret],
+                                 axis=1, join='inner')
 
         # quantile rets
         quant_ret_ts_df = pd.DataFrame()
         for quant in range(1, self.factor_bins + 1):
             quant_ret_ts_df = pd.concat([quant_ret_ts_df,
-                                         quant_ret_df[quant_ret_df[factor] == quant]['fwd_ret_1'].groupby(
+                                         quant_ret_df[quant_ret_df[factor] == quant].iloc[:, -1].groupby(
                                              'date').mean().to_frame(quant)], axis=1)
         quant_ret_ts_df['top_vs_bottom'] = quant_ret_ts_df[self.factor_bins] - quant_ret_ts_df[1]
         quant_ret_ts_df.iloc[0] = 0  # make first period ret 0
@@ -978,7 +983,8 @@ class Factor:
         if metric == 'ret':
             df = quant_ret_ts_df
         else:
-            df = getattr(Performance(quant_ret_ts_df, mkt_ret=mkt_ret, ret_type='log'), metric)(**kwargs)
+            df = getattr(Performance(quant_ret_ts_df, mkt_ret=mkt_ret, ret_type='log', ann_factor=ann_factor),
+                         metric)(**kwargs)
         # convert to df
         if isinstance(df, pd.Series):
             df = df.to_frame(metric)
