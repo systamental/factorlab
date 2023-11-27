@@ -300,12 +300,9 @@ class Trend:
 
         # compute price returns and up/down days
         if isinstance(df.index, pd.MultiIndex):  # multiindex
-            rep_fcn = lambda x: np.log(x).replace([np.inf, -np.inf], np.nan)
-            rsi_df = df.groupby(level=1, group_keys=False).apply(rep_fcn).ffill()
-            ret = rsi_df.groupby(level=1, group_keys=False).diff()
+            ret = df.groupby(level=1, group_keys=False).diff()
         else:  # single index
-            rsi_df = np.log(df).replace([np.inf, -np.inf], np.nan).ffill()
-            ret = rsi_df.diff()
+            ret = df.diff()
 
         # get up and down days
         up = ret.where(ret > 0).fillna(0)
