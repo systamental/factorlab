@@ -7,14 +7,14 @@ from typing import Optional, Union
 from scipy.stats import chi2_contingency, spearmanr, kendalltau, contingency
 from sklearn.feature_selection import mutual_info_classif
 
-from factorlab.time_series_analysis import linear_reg, fm_summary
-from factorlab.transform import Transform
-from factorlab.performance import Performance
+from factorlab.feature_analysis.time_series_analysis import linear_reg, fm_summary
+from factorlab.feature_engineering.transform import Transform
+from factorlab.feature_analysis.performance import Performance
 
 
 class Factor:
     """
-    Screening methods for raw data or features.
+    Analysis of alpha or risk factor.
     """
     def __init__(self,
                  factors: pd.DataFrame,
@@ -251,7 +251,7 @@ class Factor:
     def filter(
             self,
             ts_norm: bool = False,
-            metrics: Union[str, list] = 'all',
+            metrics: Union[str, list] = ['spearman_r'],
             rank_on: Optional[str] = 'spearman_r'
     ) -> pd.DataFrame:
         """
@@ -271,9 +271,9 @@ class Factor:
         Parameters
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
-        metrics: str, default 'all'
-            Metrics to compute.
-        rank_on: str, optional, default 'IC'
+        metrics: str, {'all', 'spearman_r'}, default 'spearman_r'
+            Metric to compute.
+        rank_on: str, optional, default 'spearman_r'
             Ranks the factors in descending order by selected metric.
 
         Returns
@@ -285,45 +285,54 @@ class Factor:
         factor_quantiles = self.quantize(self.factors, bins=self.factor_bins, ts_norm=ts_norm)
         target_quantiles = self.quantize(self.ret, bins=self.target_bins, ts_norm=ts_norm)
         # merge
-        quantiles_df = pd.concat([factor_quantiles.groupby('ticker').shift(0), target_quantiles], axis=1, join='inner')
+        quantiles_df = pd.concat([factor_quantiles, target_quantiles], axis=1, join='inner')
 
         # create empty df for correlation measures
         metrics_df = pd.DataFrame(index=self.factors.columns)
         # metrics list
         metrics_list = ['spearman_r', 'p-val', 'cramer_v', 'chi2', 'mutual_info', 'kendall_tau', 'tschuprow',
                         'pearson_cc', 'autocorrelation']
+
+        # metrics
         if metrics == 'all':
             metrics = metrics_list
+        elif metrics is None:
+            metrics = ['spearman_r']
+        else:
+            if isinstance(metrics, str):
+                metrics = [metrics]
+            for metric in metrics:
+                if metric not in metrics_list:
+                    raise ValueError(f"{metric} is not available. Select available metrics from {metrics_list}.")
 
         # loop through factors
         for col in self.factors.columns:
-            data = pd.concat([quantiles_df[col], quantiles_df
-                              ], axis=1, join='inner').dropna()
+            data = pd.concat([quantiles_df[col], quantiles_df[self.ret.name]], axis=1, join='inner').dropna()
             # add metrics
             if 'spearman_r' in metrics:
-                metrics_df.loc[col, 'spearman_r'] = spearmanr(data[col], data.iloc[:, -1])[0]
+                metrics_df.loc[col, 'spearman_r'] = spearmanr(data[col], data[self.ret.name])[0]
             if 'p-val' in metrics:
-                metrics_df.loc[col, 'p-val'] = spearmanr(data[col], data.iloc[:, -1])[1]
+                metrics_df.loc[col, 'p-val'] = spearmanr(data[col], data[self.ret.name])[1]
             if 'kendall_tau' in metrics:
-                metrics_df.loc[col, 'kendall_tau'] = kendalltau(data[col], data.iloc[:, -1])[0]
+                metrics_df.loc[col, 'kendall_tau'] = kendalltau(data[col], data[self.ret.name])[0]
             if 'cramer_v' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data[self.ret.name])
                 metrics_df.loc[col, 'cramer_v'] = contingency.association(cont_table, method='cramer')
             if 'tschuprow_t' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data[self.ret.name])
                 metrics_df.loc[col, 'tschuprow_t'] = contingency.association(cont_table, method='tschuprow')
             if 'pearson_cc' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data[self.ret.name])
                 metrics_df.loc[col, 'pearson_cc'] = contingency.association(cont_table, method='pearson')
             if 'chi2' in metrics:
                 # contingency table
-                cont_table = pd.crosstab(data[col], data.iloc[:, -1])
+                cont_table = pd.crosstab(data[col], data[self.ret.name])
                 metrics_df.loc[col, 'chi2'] = chi2_contingency(cont_table)[0]
             if 'mutual_info' in metrics:
-                metrics_df.loc[col, 'mutual_info'] = mutual_info_classif(data[[col]], data.iloc[:, -1])
+                metrics_df.loc[col, 'mutual_info'] = mutual_info_classif(data[[col]], data[self.ret.name])
             if 'autocorrelation' in metrics:
                 idx = self.factors.groupby(level=1, group_keys=False).shift(1).index
                 metrics_df.loc[col, 'autocorrelation'] = spearmanr(self.factors[col].reindex(idx),
@@ -357,9 +366,9 @@ class Factor:
                        axis=1)
         df = df.unstack().dropna(thresh=10).stack()  # set time series min nobs thresh
 
+        # compute spearman rank corr
         def spearman_r(data):
-            f = data['ret']
-            stat = data.apply(lambda x: spearmanr(x, f, nan_policy='omit')[0])
+            stat = data.apply(lambda x: spearmanr(data.iloc[:, 0], data.iloc[:, 1], nan_policy='omit')[0])
             return stat
 
         # cs strategy
@@ -367,14 +376,23 @@ class Factor:
             ic_df = df.groupby('date').apply(spearman_r).rolling(self.window_size).mean().iloc[:, :-1]
         # ts strategy
         else:
-            ic_df = pd.DataFrame(index=df.index.get_level_values('date').drop_duplicates(),
-                                 columns=df.columns[:-1])
-            lookback = self.window_size
+            # create dates list to iterate over
+            dates = df.index.droplevel(1).unique().to_list()
+            # empty np array
+            corr_arr = np.full((len(dates), 2), np.nan)
 
-            while lookback < ic_df.shape[0]:
-                ic_df.iloc[lookback] = df.iloc[lookback - self.window_size:lookback].groupby('ticker').\
-                                              apply(spearman_r).mean()[:-1]
-                lookback += 1
+            # loop through rows of df
+            for i in range(len(dates) - self.window_size + 1):
+                # get corr
+                corr = spearmanr(df.loc[dates[i]: dates[i + self.window_size - 1], df.iloc[:, 0].name],
+                                 df.loc[dates[i]: dates[i + self.window_size - 1], df.iloc[:, 1].name],
+                                 nan_policy='omit')
+                # add corr arr
+                corr_arr[i + self.window_size - 1, 0] = corr[0]
+
+            # create ic df
+            ic_df = pd.DataFrame(corr_arr, index=dates).iloc[:, 0].to_frame(self.factors[factor].name)
+            ic_df.index.name = 'date'
 
         return ic_df
 
@@ -452,7 +470,7 @@ class Factor:
                    method: str = 'pooled',
                    multivariate: bool = False,
                    norm: Optional[bool] = False,
-                   nobs: int = 10
+                   min_obs: int = 10
                    ):
         """
         Regression of forward returns on factors.
@@ -465,7 +483,7 @@ class Factor:
             Runs a multivariate regression on all factors. Otherwise, runs univariate regressions on each factor.
         norm: bool, optional, default False
             Normalizes factors using z-score method before regressing on forward returns.
-        nobs: int, default 10
+        min_obs: int, default 10
             Minimum number of observations in the cross-section for Fama Macbeth regression.
 
         Returns
@@ -510,11 +528,11 @@ class Factor:
                 # compute beta, std error and t-stat
                 table = pd.DataFrame()
                 for col in factors.columns:
-                    res = fm_summary(self.ret, factors[col], nobs=nobs)
+                    res = fm_summary(self.ret, factors[col], min_obs=min_obs)
                     table = pd.concat([table, res.loc[col].to_frame().T])
                 table = table.sort_values(by='beta', ascending=False)
             else:
-                table = fm_summary(self.ret, factors, nobs=nobs)
+                table = fm_summary(self.ret, factors,  min_obs=min_obs)
 
         return table.round(decimals=4)
 
@@ -689,7 +707,8 @@ class Factor:
                 centering: bool = True,
                 tails: Optional[str] = None,
                 leverage: Optional[int] = None,
-                norm_method: Optional[str] = 'z-score',
+                norm_method: Optional[str] = 'cdf',
+                clip: int = 3,
                 ts_norm: bool = False,
                 rebalancing: Optional[Union[str, int]] = None,
                 t_cost: Optional[float] = None,
@@ -700,8 +719,8 @@ class Factor:
         """
         Computes factors returns.
 
-        Factor returns are defined as F * fwd_ret, where F is the fxn factor matrix and fwd_ret is an nx1 vector of
-        forward returns.
+        Factor returns are defined as F,t-1 * ret, where F is the fxn factor matrix and ret is an nx1 vector of asset
+        returns.
 
         Parameters
         ----------
@@ -724,6 +743,8 @@ class Factor:
                 min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
                 percentile: converts values to their percentile rank relative to the observations in the
                 defined window type.
+        clip: int, default 3
+            Max/min value to use for winsorization/clipping for signals when method is z-score, iqr or mod z.
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross section.
         rebalancing: str or int, default None
@@ -746,7 +767,7 @@ class Factor:
             Series or dataframe with DatetimeIndex (level 0), tickers (level 1) and factor returns (cols).
         """
         # compute factors
-        factors = self.compute_factors(signal_type=signal_type, centering=centering, norm_method=norm_method,
+        factors = self.compute_factors(signal_type=signal_type, centering=centering, norm_method=norm_method, clip=clip,
                                        ts_norm=ts_norm, leverage=leverage, tails=tails, rebalancing=rebalancing)
 
         # compute weights
@@ -765,7 +786,6 @@ class Factor:
         tcost_df = self.tcosts(factors.groupby('ticker').shift(1), t_cost=t_cost)  # t-costs
         net_ret_df = ret_df.subtract(tcost_df, axis=0).dropna(how='all')
         # replace NaNs with 0s
-        net_ret_df.fillna(0, inplace=True)
         net_ret_df.iloc[0] = 0
 
         return net_ret_df
@@ -907,7 +927,7 @@ class Factor:
 
     def quantiles(self,
                   factor: str,
-                  metric: str = 'mean_ret',
+                  metric: str = 'ret',
                   mkt_ret: pd.Series = None,
                   signal_type: str = 'signal',
                   norm_method: str = 'cdf',

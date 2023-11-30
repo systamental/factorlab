@@ -4,8 +4,8 @@ import numpy as np
 from typing import Union
 
 
-from factorlab.time_series_analysis import linear_reg
-from factorlab.transform import Transform
+from factorlab.feature_analysis.time_series_analysis import linear_reg
+from factorlab.feature_engineering.transform import Transform
 
 
 class Trend:
@@ -254,12 +254,12 @@ class Trend:
             df = Transform(df).vwap()['vwap'].to_frame('price')
         else:
             df = df.close.to_frame('price')
-
-        # log
-        df = Transform(df).log()
+        #
+        # # log
+        # df = Transform(df).log()
 
         # compute ret
-        y = df.groupby(level=1).diff().price.rename('y')
+        y = Transform(df).returns().price.rename('y')
         # compute market beta ret X and market ret y
         X = y.groupby(level=0).mean().rename('X')
         # merge y, X
@@ -343,7 +343,7 @@ class Trend:
 
         # st lookback
         if self.st_lookback is None:
-            self.st_lookback = self.lookback / 4
+            self.st_lookback = max(2, round(self.lookback / 4))
 
         # compute k
         if isinstance(df.index, pd.MultiIndex):

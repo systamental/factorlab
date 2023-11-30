@@ -5,7 +5,8 @@ import seaborn as sns
 from PIL import Image
 from importlib import resources
 from typing import Union, Optional, Dict, List
-from factorlab.time_series_analysis import linear_reg
+
+from factorlab.feature_analysis.time_series_analysis import linear_reg
 
 
 class Performance:

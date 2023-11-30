@@ -8,8 +8,8 @@ import seaborn as sns
 from PIL import Image
 from importlib import resources
 
-from factorlab.factor_analysis import Factor
-from factorlab.performance import Performance
+from factorlab.feature_analysis.factor_analysis import Factor
+from factorlab.feature_analysis.performance import Performance
 
 
 def feat_partial(feature: Callable,
@@ -150,7 +150,7 @@ def ret_partial(factor_part: Callable,
 
 
 def factor_ret(factors: Union[pd.Series, pd.DataFrame],
-               fwd_ret: Union[pd.Series, pd.DataFrame],
+               ret: Union[pd.Series, pd.DataFrame],
                factor_args: Dict,
                ret_args: Dict
                ) -> Union[pd.Series, pd.DataFrame]:
@@ -162,8 +162,8 @@ def factor_ret(factors: Union[pd.Series, pd.DataFrame],
     ----------
     factors: pd.Series or pd.DataFrame
         Series or dataframe with DatetimeIndex (level 0), ticker (level 1) and factor values (cols).
-    fwd_ret: pd.Series or pd.DataFrame
-        Series or dataframe with DatetimeIndex (level 0), ticker (level 1) and forward returns (cols).
+    ret: pd.Series or pd.DataFrame
+        Series or dataframe with DatetimeIndex (level 0), ticker (level 1) and returns (cols).
     factor_args: dict
         Keyword arguments for computation of factor-based strategy.
     ret_args: dict
@@ -175,7 +175,7 @@ def factor_ret(factors: Union[pd.Series, pd.DataFrame],
         Factor returns series or dataframe with DatetimeIndex (level 0), ticker (level 1) and factor returns (cols).
     """
     # get factor partial fcn/callable
-    factor_part = factor_partial(factors, fwd_ret, **factor_args)
+    factor_part = factor_partial(factors, ret, **factor_args)
     # compute factor returns
     ret = ret_partial(factor_part, **ret_args)
 
@@ -202,7 +202,7 @@ def grid_parameters(parameters: dict[str, Iterable[Any]]) -> Iterable[dict[str, 
 
 def compute_metric(
         factor: Union[pd.Series, pd.DataFrame],
-        fwd_ret: Union[pd.Series, pd.DataFrame],
+        ret: Union[pd.Series, pd.DataFrame],
         factor_args: Dict,
         ret_args: Dict,
         metric: str
@@ -214,8 +214,8 @@ def compute_metric(
     ----------
     factor: pd.Series or pd.DataFrame
         Factor to compute factor returns.
-    fwd_ret: pd.Series or DataFrame
-        Forward returns.
+    ret: pd.Series or DataFrame
+        Returns.
     factor_args: dict
         Keyword arguments for computation of factor-based strategy.
     ret_args: dict
@@ -229,14 +229,14 @@ def compute_metric(
     val: pd.Series
         Performance metric value.
     """
-    val = getattr(Performance(factor_ret(factor, fwd_ret, factor_args, ret_args)), metric)()
+    val = getattr(Performance(factor_ret(factor, ret, factor_args, ret_args)), metric)()
 
     return val
 
 
 def factor_param_grid_search(
         df: Union[pd.Series, pd.DataFrame],
-        fwd_ret: Union[pd.Series, pd.DataFrame],
+        ret: Union[pd.Series, pd.DataFrame],
         feature: Callable,
         algo: str,
         feat_args: Dict,
@@ -253,8 +253,8 @@ def factor_param_grid_search(
     ----------
     df: pd.DataFrame - pd.MultiIndex
         DataFrame with DatetimeIndex (level 0), tickers (level 1) and raw data (cols).
-    fwd_ret: pd.Series or DataFrame
-        Forward returns.
+    ret: pd.Series or DataFrame
+        Returns.
     feature: callable
         Alpha or risk factor to construct, e.g. Trend, Value, Carry, etc.
     algo: str
@@ -278,7 +278,7 @@ def factor_param_grid_search(
     """
     # loop through params and compute metrics
     metrics = Parallel(n_jobs=8)(delayed(compute_metric)(feat(df, feature, algo, feat_param, algo_param),
-                                                         fwd_ret,
+                                                         ret,
                                                          factor_args,
                                                          ret_args,
                                                          metric)
@@ -299,7 +299,7 @@ def factor_param_grid_search(
 
 def strategy_param_grid_search(
         factor: Union[pd.Series, pd.DataFrame],
-        fwd_ret: Union[pd.Series, pd.DataFrame],
+        ret: Union[pd.Series, pd.DataFrame],
         factor_args: Dict,
         ret_args: Dict,
         metric: str = 'sharpe_ratio',
@@ -312,8 +312,8 @@ def strategy_param_grid_search(
     ----------
     factor: pd.Series or pd.DataFrame
         Factor to compute factor returns.
-    fwd_ret: pd.Series or DataFrame
-        Forward returns.
+    ret: pd.Series or DataFrame
+        Returns.
     factor_args: dict
         Keyword arguments for computation of factor-based strategy.
     ret_args: dict
@@ -331,7 +331,7 @@ def strategy_param_grid_search(
     if not isinstance(factor, pd.Series):
         raise TypeError("Factor must be a series for parameter grid search.")
 
-    metrics = Parallel(n_jobs=8)(delayed(compute_metric)(factor, fwd_ret, factor_param, ret_param, metric)
+    metrics = Parallel(n_jobs=8)(delayed(compute_metric)(factor, ret, factor_param, ret_param, metric)
                                  for factor_param in grid_parameters(factor_args) for ret_param in
                                  grid_parameters(ret_args))
     metrics = [i[0] for i in metrics]

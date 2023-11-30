@@ -242,6 +242,31 @@ def adf(df: Union[pd.Series, pd.DataFrame],
     return res_df.sort_values(by='adf')
 
 
+def he(series, window_size):
+    """
+
+    Parameters
+    ----------
+    series
+    window_size
+
+    Returns
+    -------
+
+    """
+
+    # create the range of lag values
+    lags = range(2, window_size)
+
+    # calculate the array of the variances of the lagged differences
+    tau = [np.sqrt(np.std(np.subtract(series[lag:].values, series[:-lag].values))) for lag in lags]
+
+    # use a linear fit to estimate the Hurst Exponent
+    poly = np.polyfit(np.log(lags), np.log(tau), 1)
+
+    return poly[0] * 2.0
+
+
 def hurst(df: pd.DataFrame, window_size: int = 365) -> pd.DataFrame:
     """
     Computes the hurst exponent of a time series.
@@ -258,20 +283,6 @@ def hurst(df: pd.DataFrame, window_size: int = 365) -> pd.DataFrame:
     hurst: pd.DataFrame
         DataFrame with Hurst exponents for each series/col.
     """
-
-    def he(series, window_size=window_size):
-
-        # create the range of lag values
-        lags = range(2, window_size)
-
-        # calculate the array of the variances of the lagged differences
-        tau = [np.sqrt(np.std(np.subtract(series[lag:].values, series[:-lag].values))) for lag in lags]
-
-        # use a linear fit to estimate the Hurst Exponent
-        poly = np.polyfit(np.log(lags), np.log(tau), 1)
-
-        return poly[0] * 2.0
-
     # conver to df
     if isinstance(df, pd.Series):
         df = df.to_frame()
@@ -281,7 +292,7 @@ def hurst(df: pd.DataFrame, window_size: int = 365) -> pd.DataFrame:
 
     # loop through cols
     for col in df.columns:
-        hurst_exp = {'hurst': he(df[col], window_size=window_size)}
+        hurst_exp = {'hurst': he(df[col], window_size)}
         res_df = res_df.append(hurst_exp, ignore_index=True)
 
     # add index
@@ -314,7 +325,7 @@ def ols_betas(data):
 
 def fm_reg(returns: Union[pd.Series, pd.DataFrame],
            factors: Union[pd.Series, pd.DataFrame],
-           nobs: int = 5
+           min_obs: int = 5
            ) -> pd.DataFrame:
     """
     Runs cross-sectional Fama Macbeth regressions for each time period to compute factor/characteristic betas.
@@ -325,7 +336,7 @@ def fm_reg(returns: Union[pd.Series, pd.DataFrame],
         Returns.
     factors: pd.Series or pd.DataFrame
         Factor values
-    nobs: int, default 5
+    min_obs: int, default 5
         Minimum number of observations in the cross section to run the Fama Macbeth regression.
 
     Returns
@@ -334,11 +345,11 @@ def fm_reg(returns: Union[pd.Series, pd.DataFrame],
         Dataframe with DatetimeIndex and estimated factor betas.
     """
     # check n obs for factors in cross-section
-    if factors.groupby('date').count()[(factors.groupby('date').count() > nobs)].dropna(how='all').empty:
+    if factors.groupby('date').count()[(factors.groupby('date').count() > min_obs)].dropna(how='all').empty:
         raise Exception(f"Cross-section does not meet minimum number of observations. Change nobs parameter or "
                         f"increase asset universe.")
     else:
-        start_idx = factors.groupby('date').count()[(factors.groupby('date').count() > nobs)].index[0]
+        start_idx = factors.groupby('date').count()[(factors.groupby('date').count() > min_obs)].index[0]
     # y, X
     y, X = returns, factors.loc[start_idx:]
     # add constant and join X, y
@@ -351,7 +362,7 @@ def fm_reg(returns: Union[pd.Series, pd.DataFrame],
 
 def fm_summary(returns: Union[pd.Series, pd.DataFrame],
                factors: Union[pd.Series, pd.DataFrame],
-               nobs: int = 5
+               min_obs: int = 5
                ) -> pd.DataFrame:
     """
     Computes test statistics for betas from Fama Macbeth cross sectional regressions.
@@ -362,7 +373,7 @@ def fm_summary(returns: Union[pd.Series, pd.DataFrame],
         Returns series.
     factors: pd.Series or pd.DataFrame
         Factors.
-    nobs: int, default 5
+    min_obs: int, default 5
         Minimum number of observations in the cross section to run the Fama Macbeth regression.
 
     Returns
@@ -371,7 +382,7 @@ def fm_summary(returns: Union[pd.Series, pd.DataFrame],
         DataFrame with mean estimated betas, std errors and t-stats.
     """
     # compute betas
-    betas = fm_reg(returns, factors, nobs=nobs)
+    betas = fm_reg(returns, factors, min_obs=min_obs)
     # get stats
     stats = betas.describe().T
     stats['std_error'] = stats['std'] / np.sqrt(stats['count'])
