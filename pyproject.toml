@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "factorlab"
-version = "0.1.4"
+version = "0.1.5"
 description = "Python library which enables the discovery and analysis of alpha and risk factors used in the investment algorithm development process"
 authors = ["Systamental"]
 license = "Apache License 2.0"
@@ -17,10 +17,12 @@ statsmodels = "^0.13.2"
 seaborn = "^0.12.1"
 plotly = "^5.11.0"
 openpyxl = "^3.0.10"
+scikit-learn-intelex = "^2023.2.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.2.0"
 jupyter = "^1.0.0"
+google-generativeai = "^0.2.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
