@@ -50,7 +50,7 @@ class Trend:
         lags: int, default 0
             Number of periods to lag values by.
         """
-        # check data types
+        # convert data types
         if isinstance(df, pd.Series):
             df = df.to_frame('close')
         if not isinstance(df.index, pd.MultiIndex):
@@ -144,7 +144,7 @@ class Trend:
 
         return self.trend
 
-    def divergence(self) -> Union[pd.Series, pd.DataFrame]:
+    def divergence(self) -> pd.DataFrame:
         """
         Compute divergence measure.
 
@@ -166,7 +166,7 @@ class Trend:
 
         return self.trend
 
-    def time_trend(self) -> Union[pd.Series, pd.DataFrame]:
+    def time_trend(self) -> pd.DataFrame:
         """
         Computes the time trend factor by regressing price on a constant and time trend to estimate coefficients.
 
@@ -189,7 +189,7 @@ class Trend:
 
         return self.trend
 
-    def price_acc(self) -> Union[pd.Series, pd.DataFrame]:
+    def price_acc(self) -> pd.DataFrame:
         """
         Compute the price acceleration factor by regressing price on a constant, time trend
         and time trend squared to estimate coefficients.
@@ -213,7 +213,7 @@ class Trend:
 
         return self.trend
 
-    def alpha_mom(self) -> Union[pd.Series, pd.DataFrame]:
+    def alpha_mom(self) ->pd.DataFrame:
         """
         Constant term (alpha) from fitting an OLS linear regression of price on the market beta,
         i.e. cross-sectional average).
@@ -248,7 +248,7 @@ class Trend:
 
         return self.trend
 
-    def rsi(self, signal: bool = True) -> Union[pd.Series, pd.DataFrame]:
+    def rsi(self, signal: bool = True) -> pd.DataFrame:
         """
         Computes the RSI indicator.
 
@@ -356,7 +356,7 @@ class Trend:
 
         return self.trend
 
-    def intensity(self) -> Union[pd.Series, pd.DataFrame]:
+    def intensity(self) -> pd.DataFrame:
         """
         Computes intraday intensity trend factor.
 
@@ -395,7 +395,7 @@ class Trend:
 
         return self.trend
 
-    def mw_diff(self) -> Union[pd.Series, pd.DataFrame]:
+    def mw_diff(self) -> pd.DataFrame:
         """
         Computes the moving window difference trend factor.
 
@@ -430,7 +430,7 @@ class Trend:
                     s_k: list = [2, 4, 8],
                     l_k: list = [6, 12, 24],
                     signal: bool = False
-                    ) -> Union[pd.Series, pd.DataFrame]:
+                    ) -> pd.DataFrame:
         """
         Computes the moving window difference trend factor.
 
@@ -494,7 +494,7 @@ class Trend:
 
         return self.trend
 
-    def energy(self, mass_method='vol', perc: Optional[float] = 0.05) -> Union[pd.Series, pd.DataFrame]:
+    def energy(self, mass_method='vol', perc: Optional[float] = 0.05) -> pd.DataFrame:
         """
         Computes the energy trend factor, E = mc^2, where E is energy, m is mass (volatility or VaR)
         and c is the speed (price momentum).
