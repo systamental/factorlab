@@ -9,13 +9,14 @@ from matplotlib import font_manager as fm
 
 
 def add_fonts():
-
-    # Get the path to the directory where this Python script is located
+    # Get the directory of the current script or module
     current_dir = Path(__file__).resolve().parent
-    # Construct the relative path to the 'fonts' directory
-    fonts_dir = current_dir / 'conf' / 'fonts'
-    # Use Path.glob() to find all .ttf font files within the 'fonts' directory
-    font_files = list(fonts_dir.glob('*.ttf'))
+    # Navigate to the parent directory
+    parent_dir = current_dir.parent
+    # Navigate to the child directory (replace 'child_directory' with your actual directory)
+    child_dir = parent_dir / 'conf' / 'fonts'
+    # list of font files
+    font_files = list(child_dir.glob('*.ttf'))
     # add to matplotlib fonts
     for font_file in font_files:
         fm.fontManager.addfont(font_file)
@@ -84,7 +85,7 @@ def plot_series(data: Union[pd.Series, pd.DataFrame],
 
     # font
     add_fonts()
-    plt.rcParams["font.family"] = "sans-serif"
+    # plt.rcParams["font.family"] = "sans-serif"
     plt.rcParams['font.sans-serif'] = font
 
     # grid
@@ -158,7 +159,8 @@ def plot_series(data: Union[pd.Series, pd.DataFrame],
 
 
 def plot_bar(data: Union[pd.Series, pd.DataFrame],
-             fig_size: tuple = (15, 7),
+             axis: str = 'vertical',
+             fig_size: Union[tuple, str] = 'auto',
              color_lightness: Optional[str] = None,
              color: Optional[str] = None,
              font: Optional[str] = 'Lato',
@@ -180,8 +182,10 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
     ----------
     data: pd.Series or pd.DataFrame
         Data object from which to create bar plot.
-    fig_size: tuple
-        Tuple (width, height) of figure object.
+    axis: str, {'vertical', 'horizontal'}, default 'vertical'
+        Axis along which to plot the bar plot.
+    fig_size: tuple or str, default 'auto'
+        Tuple (width, height) of figure object, defaults to 'auto'
     color_lightness: str, {'dark', 'light', 'medium'}, optional
         Color lightness for the bar plot.
     color: int, optional, default None
@@ -210,6 +214,15 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
         Font used for the source text.
 
     """
+    # axis
+    if fig_size == 'auto':
+        if axis == 'vertical':
+            width, height = data.shape[0], data.shape[0] / 10 + 5
+        else:
+            width, height = 7, data.shape[0] / 4 + 3
+        # set figsize
+        fig_size = (width, height)
+
     # plot size
     fig, ax = plt.subplots(figsize=fig_size)
 
@@ -230,7 +243,10 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
         color = colors[0]
 
     # plot
-    data.plot(kind='bar', color=color, legend=False, rot=0, ax=ax)
+    if axis == 'horizontal':
+        data.plot(kind='barh', color=color, legend=False, rot=0, ax=ax)
+    else:
+        data.plot(kind='bar', color=color, legend=False, rot=0, ax=ax)
 
     # font
     add_fonts()
@@ -239,40 +255,32 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
 
     # grid
     ax.set_axisbelow(True)
-    ax.grid(which="major", axis='y', color='#758D99', alpha=0.6)
     ax.set_facecolor("whitesmoke")
+    if axis == 'horizontal':
+        ax.grid(which="major", axis='x', color='#758D99', alpha=0.6)
+    else:
+        ax.grid(which="major", axis='y', color='#758D99', alpha=0.6)
 
     # remove splines
     ax.spines[['top', 'right', 'left']].set_visible(False)
 
     # format x-axis
     ax.set_xlabel(x_label)
+    ax.margins(x=0)
 
     # format y-axis
-    ax.set_ylabel(y_label)
-    ax.yaxis.tick_right()
-    ax.ticklabel_format(style='plain', axis='y')
-
-    # legend
-    ax.legend(
-        loc="upper right",
-        bbox_to_anchor=(0.9, 0.94),
-        bbox_transform=fig.transFigure,
-        facecolor='white',
-        edgecolor='white'
-    )
-
-    # add in title and subtitle
-    if subtitle is None:
-        ax.text(x=0.125, y=0.89, s=f"{title}", transform=fig.transFigure, ha='left',
-                fontsize=16, weight='bold', alpha=.8, fontdict=title_font)
+    if axis == 'vertical':
+        ax.yaxis.tick_right()  # side
+        ax.set_ylabel(y_label)  # label
+        ax.ticklabel_format(style='plain', axis='y')
+        ax.tick_params(right=False)
     else:
-        ax.text(x=0.125, y=0.93, s=f"{title}", transform=fig.transFigure, ha='left',
-                fontsize=16, weight='bold', alpha=.8, fontdict=title_font)
-        ax.text(x=0.125, y=.89, s=f"{subtitle}", transform=fig.transFigure, ha='left',
-                fontsize=14, alpha=.8, fontdict=title_font)
+        ax.yaxis.tick_left()  # side
+        ax.set_ylabel(y_label)  # label
+        ax.tick_params(left=False)
+        ax.margins(y=0)
 
-    # add in line and tag
+        # add in line and tag
     line_colors = ['black', '#758D99', '#006BA2', '#DB444B', '#3EBCD2', '#379A8B', '#EBB434', '#B4BA39', '#9A607F',
                    '#D1B07C', '#758D99']
     if add_line:
@@ -280,13 +288,23 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
             line_color = line_colors[line_color]
         else:
             line_color = line_colors[0]
+
         # create line
-        ax.plot([0.12, .9],  # set line width
-                [.98, .98],  # set line height
-                transform=fig.transFigure,  # set location relative to plot
+        ax.plot([0, 1],  # set line width
+                [1.05, 1.05],  # set line height
+                transform=ax.transAxes,  # set location relative to axis
                 clip_on=False,
                 color=line_color,
                 linewidth=.6)
+
+    # add in title and subtitle
+    if subtitle is None:
+        ax.set_title(title, loc='left', pad=None, fontsize=16, weight='bold', alpha=.8, fontdict=title_font)
+
+    else:
+        ax.set_title(title, loc='left', pad=25, fontsize=16, weight='bold', alpha=.8, fontdict=title_font)
+        ax.text(x=0, y=1.01, s=f"{subtitle}", transform=ax.transAxes, ha='left',
+                fontsize=14, alpha=.8, fontdict=title_font)
 
     # add systamental logo
     if add_logo:
@@ -297,8 +315,10 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
 
     # Set source text
     if source is not None:
-        ax.text(x=0.125, y=0.05, s=f"""Source: {source}""", transform=fig.transFigure, ha='left', fontsize=10,
+        ax.text(x=0, y=-0.2, s=f"""Source: {source}""", transform=ax.transAxes, ha='left', fontsize=10,
                 alpha=.8, fontdict=source_font)
+
+    plt.show()
 
 
 def plot_table(data: pd.DataFrame,
