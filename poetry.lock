@@ -141,6 +141,26 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "catboost"
+version = "1.2.2"
+description = "CatBoost Python Package"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+graphviz = "*"
+matplotlib = "*"
+numpy = ">=1.16.0"
+pandas = ">=0.24"
+plotly = "*"
+scipy = "*"
+six = "*"
+
+[package.extras]
+widget = ["traitlets", "ipython", "ipywidgets (>=7.0,<9.0)"]
+
+[[package]]
 name = "certifi"
 version = "2023.7.22"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -412,6 +432,19 @@ protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.1 || >4.21.1,<4
 
 [package.extras]
 grpc = ["grpcio (>=1.44.0,<2.0.0.dev0)"]
+
+[[package]]
+name = "graphviz"
+version = "0.20.1"
+description = "Simple Python interface for Graphviz"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+dev = ["tox (>=3)", "flake8", "pep8-naming", "wheel", "twine"]
+docs = ["sphinx (>=5)", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
+test = ["pytest (>=7)", "pytest-mock (>=3)", "mock (>=4)", "pytest-cov", "coverage"]
 
 [[package]]
 name = "grpcio"
@@ -1783,6 +1816,26 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "xgboost"
+version = "2.0.3"
+description = "XGBoost Python Package"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
+
+[package.extras]
+dask = ["dask", "distributed", "pandas"]
+datatable = ["datatable"]
+pandas = ["pandas"]
+plotting = ["graphviz", "matplotlib"]
+pyspark = ["cloudpickle", "pyspark", "scikit-learn"]
+scikit-learn = ["scikit-learn"]
+
+[[package]]
 name = "zipp"
 version = "3.11.0"
 description = "Backport of pathlib-compatible object wrapper for zip files"
@@ -1797,7 +1850,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "flake8 (<5)", "pytest-co
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9"
-content-hash = "a4f3c6255c5c0b75251c8fab6e52de8087e0a25b54ea76d35ad0acc80df242d7"
+content-hash = "2753037b51c8a485d9d56dcbd349beb97641b1b7dc5fbd257acfa8dc9c9cc20e"
 
 [metadata.files]
 anyio = []
@@ -1848,6 +1901,7 @@ bleach = [
     {file = "bleach-5.0.1.tar.gz", hash = "sha256:0d03255c47eb9bd2f26aa9bb7f2107732e7e8fe195ca2f64709fcf3b0a4a085c"},
 ]
 cachetools = []
+catboost = []
 certifi = []
 cffi = []
 charset-normalizer = []
@@ -1882,6 +1936,7 @@ google-api-core = []
 google-auth = []
 google-generativeai = []
 googleapis-common-protos = []
+graphviz = []
 grpcio = []
 grpcio-status = []
 idna = []
@@ -2134,4 +2189,5 @@ webencodings = [
 ]
 websocket-client = []
 widgetsnbextension = []
+xgboost = []
 zipp = []
