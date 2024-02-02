@@ -24,9 +24,11 @@ class Carry:
         sign_flip: bool, default False
             Flips sign of rate series if true.
         """
-        # check data type
+        # convert data types
+        if isinstance(df, pd.Series):
+            df = df.to_frame()
         if not isinstance(df.index, pd.MultiIndex):
-            raise TypeError("DataFrame index must be a MultiIndex.")
+            df = df.stack()
         # check fields
         if 'spot' not in df.columns:
             raise ValueError("'spot' price series must be provided in dataframe.")
@@ -103,10 +105,6 @@ class Carry:
         # dispersion
         self.disp = Transform(self.carry).dispersion(method=method, window_type='rolling', window_size=window_size,
                                                      min_periods=window_size, window_fcn=window_fcn).dropna()
-
-        # replace 0s with NaNs
-        rep_fcn = lambda x: x.replace([np.inf, -np.inf, 0], np.nan)
-        self.disp = self.disp.groupby(level=1, group_keys=False).apply(rep_fcn).ffill()
 
         return self.disp
 
