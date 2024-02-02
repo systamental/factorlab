@@ -5,7 +5,7 @@ import inspect
 from typing import Union, Optional
 
 from factorlab.feature_analysis.time_series_analysis import linear_reg
-from factorlab.feature_engineering.transform import Transform
+from factorlab.feature_engineering.transformations import Transform
 
 
 class Trend:
