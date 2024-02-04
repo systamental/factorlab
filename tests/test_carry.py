@@ -2,9 +2,6 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from typing import List
-
-from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.carry import Carry
 
 
@@ -123,5 +120,3 @@ class TestCarry:
 
         # test name
         assert actual.columns[0] == 'carry_to_std_30'
-
-
