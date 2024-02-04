@@ -213,7 +213,7 @@ class Trend:
 
         return self.trend
 
-    def alpha_mom(self) ->pd.DataFrame:
+    def alpha_mom(self) -> pd.DataFrame:
         """
         Constant term (alpha) from fitting an OLS linear regression of price on the market beta,
         i.e. cross-sectional average).
