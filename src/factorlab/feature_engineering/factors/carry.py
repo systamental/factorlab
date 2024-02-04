@@ -1,6 +1,5 @@
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 from typing import Union, Optional
 
 from factorlab.feature_engineering.transformations import Transform
@@ -35,7 +34,7 @@ class Carry:
         if 'rate' not in df.columns and 'fwd' not in df.columns:
             raise ValueError("'fwd' price or interest 'rate' series must be provided in dataframe.")
 
-        self.df = df if isinstance(df, pd.DataFrame) else df.to_frame() if isinstance(df, pd.Series) else None
+        self.df = df.copy()
         self.sign_flip = sign_flip
         self.spot_price = None
         self.rate = None
