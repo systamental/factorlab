@@ -114,8 +114,8 @@ class TestFeatureSelection:
         assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
 
         # test shape
-        assert self.default_fs_instance.selected_features.shape[1] == self.default_fs_instance.n_feat
-        assert self.fs_5feat_instance.selected_features.shape[1] == self.fs_5feat_instance.n_feat
+        assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
+        assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
@@ -158,8 +158,8 @@ class TestFeatureSelection:
         assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
 
         # test shape
-        assert self.default_fs_instance.selected_features.shape[1] == self.default_fs_instance.n_feat
-        assert self.fs_5feat_instance.selected_features.shape[1] == self.fs_5feat_instance.n_feat
+        assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
+        assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
@@ -202,8 +202,8 @@ class TestFeatureSelection:
         assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
 
         # test shape
-        assert self.default_fs_instance.selected_features.shape[1] == self.default_fs_instance.n_feat
-        assert self.fs_5feat_instance.selected_features.shape[1] == self.fs_5feat_instance.n_feat
+        assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
+        assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
@@ -246,8 +246,8 @@ class TestFeatureSelection:
         assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
 
         # test shape
-        assert self.default_fs_instance.selected_features.shape[1] == self.default_fs_instance.n_feat
-        assert self.fs_5feat_instance.selected_features.shape[1] == self.fs_5feat_instance.n_feat
+        assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
+        assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
@@ -290,8 +290,8 @@ class TestFeatureSelection:
         assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
 
         # test shape
-        assert self.default_fs_instance.selected_features.shape[1] == self.default_fs_instance.n_feat
-        assert self.fs_5feat_instance.selected_features.shape[1] == self.fs_5feat_instance.n_feat
+        assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
+        assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
@@ -334,8 +334,8 @@ class TestFeatureSelection:
         assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
 
         # test shape
-        assert self.default_fs_instance.selected_features.shape[1] == self.default_fs_instance.n_feat
-        assert self.fs_5feat_instance.selected_features.shape[1] == self.fs_5feat_instance.n_feat
+        assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
+        assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]

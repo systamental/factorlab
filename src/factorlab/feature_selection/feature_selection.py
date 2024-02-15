@@ -165,7 +165,7 @@ class FeatureSelection:
         """
         pass
 
-    def get_ranked_features(self, model: Any, attr: str) -> Union[np.array, pd.DataFrame]:
+    def get_selected_features(self, model: Any, attr: str) -> Union[np.array, pd.DataFrame]:
         """
         Get selected features from a model.
 
@@ -181,13 +181,21 @@ class FeatureSelection:
         selected_features: np.array or pd.DataFrame
             Selected features from the model.
         """
-        # selected features
-        sorted_coef_idxs = np.argsort(np.abs(getattr(model, attr)))[::-1]
-        self.ranked_features = self.features[:, sorted_coef_idxs]
-        self.feature_importance = getattr(model, attr)[sorted_coef_idxs]
-        self.feature_importance = self.feature_importance[np.abs(self.feature_importance) > 0]
+        # coefficients or feature importances
+        if not hasattr(model, attr):
+            raise AttributeError(f"Model must have attribute {attr}.")
+        if not isinstance(getattr(model, attr), np.ndarray):
+            raise TypeError(f"Attribute {attr} must be a numpy array.")
+        coef = getattr(model, attr)
 
-        # list of selected features
+        # ranked features
+        sorted_coef_idxs = np.argsort(np.abs(coef))[::-1]
+        sorted_coefs = coef[sorted_coef_idxs]
+        self.feature_importance = sorted_coefs[sorted_coefs != 0]
+        self.ranked_features = self.features[:, sorted_coef_idxs]
+        self.selected_features = self.ranked_features[:, :len(self.feature_importance)][:, :self.n_feat]
+
+        # create list and dfs
         if self.features_cols is not None:
             self.ranked_features_list = self.features_cols[sorted_coef_idxs].tolist()
             self.ranked_features = pd.DataFrame(self.ranked_features, index=self.index,
@@ -195,8 +203,9 @@ class FeatureSelection:
             self.feature_importance = pd.DataFrame(self.feature_importance,
                                                    index=self.ranked_features_list[: len(self.feature_importance)],
                                                    columns=['feature_importance'])
+            self.selected_features = self.ranked_features.iloc[:, :len(self.feature_importance)].iloc[:, :self.n_feat]
 
-        return self.ranked_features
+        return self.selected_features
 
     def lars(self, **kwargs) -> pd.DataFrame:
         """
@@ -221,14 +230,8 @@ class FeatureSelection:
         lars = Lars(n_nonzero_coefs=self.n_feat, normalize=False, **kwargs)
         lars.fit(self.features, self.target)
 
-        # ranked features
-        self.get_ranked_features(lars, 'coef_')
-
         # selected features
-        if isinstance(self.ranked_features, pd.DataFrame):
-            self.selected_features = self.ranked_features.iloc[:, :self.n_feat]
-        else:
-            self.selected_features = self.ranked_features[:, :self.n_feat]
+        self.get_selected_features(lars, 'coef_')
 
         return self.selected_features
 
@@ -267,14 +270,8 @@ class FeatureSelection:
             lasso = Lasso(alpha=alpha, **kwargs)
         lasso.fit(self.features, self.target)
 
-        # ranked features
-        self.get_ranked_features(lasso, 'coef_')
-
         # selected features
-        if isinstance(self.ranked_features, pd.DataFrame):
-            self.selected_features = self.ranked_features.iloc[:, :self.n_feat]
-        else:
-            self.selected_features = self.ranked_features[:, :self.n_feat]
+        self.get_selected_features(lasso, 'coef_')
 
         return self.selected_features
 
@@ -304,14 +301,8 @@ class FeatureSelection:
         ridge = Ridge(alpha=alpha, **kwargs)
         ridge.fit(self.features, self.target)
 
-        # ranked features
-        self.get_ranked_features(ridge, 'coef_')
-
         # selected features
-        if isinstance(self.ranked_features, pd.DataFrame):
-            self.selected_features = self.ranked_features.iloc[:, :self.n_feat]
-        else:
-            self.selected_features = self.ranked_features[:, :self.n_feat]
+        self.get_selected_features(ridge, 'coef_')
 
         return self.selected_features
 
@@ -344,14 +335,8 @@ class FeatureSelection:
         elastic_net = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, **kwargs)
         elastic_net.fit(self.features, self.target)
 
-        # ranked features
-        self.get_ranked_features(elastic_net, 'coef_')
-
         # selected features
-        if isinstance(self.ranked_features, pd.DataFrame):
-            self.selected_features = self.ranked_features.iloc[:, :self.n_feat]
-        else:
-            self.selected_features = self.ranked_features[:, :self.n_feat]
+        self.get_selected_features(elastic_net, 'coef_')
 
         return self.selected_features
 
@@ -388,16 +373,10 @@ class FeatureSelection:
         rf = RandomForestRegressor(n_estimators=n_estimators, criterion=criterion, max_depth=max_depth, **kwargs)
         rf.fit(self.features, self.target)
 
-        # ranked features
-        self.get_ranked_features(rf, 'feature_importances_')
-
         # selected features
-        if isinstance(self.ranked_features, pd.DataFrame):
-            self.selected_features = self.ranked_features.iloc[:, :self.n_feat]
-        else:
-            self.selected_features = self.ranked_features[:, :self.n_feat]
+        self.get_selected_features(rf, 'feature_importances_')
 
-        return self.selected_features
+        return self.selected_features[:]
 
     def xgboost(self, n_estimators: int = 100, max_depth: int = 5, **kwargs) -> pd.DataFrame:
         """
@@ -427,14 +406,8 @@ class FeatureSelection:
         xgb = XGBRegressor(n_estimators=n_estimators, max_depth=max_depth, **kwargs)
         xgb.fit(self.features, self.target)
 
-        # ranked features
-        self.get_ranked_features(xgb, 'feature_importances_')
-
         # selected features
-        if isinstance(self.ranked_features, pd.DataFrame):
-            self.selected_features = self.ranked_features.iloc[:, :self.n_feat]
-        else:
-            self.selected_features = self.ranked_features[:, :self.n_feat]
+        self.get_selected_features(xgb, 'feature_importances_')
 
         return self.selected_features
 
