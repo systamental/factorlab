@@ -7,6 +7,8 @@ from sklearn.linear_model import LassoLarsIC, Lasso, Ridge, ElasticNet, Lars
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
+from factorlab.feature_analysis.time_series_analysis import add_lags
+
 
 class FeatureSelection:
     """
@@ -15,7 +17,9 @@ class FeatureSelection:
     def __init__(self,
                  target: Union[pd.Series, pd.DataFrame, np.array],
                  features: Union[pd.DataFrame, np.array],
-                 n_feat: Optional[int] = None
+                 n_feat: Optional[int] = None,
+                 n_lookahead: int = 1,
+                 n_lags: int = 4,
                  ):
         """
         Initialize FeatureSelection object.
@@ -28,13 +32,19 @@ class FeatureSelection:
             Dataframe of features.
         n_feat: int, default None
             Number of features to select.
+        n_lookahead: int, default 1
+            Number of periods to lookahead for the target variable.
+        n_lags: int, default 4
+            Number of lags to add to the target variable and features.
         """
         self.target = target
         self.features = features
-        self.data = self.preprocess_data()  # pre-process data, target and features attributes
         self.n_feat = n_feat
-        self.index = self.data.index if isinstance(self.data, pd.DataFrame) else None
-        self.features_cols = self.data.iloc[:, 1:].columns if isinstance(self.data, pd.DataFrame) else None
+        self.n_lookahead = n_lookahead
+        self.n_lags = n_lags
+        self.lagged_target = None
+        self.data = self.preprocess_data()  # pre-process data, target and features attributes
+        self.index = self.data.index
         self.ranked_features = None
         self.ranked_features_list = None
         self.selected_features = None
@@ -58,30 +68,20 @@ class FeatureSelection:
         """
         Pre-process data, target and features attributes.
 
-        Parameters
-        ----------
-        target: pd.Series, pd.DataFrame or np.array
-            Factor to select features for.
-        features: pd.DataFrame or np.array
-            Features to select from.
-
         Returns
         -------
         data: pd.DataFrame or np.array
             Data matrix.
         """
-        if isinstance(self.target, pd.Series) or isinstance(self.target, pd.DataFrame) and \
-                isinstance(self.features, pd.DataFrame):
-            self.data = pd.concat([self.target, self.features], axis=1).dropna()
-            self.target = self.data.iloc[:, 0].to_numpy(dtype=np.float64)
-            self.features = self.data.iloc[:, 1:].to_numpy(dtype=np.float64)
-        elif isinstance(self.target, np.ndarray) and isinstance(self.features, np.ndarray):
-            n = min(self.target.shape[0], self.features.shape[0])
-            self.data = np.concatenate([self.target[-n:].reshape(-1, 1), self.features[-n:]], axis=1)
-            self.target = self.data[:, 0]
-            self.features = self.data[:, 1:]
+        if isinstance(self.target, pd.Series) and isinstance(self.features, pd.DataFrame):
+            if self.n_lags > 0:
+                self.lagged_target = add_lags(self.target, self.n_lags)
+            self.target = self.target.shift(-self.n_lookahead).rename(f"{self.target.name}_F{self.n_lookahead}")
+            self.data = pd.concat([self.target, self.lagged_target, self.features], axis=1).dropna()
+            self.target = self.data.iloc[:, 0]
+            self.features = self.data.iloc[:, 1:]
         else:
-            raise TypeError("Target and features must be a pandas Series, DataFrame or np.array.")
+            raise TypeError("Target and features must be a pandas Series or DataFrame.")
 
         return self.data
 
@@ -188,22 +188,20 @@ class FeatureSelection:
             raise TypeError(f"Attribute {attr} must be a numpy array.")
         coef = getattr(model, attr)
 
-        # ranked features
+        # feature importance
         sorted_coef_idxs = np.argsort(np.abs(coef))[::-1]
         sorted_coefs = coef[sorted_coef_idxs]
         self.feature_importance = sorted_coefs[sorted_coefs != 0]
-        self.ranked_features = self.features[:, sorted_coef_idxs]
-        self.selected_features = self.ranked_features[:, :len(self.feature_importance)][:, :self.n_feat]
 
-        # create list and dfs
-        if self.features_cols is not None:
-            self.ranked_features_list = self.features_cols[sorted_coef_idxs].tolist()
-            self.ranked_features = pd.DataFrame(self.ranked_features, index=self.index,
-                                                columns=self.ranked_features_list)
-            self.feature_importance = pd.DataFrame(self.feature_importance,
-                                                   index=self.ranked_features_list[: len(self.feature_importance)],
-                                                   columns=['feature_importance'])
-            self.selected_features = self.ranked_features.iloc[:, :len(self.feature_importance)].iloc[:, :self.n_feat]
+        # ranked features
+        self.ranked_features = self.features.iloc[:, sorted_coef_idxs].copy()
+        self.ranked_features_list = self.ranked_features.columns.tolist()
+        self.feature_importance = pd.DataFrame(self.feature_importance,
+                                               index=self.ranked_features_list[: len(self.feature_importance)],
+                                               columns=['feature_importance'])
+        self.ranked_features.drop(columns=self.lagged_target.columns, inplace=True, errors='ignore')
+        self.feature_importance.drop(index=self.lagged_target.columns, inplace=True, errors='ignore')
+        self.selected_features = self.ranked_features.iloc[:, :len(self.feature_importance)].iloc[:, :self.n_feat]
 
         return self.selected_features
 

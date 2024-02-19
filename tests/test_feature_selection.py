@@ -1,9 +1,7 @@
 import pytest
 import pandas as pd
-import numpy as np
 
 from factorlab.feature_selection.feature_selection import FeatureSelection
-from factorlab.feature_analysis.time_series_analysis import add_lags
 
 
 @pytest.fixture
@@ -27,7 +25,7 @@ def features():
                           'US_breakeven_inflation', 'US_real_estate'])
     pr_df = (1 + df).cumprod()
     yoy_ret = (pr_df / pr_df.shift(12)) - 1
-    return add_lags(yoy_ret, 12)
+    return yoy_ret
 
 
 class TestFeatureSelection:
@@ -42,28 +40,22 @@ class TestFeatureSelection:
     def fs_setup_5feat(self, features, target):
         self.fs_5feat_instance = FeatureSelection(target, features, n_feat=5)
 
-    def test_initialization(self) -> None:
+    def test_initialization(self, target) -> None:
         """
         Test initialization.
         """
         assert isinstance(self.default_fs_instance, FeatureSelection)
         assert isinstance(self.fs_5feat_instance, FeatureSelection)
-        assert isinstance(self.default_fs_instance.data, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.data, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.data, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.data, np.ndarray)
-        assert isinstance(self.default_fs_instance.target, pd.Series) or \
-               isinstance(self.default_fs_instance.target, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.target, pd.Series) or \
-               isinstance(self.fs_5feat_instance.target, np.ndarray)
-        assert isinstance(self.default_fs_instance.features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.features, np.ndarray)
+        assert isinstance(self.default_fs_instance.data, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.data, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.target, pd.Series)
+        assert isinstance(self.fs_5feat_instance.target, pd.Series)
+        assert isinstance(self.default_fs_instance.features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.features, pd.DataFrame)
         assert all(self.default_fs_instance.index == self.default_fs_instance.data.index)
         assert all(self.fs_5feat_instance.index == self.fs_5feat_instance.data.index)
-        assert all(self.default_fs_instance.features_cols == self.default_fs_instance.data.columns[1:].tolist())
-        assert all(self.fs_5feat_instance.features_cols == self.fs_5feat_instance.data.columns[1:].tolist())
+        assert self.default_fs_instance.lagged_target.shape[1] == 5
+        assert all(self.default_fs_instance.target.iloc[-12:].values == target.shift(-1).dropna().iloc[-12:].values)
 
     def test_check_n_feat(self) -> None:
         """
@@ -90,36 +82,30 @@ class TestFeatureSelection:
         self.fs_5feat_instance.lars()
 
         # test type
-        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.selected_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.selected_features, np.ndarray)
-        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.ranked_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.ranked_features, np.ndarray)
+        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame)
         assert isinstance(self.default_fs_instance.ranked_features_list, list)
         assert isinstance(self.fs_5feat_instance.ranked_features_list, list)
-        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.feature_importance, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.feature_importance, np.ndarray)
+        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame)
 
         # test values
         assert self.default_fs_instance.selected_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.selected_features.isin(self.fs_5feat_instance.data).all().all()
         assert self.default_fs_instance.ranked_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.ranked_features.isin(self.fs_5feat_instance.data).all().all()
-        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features_cols)
-        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
+        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features.columns)
+        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features.columns)
 
         # test shape
         assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
         assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
-        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
-        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1]
+        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1] - 5
+        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1] - 5
         assert self.default_fs_instance.ranked_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.ranked_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert len(self.default_fs_instance.ranked_features_list) == self.default_fs_instance.features.shape[1]
@@ -134,36 +120,30 @@ class TestFeatureSelection:
         self.fs_5feat_instance.lasso(alpha=0.01)
 
         # test type
-        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.selected_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.selected_features, np.ndarray)
-        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.ranked_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.ranked_features, np.ndarray)
+        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame)
         assert isinstance(self.default_fs_instance.ranked_features_list, list)
         assert isinstance(self.fs_5feat_instance.ranked_features_list, list)
-        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.feature_importance, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.feature_importance, np.ndarray)
+        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame)
 
         # test values
         assert self.default_fs_instance.selected_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.selected_features.isin(self.fs_5feat_instance.data).all().all()
         assert self.default_fs_instance.ranked_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.ranked_features.isin(self.fs_5feat_instance.data).all().all()
-        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features_cols)
-        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
+        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features.columns)
+        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features.columns)
 
         # test shape
         assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
         assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
-        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
-        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1]
+        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1] - 5
+        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1] - 5
         assert self.default_fs_instance.ranked_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.ranked_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert len(self.default_fs_instance.ranked_features_list) == self.default_fs_instance.features.shape[1]
@@ -178,36 +158,30 @@ class TestFeatureSelection:
         self.fs_5feat_instance.ridge()
 
         # test type
-        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.selected_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.selected_features, np.ndarray)
-        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.ranked_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.ranked_features, np.ndarray)
+        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame)
         assert isinstance(self.default_fs_instance.ranked_features_list, list)
         assert isinstance(self.fs_5feat_instance.ranked_features_list, list)
-        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.feature_importance, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.feature_importance, np.ndarray)
+        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame)
 
         # test values
         assert self.default_fs_instance.selected_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.selected_features.isin(self.fs_5feat_instance.data).all().all()
         assert self.default_fs_instance.ranked_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.ranked_features.isin(self.fs_5feat_instance.data).all().all()
-        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features_cols)
-        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
+        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features.columns)
+        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features.columns)
 
         # test shape
         assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
         assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
-        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
-        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1]
+        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1] - 5
+        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1] - 5
         assert self.default_fs_instance.ranked_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.ranked_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert len(self.default_fs_instance.ranked_features_list) == self.default_fs_instance.features.shape[1]
@@ -222,36 +196,30 @@ class TestFeatureSelection:
         self.fs_5feat_instance.elastic_net()
 
         # test type
-        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.selected_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.selected_features, np.ndarray)
-        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.ranked_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.ranked_features, np.ndarray)
+        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame)
         assert isinstance(self.default_fs_instance.ranked_features_list, list)
         assert isinstance(self.fs_5feat_instance.ranked_features_list, list)
-        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.feature_importance, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.feature_importance, np.ndarray)
+        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame)
 
         # test values
         assert self.default_fs_instance.selected_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.selected_features.isin(self.fs_5feat_instance.data).all().all()
         assert self.default_fs_instance.ranked_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.ranked_features.isin(self.fs_5feat_instance.data).all().all()
-        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features_cols)
-        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
+        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features.columns)
+        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features.columns)
 
         # test shape
         assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
         assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
-        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
-        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1]
+        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1] - 5
+        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1] - 5
         assert self.default_fs_instance.ranked_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.ranked_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert len(self.default_fs_instance.ranked_features_list) == self.default_fs_instance.features.shape[1]
@@ -266,36 +234,30 @@ class TestFeatureSelection:
         self.fs_5feat_instance.random_forest()
 
         # test type
-        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.selected_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.selected_features, np.ndarray)
-        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.ranked_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.ranked_features, np.ndarray)
+        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame)
         assert isinstance(self.default_fs_instance.ranked_features_list, list)
         assert isinstance(self.fs_5feat_instance.ranked_features_list, list)
-        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.feature_importance, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.feature_importance, np.ndarray)
+        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame)
 
         # test values
         assert self.default_fs_instance.selected_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.selected_features.isin(self.fs_5feat_instance.data).all().all()
         assert self.default_fs_instance.ranked_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.ranked_features.isin(self.fs_5feat_instance.data).all().all()
-        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features_cols)
-        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
+        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features.columns)
+        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features.columns)
 
         # test shape
         assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
         assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
-        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
-        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1]
+        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1] - 5
+        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1] - 5
         assert self.default_fs_instance.ranked_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.ranked_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert len(self.default_fs_instance.ranked_features_list) == self.default_fs_instance.features.shape[1]
@@ -310,36 +272,30 @@ class TestFeatureSelection:
         self.fs_5feat_instance.xgboost()
 
         # test type
-        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.selected_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.selected_features, np.ndarray)
-        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.ranked_features, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.ranked_features, np.ndarray)
+        assert isinstance(self.default_fs_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.selected_features, pd.DataFrame)
+        assert isinstance(self.default_fs_instance.ranked_features, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.ranked_features, pd.DataFrame)
         assert isinstance(self.default_fs_instance.ranked_features_list, list)
         assert isinstance(self.fs_5feat_instance.ranked_features_list, list)
-        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.default_fs_instance.feature_importance, np.ndarray)
-        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame) or \
-               isinstance(self.fs_5feat_instance.feature_importance, np.ndarray)
+        assert isinstance(self.default_fs_instance.feature_importance, pd.DataFrame)
+        assert isinstance(self.fs_5feat_instance.feature_importance, pd.DataFrame)
 
         # test values
         assert self.default_fs_instance.selected_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.selected_features.isin(self.fs_5feat_instance.data).all().all()
         assert self.default_fs_instance.ranked_features.isin(self.default_fs_instance.data).all().all()
         assert self.fs_5feat_instance.ranked_features.isin(self.fs_5feat_instance.data).all().all()
-        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features_cols)
-        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features_cols)
+        assert set(self.default_fs_instance.ranked_features_list) == set(self.default_fs_instance.features.columns)
+        assert set(self.fs_5feat_instance.ranked_features_list) == set(self.fs_5feat_instance.features.columns)
 
         # test shape
         assert self.default_fs_instance.selected_features.shape[1] <= self.default_fs_instance.n_feat
         assert self.fs_5feat_instance.selected_features.shape[1] <= self.fs_5feat_instance.n_feat
         assert self.default_fs_instance.selected_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.selected_features.shape[0] == self.fs_5feat_instance.data.shape[0]
-        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1]
-        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1]
+        assert self.default_fs_instance.ranked_features.shape[1] == self.default_fs_instance.features.shape[1] - 5
+        assert self.fs_5feat_instance.ranked_features.shape[1] == self.fs_5feat_instance.features.shape[1] - 5
         assert self.default_fs_instance.ranked_features.shape[0] == self.default_fs_instance.data.shape[0]
         assert self.fs_5feat_instance.ranked_features.shape[0] == self.fs_5feat_instance.data.shape[0]
         assert len(self.default_fs_instance.ranked_features_list) == self.default_fs_instance.features.shape[1]
