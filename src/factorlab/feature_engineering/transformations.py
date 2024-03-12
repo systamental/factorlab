@@ -9,7 +9,7 @@ class Transform:
     """
     Transformations on raw data, returns or features.
     """
-    def __init__(self, data: Union[pd.Series, pd.DataFrame, np.array]):
+    def __init__(self, data: Union[pd.Series, pd.DataFrame, np.array], **kwargs: dict):
         """
         Constructor
 
@@ -17,47 +17,68 @@ class Transform:
         ----------
         data: pd.Series, pd.DataFrame or np.array
             Data to transform.
+        kwargs: dict
         """
-        self.df = data.astype(float) if isinstance(data, pd.DataFrame) else data.astype(float).to_frame() \
-            if isinstance(data, pd.Series) else None
-        self.arr = data.to_numpy(dtype=np.float64) if isinstance(data, pd.DataFrame) or isinstance(data, pd.Series) \
-            else data.astype(float).values
+        self.raw_data = data
+        self.df = None
+        self.arr = None
         self.trans_df = None
+        self.index = None
+        self.freq = None
+        self.kwargs = kwargs
+        self.preprocess_data()
 
-    def vwap(self) -> Union[pd.Series, pd.DataFrame]:
+    def preprocess_data(self) -> None:
         """
-        Computes volume-weighted average price from OHLCV prices and add vwap price to dataframe.
+        Preprocesses data.
+        """
+        # df
+        if isinstance(self.raw_data, pd.DataFrame) or isinstance(self.raw_data, pd.Series):
+            self.df = self.raw_data.astype('float64').copy()
+            self.arr = self.raw_data.to_numpy(dtype='float64').copy()
+            self.index = self.raw_data.index
+            if isinstance(self.index, pd.MultiIndex):
+                self.freq = pd.infer_freq(self.index.get_level_values(0).unique())
+            else:
+                self.freq = pd.infer_freq(self.index)
+        # series
+        elif isinstance(self.raw_data, pd.Series):
+            self.df = self.df.to_frame()
+        # array
+        elif isinstance(self.raw_data, np.ndarray):
+            self.arr = self.raw_data.astype(float).copy()
+            self.df = pd.DataFrame(self.arr).copy()
+
+        self.trans_df = self.df.copy()
+
+    def vwap(self) -> pd.DataFrame:
+        """
+        Computes volume weighted average price.
 
         Returns
         -------
-        vwap: pd.Series or pd.DataFrame
-            Series or dataframe with DatetimeIndex (level 0), tickers (level 1) and
-            volume-weighted average price from OHLCV prices (cols).
+        df: pd.DataFrame
+            DataFrame with vwap.
         """
-        # transformed df
-        self.trans_df = self.df.copy()
-
         # check if OHLC
         if not all([col in self.df.columns for col in ['open', 'high', 'low', 'close']]):
             raise ValueError("Dataframe must have open, high, low and close fields to compute vwap.")
 
         # compute vwap
-        self.trans_df['vwap'] = (self.trans_df.close +
-                                (self.trans_df.open + self.trans_df.high + self.trans_df.low)/3)/2
+        self.trans_df['vwap'] = (self.df.close +
+                                (self.df.open + self.df.high + self.df.low)/3)/2
 
         return self.trans_df
 
     def log(self) -> Union[pd.Series, pd.DataFrame]:
         """
-        Computes log of price.
+        Computes log transformation.
 
         Returns
         -------
-        df: pd.Series or pd.DataFrame - MultiIndex
-            Series or dataframe with DatetimeIndex (level 0), tickers (level 1) and log of price (cols).
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with log-transformed values.
         """
-        # transformed df
-        self.trans_df = self.df.copy()
         # remove negative values
         self.trans_df[self.trans_df <= 0] = np.nan
         # log and replace inf
@@ -72,385 +93,114 @@ class Transform:
                 market: Optional[bool] = False,
                 mkt_field: str = 'close',
                 mkt_weighting: Optional[str] = None
-                ) -> pd.DataFrame:
+                ) -> Union[pd.Series, pd.DataFrame]:
         """
-        Computes the log returns of a price series.
+        Computes price returns.
+
 
         Parameters
         ----------
         lags: int, default 1
-            Interval over which to compute returns: 1 computes daily return, 5 weekly returns, 30 monthly returns, etc.
+            Number of periods to lag the returns.
         forward: bool, default False
-            Shifts returns forward by number of periods specified in lags.
+            Forward returns.
         method: str, {'simple', 'log'}, default 'log'
-            Method to compute returns, continuous or simple
-        market: bool, Optional, default False
-            Computes the returns of the entire universe of asset prices, or the market return.
-        mkt_field: str, optional, default None
-            Field to use to compute market return.
-        mkt_weighting: str, optional, default None
-            Weighting method to use to compute market return.
+            Type of returns.
+        market: bool, default False
+            Market returns.
+        mkt_field: str, default 'close'
+            Market field to use.
+        mkt_weighting: str, default None
+            Market weighting method.
 
         Returns
         -------
-        ret: Series or DataFrame - Single or MultiIndex
-            Series or DataFrame with DatetimeIndex and returns series.
+        df: pd.DataFrame
+            DataFrame with returns.
         """
-        # unstack
-        if isinstance(self.df.index, pd.MultiIndex):
-            df = self.df.unstack().copy()
-        else:
-            df = self.df.copy()
-
         # simple returns
         if method == 'simple':
-            ret = df.pct_change(lags)
+            if isinstance(self.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=1).pct_change(lags)
+            else:
+                self.trans_df = self.df.pct_change(lags)
+
         # log returns
         else:
             # remove negative values
-            df[df <= 0] = np.nan
-            ret = np.log(df) - np.log(df).shift(lags)
+            self.df[self.df <= 0] = np.nan
+            if isinstance(self.index, pd.MultiIndex):
+                self.trans_df = np.log(self.df).groupby(level=1).diff(lags)
+            else:
+                self.trans_df = np.log(self.df).diff(lags)
 
         # forward returns
         if forward:
-            ret = ret.shift(lags * -1)
-
-        # stack to multiindex
-        if isinstance(ret.index, pd.DatetimeIndex):
-            ret = ret.stack()
+            if isinstance(self.index, pd.MultiIndex):
+                self.trans_df = self.trans_df.groupby(level=1).shift(lags * -1)
+            else:
+                self.trans_df = self.trans_df.shift(lags * -1)
 
         # market return
-        # TODO: write tests
         if market:
             if mkt_weighting is None:
-                ret = ret.unstack()[mkt_field].mean(axis=1).to_frame('mkt_ret')
+                if isinstance(self.index, pd.MultiIndex):
+                    self.trans_df = self.trans_df.groupby(level=0).mean()[mkt_field].to_frame('mkt_ret')
+                else:
+                    self.trans_df = self.trans_df[mkt_field].to_frame('mkt_ret')
             else:
                 pass  # TODO: add other market computations
 
-        return ret
+        return self.trans_df.sort_index()
 
     @staticmethod
-    def compute_std(df: Union[pd.Series, pd.DataFrame],
-                    window_type: str = 'fixed',
-                    window_size: int = 30,
-                    min_periods: int = 2,
-                    window_fcn: str = None
-                    ) -> Union[pd.Series, pd.DataFrame]:
+    def returns_to_price(returns: Union[pd.Series, pd.DataFrame],
+                         ret_type: str = 'simple',
+                         start_val: float = 1.0
+                         ) -> Union[pd.Series, pd.DataFrame]:
         """
-        Computes standard deviation.
+        Converts returns to price series.
 
         Parameters
         ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to compute standard deviation.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+        returns: pd.Series or pd.DataFrame
+            Series or DataFrame with returns.
+        ret_type: str, {'simple', 'log'}, default 'simple'
+            Type of returns.
+        start_val: float, default 1.0
+            Starting value for the price series.
 
         Returns
         -------
-        stdev: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and standard deviation of values (cols).
+        price: pd.Series or pd.DataFrame
+            Series or DataFrame with price series.
         """
-        if window_type == 'rolling':
-            stdev = df.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).std()
-        elif window_type == 'expanding':
-            stdev = df.expanding(min_periods=min_periods).std()
-        else:
-            stdev = df.std()
-
-        return stdev
-
-    @staticmethod
-    def compute_iqr(df: Union[pd.Series, pd.DataFrame],
-                    window_type: str = 'fixed',
-                    window_size: int = 30,
-                    min_periods: int = 2,
-                    window_fcn: str = None
-                    ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Computes interquartile range.
-
-        Parameters
-        ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to compute interquartile range.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
-
-        Returns
-        -------
-        iqr: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and interquartile range of values (cols).
-        """
-        if window_type == 'rolling':
-            iqr = df.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).quantile(0.75) - \
-                    df.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).quantile(0.25)
-        elif window_type == 'expanding':
-            iqr = df.expanding(min_periods=min_periods).quantile(0.75) - \
-                    df.expanding(min_periods=min_periods).quantile(0.25)
-        else:
-            iqr = df.quantile(0.75) - df.quantile(0.25)
-
-        return iqr
-
-    @staticmethod
-    def compute_mad(df: Union[pd.Series, pd.DataFrame],
-                    window_type: str = 'fixed',
-                    window_size: int = 30,
-                    min_periods: int = 2,
-                    window_fcn: str = None
-                    ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Computes median absolute deviation.
-
-        Parameters
-        ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to compute median absolute deviation.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
-
-        Returns
-        -------
-        mad: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and
-            median absolute deviation of values (cols).
-        """
-        if window_type == 'rolling':
-            abs_dev = (df - df.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).median()).abs()
-            mad = abs_dev.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).median()
-        elif window_type == 'expanding':
-            abs_dev = (df - df.expanding(min_periods=min_periods).median()).abs()
-            mad = abs_dev.expanding(min_periods=min_periods).median()
-        else:
-            abs_dev = (df - df.median()).abs()
-            mad = abs_dev.median()
-
-        return mad
-
-    @staticmethod
-    def compute_range(df: Union[pd.Series, pd.DataFrame],
-                      window_type: str = 'fixed',
-                      window_size: int = 30,
-                      min_periods: int = 2,
-                      window_fcn: str = None
-                      ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Computes range.
-
-        Parameters
-        ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to compute range.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
-
-        Returns
-        -------
-        range: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and range of values (cols).
-        """
-        if window_type == 'rolling':
-            min_max = df.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).max() - \
-                    df.rolling(window=window_size, min_periods=min_periods, win_type=window_fcn).min()
-        elif window_type == 'expanding':
-            min_max = df.expanding(min_periods=min_periods).max() - \
-                    df.expanding(min_periods=min_periods).min()
-        else:
-            min_max = df.max() - df.min()
-
-        return min_max
-
-    @staticmethod
-    def compute_var(df: Union[pd.Series, pd.DataFrame],
-                    window_type: str = 'fixed',
-                    window_size: int = 30,
-                    min_periods: int = 2,
-                    window_fcn: str = None
-                    ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Computes variance.
-
-        Parameters
-        ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to compute variance.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
-
-        Returns
-        -------
-        var: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and variance of values (cols).
-        """
-        if window_type == 'rolling':
-            var = getattr(df, 'rolling')(window=window_size, min_periods=min_periods, win_type=window_fcn).var()
-        elif window_type == 'expanding':
-            var = getattr(df, 'expanding')(min_periods=min_periods).var()
-        else:
-            var = df.var()
-
-        return var
-
-    @staticmethod
-    def compute_atr(df: Union[pd.Series, pd.DataFrame],
-                    window_type: str = 'fixed',
-                    window_size: int = 30,
-                    min_periods: int = 2,
-                    window_fcn: str = None
-                    ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Computes average true range.
-
-        Parameters
-        ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to compute average true range.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
-
-        Returns
-        -------
-        atr: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and average true range of values (cols).
-        """
-        # check if OHLC
-        if not all([col in df.columns for col in ['open', 'high', 'low', 'close']]):
-            raise ValueError("Dataframe must have open, high, low and close fields to compute atr.")
-
-        # compute atr
-        df['tr1'] = df.high - df.low
-        df['tr2'] = np.abs(df.high - df.close.shift())
-        df['tr3'] = np.abs(df.low - df.close.shift())
-        df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
-
-        # window type
-        if window_type == 'rolling':
-            atr = df.tr.rolling(window=window_size, min_periods=min_periods, window_type=window_fcn).mean()
-        elif window_type == 'expanding':
-            atr = df.tr.expanding(min_periods=min_periods).mean()
-        else:
-            atr = df.tr.mean()
-
-        return atr
-
-    def dispersion(self,
-                   method: str = 'std',
-                   axis: str = 'ts',
-                   window_type: str = 'fixed',
-                   window_size: int = 30,
-                   min_periods: int = 1,
-                   window_fcn: str = None,
-                   ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Computes dispersion of series.
-
-        Parameters
-        ----------
-        method: str, {'std', 'iqr', 'range', 'atr', 'range', 'mad'}, default 'std'
-            Method for computing dispersion. Options are 'std' or 'beta'.
-        axis: str, {'ts', 'cs'}, default 'ts'
-            Axis along which to compute dispersion, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
-            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
-            window statistic.
-        min_periods: int, default 1
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_fcn: str, default None
-            Provide a window function. If None, observations are equally-weighted in the rolling computation.
-            See scipy.signal.windows for more information.
-
-        Returns
-        -------
-        disp: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), ticker (level 1) and dispersion values (cols).
-        """
-        # axis ts
-        if axis == 'ts':
-
-            # unstack
-            if isinstance(self.df.index, pd.MultiIndex):
-                self.trans_df = self.df.unstack().copy()
+        # simple returns
+        if ret_type == 'simple':
+            if isinstance(returns.index, pd.MultiIndex):
+                cum_ret = (1 + returns).groupby(level=1).cumprod()
             else:
-                self.trans_df = self.df.copy()
-
-            # dispersion
-            if window_type == 'rolling':
-                self.trans_df = getattr(self, f"compute_{method}")(self.trans_df, window_type='rolling',
-                                                                   window_size=window_size, min_periods=min_periods,
-                                                                   window_fcn=window_fcn)
-            elif window_type == 'expanding':
-                self.trans_df = getattr(self, f"compute_{method}")(self.trans_df, window_type='expanding',
-                                                                   window_size=window_size, min_periods=min_periods)
-            else:
-                self.trans_df = getattr(self, f"compute_{method}")(self.trans_df, window_type='fixed')
-
-            # stack to multiindex
-            if isinstance(self.df.index, pd.MultiIndex):
-                self.trans_df = self.trans_df.stack()
-
-        # axis cs
+                cum_ret = (1 + returns).cumprod()
         else:
-            # df
-            self.trans_df = self.df.copy()
-            # axis 1 - cross-section
-            if isinstance(self.df.index, pd.MultiIndex):
-                self.trans_df = self.trans_df.groupby(level=0).apply(getattr(self, f"compute_{method}"))
+            if isinstance(returns.index, pd.MultiIndex):
+                cum_ret = np.exp(returns).groupby(level=1).cumprod()
             else:
-                self.trans_df = self.trans_df.apply(getattr(self, f"compute_{method}"), axis=1)
+                cum_ret = np.exp(returns.cumsum())
 
-        return self.trans_df
+        # start val
+        if start_val == 0:
+            price = cum_ret - 1
+        else:
+            price = cum_ret * start_val
+
+        return price
 
     def target_vol(self,
                    ann_vol: float = 0.15,
                    ann_factor: float = 365
-                   ) -> pd.DataFrame:
+                   ) -> Union[pd.Series, pd.DataFrame]:
         """
-        Set volatility of returns to be equal to a specific vol target.
+        Set volatility of series to be equal to a specific vol target.
 
         Parameters
         ----------
@@ -461,25 +211,18 @@ class Transform:
 
         Returns
         -------
-        df: DataFrame
-            DataFrame with vol-adjusted returns.
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with target volatility.
         """
-        # df
-        df = self.df.copy()
-
-        # unstack
-        if isinstance(self.df.index, pd.MultiIndex):
-            df = df.unstack()
-
         # set target vol
-        norm_factor = 1 / ((df.std() / ann_vol) * np.sqrt(ann_factor))
-        df = df * norm_factor
+        if isinstance(self.df.index, pd.MultiIndex):
+            norm_factor = 1 / ((self.df.groupby(level=1).std() / ann_vol) * np.sqrt(ann_factor)).sort_index()
+        else:
+            norm_factor = 1 / ((self.df.std() / ann_vol) * np.sqrt(ann_factor))
 
-        # stack to multiindex
-        if isinstance(df.index, pd.MultiIndex):
-            df = df.stack()
+        self.trans_df = self.df * norm_factor
 
-        return df
+        return self.trans_df
 
     def smooth(self,
                window_size: int,
@@ -510,208 +253,659 @@ class Transform:
         Returns
         -------
         df: pd.Series or pd.DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), tickers (level 1) and smoothed values (cols).
+            Series or DataFrame with smoothed values.
         """
         # TODO: refactor to allow for more window functions in rolling
-        # multiindex
-        if isinstance(self.df.index, pd.MultiIndex):
-            # unstack
-            self.trans_df = self.df.unstack().copy()
-        else:
-            self.trans_df = self.df.copy()
 
         # smoothing
         if window_type == 'ewm':
             if central_tendency == 'median':
                 raise ValueError("Median is not supported for ewm smoothing.")
             else:
-                self.trans_df = getattr(getattr(self.trans_df, window_type)(span=window_size),
-                                    central_tendency)(**kwargs).shift(lags)
-        elif window_type == 'rolling':
-            self.trans_df = getattr(getattr(self.trans_df, window_type)(window=window_size, win_type=window_fcn),
-                                    central_tendency)(**kwargs).shift(lags)
-        elif window_type == 'expanding':
-            self.trans_df = getattr(getattr(self.trans_df, window_type)(), central_tendency)(**kwargs).shift(lags)
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(span=window_size, **kwargs),
+                                        central_tendency)().droplevel(0).groupby(level=1).shift(lags).sort_index()
+                else:
+                    self.trans_df = getattr(getattr(self.df, window_type)(span=window_size, **kwargs),
+                                            central_tendency)().shift(lags)
 
-        # stack to multiindex
-        if isinstance(self.df.index, pd.MultiIndex):
-            self.trans_df = self.trans_df.stack()
+        elif window_type == 'rolling':
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(window=window_size,
+                                                                                   win_type=window_fcn, **kwargs),
+                                    central_tendency)().droplevel(0).groupby(level=1).shift(lags).sort_index()
+            else:
+                self.trans_df = getattr(getattr(self.df, window_type)(window=window_size, win_type=window_fcn,
+                                                                      **kwargs), central_tendency)().shift(lags)
+
+        elif window_type == 'expanding':
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(), central_tendency)()\
+                    .droplevel(0).groupby(level=1).shift(lags).sort_index()
+            else:
+                self.trans_df = getattr(getattr(self.df, window_type)(), central_tendency)().shift(lags)
 
         return self.trans_df
 
-    # TODO: correct normalize for look-ahead bias
-    @staticmethod
-    def normalize(df: Union[pd.Series, pd.DataFrame],
-                  centering: bool = True,
+    def center(self,
+               axis: str = 'ts',
+               central_tendency: str = 'mean',
+               window_type: str = 'fixed',
+               window_size: int = 30,
+               min_periods: int = 2
+               ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Centers values.
+
+        Parameters
+        ----------
+        axis: int, {0, 1}, default 0
+            Axis along which to compute standard deviation, time series or cross-section.
+        central_tendency: str, {'mean', 'median', 'min'}, default 'mean'
+            Measure of central tendency used for the rolling window.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+
+        Returns
+        -------
+        centered: pd.Series or pd.DataFrame
+            Series or DataFrame with centered values.
+        """
+        # axis time series
+        if axis == 'ts':
+
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df - \
+                                    getattr(self.df.groupby(level=1).rolling(window=window_size,
+                                                                             min_periods=min_periods),
+                                            central_tendency)().droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df - getattr(self.df.rolling(window=window_size, min_periods=min_periods),
+                                                     central_tendency)()
+
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df - \
+                                    getattr(self.df.groupby(level=1).expanding(min_periods=min_periods),
+                                            central_tendency)().droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df - getattr(self.df.expanding(min_periods=min_periods), central_tendency)()
+
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df - getattr(self.df.groupby(level=1), central_tendency)().sort_index()
+                else:
+                    self.trans_df = self.df - getattr(self.df, central_tendency)()
+
+        # axis 1 (cross-section)
+        else:
+            # fixed window
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df - getattr(self.df.groupby(level=0), central_tendency)()
+            else:
+                self.trans_df = self.df.subtract(getattr(self.df, central_tendency)(axis=1), axis=0)
+
+        return self.trans_df
+
+    def compute_std(self,
+                    axis: str = 'ts',
+                    window_type: str = 'fixed',
+                    window_size: int = 30,
+                    min_periods: int = 2,
+                    window_fcn: str = None
+                    ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes standard deviation.
+
+        Parameters
+        ----------
+        axis: int, {0, 1}, default 0
+            Axis along which to compute standard deviation, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        std: pd.Series or pd.DataFrame
+            Series or DataFrame with standard deviation of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                        win_type=window_fcn).std().droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).std()
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).std().\
+                        droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.expanding(min_periods=min_periods).std()
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).std()
+                else:
+                    self.trans_df = self.df.std()
+
+        # axis 1 (cross-section)
+        else:
+            # fixed window
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=0).std()
+            else:
+                self.trans_df = self.df.std(axis=1)
+
+        return self.trans_df
+
+    def compute_iqr(self,
+                    axis: str = 'ts',
+                    window_type: str = 'fixed',
+                    window_size: int = 30,
+                    min_periods: int = 2,
+                    window_fcn: str = None
+                    ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes inter-quartile range.
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute interquartile range, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        iqr: pd.Series or pd.DataFrame
+            Series or DataFrame with interquartile range of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = (self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                       win_type=window_fcn).quantile(0.75) -
+                        self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).quantile(0.25)).droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).quantile(0.75) - \
+                            self.df.rolling(window=window_size, min_periods=min_periods,
+                                            win_type=window_fcn).quantile(0.25)
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = (self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(0.75) -
+                        self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(0.25)).droplevel(0).\
+                        sort_index()
+                else:
+                    self.trans_df = self.df.expanding(min_periods=min_periods).quantile(0.75) - \
+                        self.df.expanding(min_periods=min_periods).quantile(0.25)
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).quantile(0.75) - self.df.groupby(level=1).quantile(0.25)
+                else:
+                    self.trans_df = self.df.quantile(0.75) - self.df.quantile(0.25)
+
+        # axis 1 (cross-section)
+        else:
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=0).quantile(0.75) - self.df.groupby(level=0).quantile(0.25)
+            else:
+                self.trans_df = self.df.quantile(0.75, axis=1) - self.df.quantile(0.25, axis=1)
+
+        return self.trans_df
+
+    def compute_mad(self,
+                    axis: str = 'ts',
+                    window_type: str = 'fixed',
+                    window_size: int = 30,
+                    min_periods: int = 2,
+                    window_fcn: str = None
+                    ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes median absolute deviation.
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute median absolute deviation, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        mad: pd.Series or pd.DataFrame
+            Series or DataFrame with median absolute deviation of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    abs_dev = (self.df - self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                       win_type=window_fcn).median().droplevel(0)).abs()
+                    self.trans_df = abs_dev.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                         win_type=window_fcn).median().droplevel(0).sort_index()
+                else:
+                    abs_dev = (self.df - self.df.rolling(window=window_size, min_periods=min_periods,
+                                               win_type=window_fcn).median()).abs()
+                    self.trans_df = abs_dev.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).median()
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    abs_dev = (self.df - self.df.groupby(level=1).expanding(min_periods=min_periods).median().
+                               droplevel(0)).abs()
+                    self.trans_df = abs_dev.groupby(level=1).expanding(min_periods=min_periods).median().droplevel(0).\
+                        sort_index()
+                else:
+                    abs_dev = (self.df - self.df.expanding(min_periods=min_periods).median()).abs()
+                    self.trans_df = abs_dev.expanding(min_periods=min_periods).median()
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    abs_dev = (self.df - self.df.groupby(level=1).median()).abs()
+                    self.trans_df = abs_dev.groupby(level=1).median()
+                else:
+                    self.trans_df = (self.df - self.df.median()).abs().median()
+
+        # axis 1 (cross-section)
+        else:
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = (self.df - self.df.groupby(level=0).median()).abs().groupby(level=0).median()
+            else:
+                self.trans_df = (self.df - self.df.median(axis=1)).abs().median(axis=1)
+
+        return self.trans_df
+
+    def compute_range(self,
+                      axis: str = 'ts',
+                      window_type: str = 'fixed',
+                      window_size: int = 30,
+                      min_periods: int = 2,
+                      window_fcn: str = None
+                      ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes range.
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute range, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        range: pd.Series or pd.DataFrame
+            Series or DataFrame with range of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = (self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                       win_type=window_fcn).max() -
+                        self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).min()).droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).max() - \
+                                    self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).min()
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = (self.df.groupby(level=1).expanding(min_periods=min_periods).max() -
+                                     self.df.groupby(level=1).expanding(min_periods=min_periods).min()).\
+                        droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.expanding(min_periods=min_periods).max() - \
+                                    self.df.expanding(min_periods=min_periods).min()
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).max() - self.df.groupby(level=1).min()
+                else:
+                    self.trans_df = self.df.max() - self.df.min()
+
+        # axis 1 (cross-section)
+        else:
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=0).max() - self.df.groupby(level=0).min()
+            else:
+                self.trans_df = self.df.max(axis=1) - self.df.min(axis=1)
+
+        return self.trans_df
+
+    def compute_var(self,
+                    axis: str = 'ts',
+                    window_type: str = 'fixed',
+                    window_size: int = 30,
+                    min_periods: int = 2,
+                    window_fcn: str = None
+                    ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes variance.
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute variance, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        var: pd.Series or pd.DataFrame
+            Series or DataFrame with variance of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                        win_type=window_fcn).var().droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).var()
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).var().\
+                        droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.expanding(min_periods=min_periods).var()
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).var()
+                else:
+                    self.trans_df = self.df.var()
+
+        # axis 1 (cross-section)
+        else:
+            # fixed window
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=0).var()
+            else:
+                self.trans_df = self.df.var(axis=1)
+
+        return self.trans_df
+
+    def compute_atr(self,
+                    axis: str = 'ts',
+                    window_type: str = 'fixed',
+                    window_size: int = 30,
+                    min_periods: int = 2,
+                    window_fcn: str = None
+                    ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes average true range.
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute average true range, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        atr: pd.Series or pd.DataFrame
+            Series or DataFrame with average true range of values.
+        """
+        # check if OHLC
+        if not all([col in self.df.columns for col in ['open', 'high', 'low', 'close']]):
+            raise ValueError("Dataframe must have open, high, low and close fields to compute atr.")
+
+        # unstack
+        if isinstance(self.df.index, pd.MultiIndex):
+            df = self.df.unstack().copy()
+        else:
+            df = self.df.copy()
+
+        # axis time series
+        if axis == 'ts':
+
+            # compute true range
+            tr1 = df.high - df.low
+            tr2 = df.high - df.close.shift()
+            tr3 = df.low - df.close.shift()
+
+            # multiindex
+            if isinstance(self.df.index, pd.MultiIndex):
+                tr = pd.concat([tr1.stack(), tr2.stack(), tr3.stack()], axis=1).max(axis=1)
+                # self.trans_df = tr.groupby(level=1).mean().to_frame('atr')
+            else:
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                # self.trans_df = tr.mean()
+
+            # rolling window
+            if window_type == 'rolling':
+                # multiindex
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = tr.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                               win_type=window_fcn).mean().droplevel(0).sort_index().to_frame('atr')
+                else:
+                    self.trans_df = tr.rolling(window=window_size, min_periods=min_periods,
+                                               win_type=window_fcn).mean().to_frame('atr')
+            # expanding window
+            elif window_type == 'expanding':
+                # multiindex
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = tr.groupby(level=1).expanding(min_periods=min_periods).\
+                        mean().droplevel(0).sort_index().to_frame('atr')
+                else:
+                    self.trans_df = tr.expanding(min_periods=min_periods).mean().to_frame('atr')
+            # fixed window
+            else:
+                # multiindex
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = tr.groupby(level=1).mean().to_frame('atr')
+                else:
+                    self.trans_df = tr.mean()
+
+        # axis 1 (cross-section)
+        else:
+            raise ValueError("Cross-section not supported for ATR computation.")
+
+        return self.trans_df
+
+    def compute_percentile(self,
+                           axis: str = 'ts',
+                           window_type: str = 'fixed',
+                           window_size: int = 30,
+                           min_periods: int = 2,
+                           window_fcn: str = None
+                           ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes percentile.
+
+        Parameters
+        ----------
+        axis: int, {0, 1}, default 0
+            Axis along which to compute standard deviation, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        percentile: pd.Series or pd.DataFrame
+            Series or DataFrame with percentile of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                        win_type=window_fcn).rank(pct=True).droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).rank(pct=True)
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).rank(pct=True).\
+                        droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.expanding(min_periods=min_periods).rank(pct=True)
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).rank(pct=True)
+                else:
+                    self.trans_df = self.df.rank(pct=True)
+
+        # axis 1 (cross-section)
+        else:
+            # fixed window
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=0).rank(pct=True)
+            else:
+                self.trans_df = self.df.rank(pct=True, axis=1)
+
+        return self.trans_df
+
+    def dispersion(self,
+                   method: str = 'std',
+                   axis: str = 'ts',
+                   window_type: str = 'fixed',
+                   window_size: int = 30,
+                   min_periods: int = 1,
+                   window_fcn: str = None,
+                   ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes dispersion of series.
+
+        Parameters
+        ----------
+        method: str, {'std', 'iqr', 'range', 'atr', 'range', 'mad'}, default 'std'
+            Method for computing dispersion.
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute dispersion, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 1
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+            See scipy.signal.windows for more information.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with dispersion of values.
+        """
+
+        self.trans_df = getattr(self, f"compute_{method}")(axis=axis, window_type=window_type,
+                                                           window_size=window_size, min_periods=min_periods,
+                                                           window_fcn=window_fcn)
+
+        return self.trans_df
+
+    def normalize(self,
                   method: str = 'z-score',
+                  axis: str = 'ts',
+                  centering: bool = True,
                   window_type: str = 'fixed',
                   window_size: int = 10,
                   min_periods: int = 2,
                   winsorize: Optional[int] = None
-                  ) -> pd.DataFrame:
+                  ) -> Union[pd.Series, pd.DataFrame]:
         """
         Normalizes features.
 
         Parameters
         ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to normalize.
-        centering: bool, default True
-            Centers values using the appropriate measure of central tendency used for the selected method. Otherwise,
-            0 is used.
-        method: str, {'z-score', 'cdf', iqr', 'mod_z', 'min-max', 'percentile'}, default 'z-score'
-                z-score: subtracts mean and divides by standard deviation.
-                cdf: cumulative distribution function rescales z-scores to values between 0 and 1.
-                iqr:  subtracts median and divides by interquartile range.
-                mod_z: modified z-score using median absolute deviation.
-                min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
-                percentile: converts values to their percentile rank relative to the observations in the
-                defined window type.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 10
-            Size of the moving window. This is the minimum number of observations used for the rolling or
-            expanding statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        winsorize: int, default None
-            Winsorizes/clips values to between positive and negative values of specified integer.
-
-        Returns
-        -------
-        norm_features: Series or DataFrame
-            Dataframe with DatetimeIndex and normalized features
-        """
-        # window type
-        if window_type == 'rolling':
-            mov_df = getattr(df, window_type)(window_size, min_periods=min_periods)
-        elif window_type == 'expanding':
-            mov_df = getattr(df, window_type)(min_periods=min_periods)
-        else:
-            mov_df = df
-
-        # centering
-        if centering is True and method in ['z-score', 'cdf']:
-            center = mov_df.mean()
-        elif centering is True and method in ['iqr', 'mod_z']:
-            center = mov_df.median()
-        else:
-            center = 0
-
-        # methods
-        norm_df = None
-        if method == 'z-score':
-            norm_df = (df - center) / mov_df.std()
-        elif method == 'iqr':
-            norm_df = (df - center) / (mov_df.quantile(0.75) - mov_df.quantile(0.25))
-        elif method == 'mod_z':
-            ad = (df - center).abs()
-            if window_type != 'fixed':
-                mad = getattr(ad, window_type)(window_size).median()
-            else:
-                mad = ad.median()
-            norm_df = 0.6745 * (df - center) / mad
-        elif method == 'cdf':
-            norm_df = (df - center) / mov_df.std()
-            norm_df = pd.DataFrame(stats.norm.cdf(norm_df), index=norm_df.index, columns=norm_df.columns)
-        elif method == 'min-max':
-            norm_df = (df - mov_df.min()) / (mov_df.max() - mov_df.min())
-        elif method == 'percentile':
-            if window_type != 'fixed':
-                norm_df = mov_df.apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1])
-            else:
-                norm_df = mov_df.apply(lambda x: pd.Series(x).rank(pct=True))
-
-        # winsorize
-        if winsorize is not None and method in ['z-score', 'iqr', 'mod_z']:
-            norm_df = norm_df.clip(winsorize * -1, winsorize)
-
-        return norm_df
-
-    def normalize_ts(self,
-                     centering: bool = True,
-                     method: str = 'z-score',
-                     window_type: str = 'fixed',
-                     window_size: int = 10,
-                     min_periods: int = 2,
-                     winsorize: Optional[int] = None
-                     ) -> pd.DataFrame:
-        """
-        Normalizes features over the time series (rows).
-
-        Parameters
-        ----------
-        centering: bool, default True
-            Centers values using the appropriate measure of central tendency used for the selected method. Otherwise,
-            0 is used.
-        method: str, {'z-score', 'cdf', iqr', 'min-max', 'percentile', 'mod_z}, default 'z-score'
+        method: str, {'z-score', 'iqr', 'mod_z', 'min-max', 'percentile'}, default 'z-score'
             z-score: subtracts mean and divides by standard deviation.
-            cdf: cumulative distribution function rescales z-scores to values between 0 and 1.
             iqr:  subtracts median and divides by interquartile range.
+            mod_z: modified z-score using median absolute deviation.
             min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
             percentile: converts values to their percentile rank relative to the observations in the
             defined window type.
-            mod_z: modified z-score using median absolute deviation.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 10
-            Size of the moving window. This is the minimum number of observations used for the rolling or
-            expanding statistic.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        winsorize: int, default None
-            Winsorizes/clips values to between positive and negative values of specified integer.
-
-        Returns
-        -------
-        norm_features: Series or DataFrame - MultiIndex
-            DatetimeIndex (level 0), tickers (level 1) and normalized features
-        """
-        # multiindex
-        if isinstance(self.df.index, pd.MultiIndex):
-            norm_df = self.normalize(self.df.unstack(),
-                                     centering=centering,
-                                     window_type=window_type,
-                                     window_size=window_size,
-                                     min_periods=min_periods,
-                                     method=method,
-                                     winsorize=winsorize,
-                                     ).stack()
-        # single index
-        else:
-            norm_df = self.normalize(self.df,
-                                     centering=centering,
-                                     window_type=window_type,
-                                     window_size=window_size,
-                                     min_periods=min_periods,
-                                     method=method,
-                                     winsorize=winsorize
-                                     )
-
-        return norm_df
-
-    def normalize_cs(self,
-                     centering: bool = True,
-                     method: str = 'z-score',
-                     min_periods: int = 2,
-                     winsorize: Optional[int] = None
-                     ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Normalizes features over the cross-section (cols).
-
-        Parameters
-        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute dispersion, time series or cross-section.
         centering: bool, default True
             Centers values using the appropriate measure of central tendency used for the selected method. Otherwise,
             0 is used.
-        method: str, {'z-score', 'cdf', iqr', 'min-max', 'percentile'}, default 'z-score'
-                z-score: subtracts mean and divides by standard deviation.
-                cdf: cumulative distribution function rescales z-scores to values between 0 and 1.
-                iqr:  subtracts median and divides by interquartile range.
-                mod_z: modified z-score using median absolute deviation.
-                min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
-                percentile: converts values to their percentile rank relative to the observations in the
-                defined window type.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 10
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
         min_periods: int, default 2
             Minimum number of observations in window required to have a value; otherwise, result is np.nan.
         winsorize: int, default None
@@ -719,50 +913,146 @@ class Transform:
 
         Returns
         -------
-        norm_features: Series or DataFrame - MultiIndex
-            DatetimeIndex (level 0), tickers (level 1) and normalized features
+        norm_features: pd.Series or pd.DataFrame
+            Series or DataFrame with dispersion of values.
         """
-        norm_df = self.df.groupby(level=0, group_keys=False).apply(
-            lambda x: self.normalize(x, centering=centering, method=method,
-                                     min_periods=min_periods, winsorize=winsorize))
+        #  method
+        if method == 'z-score':
+            # center
+            if centering:
+                center = self.center(axis=axis, central_tendency='mean', window_type=window_type,
+                                     window_size=window_size, min_periods=min_periods)
+            else:
+                center = self.df
+            # normalize
+            if axis == 'cs':
+                self.trans_df = center.divide(self.compute_std(axis=axis, window_type=window_type,
+                                                               window_size=window_size, min_periods=min_periods),
+                                              axis=0)
+            else:
+                self.trans_df = center / self.compute_std(axis=axis, window_type=window_type, window_size=window_size,
+                                                          min_periods=min_periods)
+        elif method == 'iqr':
+            # center
+            if centering:
+                center = self.center(axis=axis, central_tendency='median', window_type=window_type,
+                                     window_size=window_size, min_periods=min_periods)
+            else:
+                center = self.df
+            # normalize
+            if axis == 'cs':
+                self.trans_df = center.divide(self.compute_iqr(axis=axis, window_type=window_type,
+                                                               window_size=window_size, min_periods=min_periods),
+                                              axis=0)
+            else:
+                self.trans_df = center / self.compute_iqr(axis=axis, window_type=window_type, window_size=window_size,
+                                                          min_periods=min_periods)
+        elif method == 'mod_z':
+            # center
+            if centering:
+                center = self.center(axis=axis, central_tendency='median', window_type=window_type,
+                                     window_size=window_size, min_periods=min_periods)
+            else:
+                center = self.df
+            # normalize
+            if axis == 'cs':
+                self.trans_df = center.divide(self.compute_mad(axis=axis, window_type=window_type,
+                                                               window_size=window_size, min_periods=min_periods),
+                                              axis=0)
+            else:
+                self.trans_df = center / self.compute_mad(axis=axis, window_type=window_type, window_size=window_size,
+                                                          min_periods=min_periods)
+            self.trans_df = 0.6745 * self.trans_df
 
-        return norm_df
+        elif method == 'min-max':
+            # center
+            if centering:
+                center = self.center(axis=axis, central_tendency='min', window_type=window_type,
+                                     window_size=window_size, min_periods=min_periods)
+            else:
+                center = self.df
+            # normalize
+            if axis == 'cs':
+                self.trans_df = center.divide(self.compute_range(axis=axis, window_type=window_type,
+                                                               window_size=window_size, min_periods=min_periods),
+                                              axis=0)
+            else:
+                self.trans_df = center / self.compute_range(axis=axis, window_type=window_type,
+                                                          window_size=window_size,
+                                                          min_periods=min_periods)
 
-    @staticmethod
-    def quantize_np(df: Union[pd.Series, pd.DataFrame], bins: int = 5) -> np.array:
+        elif method == 'percentile':
+            self.trans_df = self.compute_percentile(axis=axis, window_type=window_type, window_size=window_size,
+                                                    min_periods=min_periods)
+
+        # winsorize
+        if winsorize is not None and method in ['z-score', 'iqr', 'mod_z']:
+            self.trans_df = self.trans_df.clip(winsorize * -1, winsorize)
+
+        return self.trans_df
+
+    def quantize(self,
+                 bins: int = 5,
+                 axis: str = 'ts',
+                 window_type: str = 'fixed',
+                 window_size: int = 30,
+                 min_periods: int = 2
+                 ) -> Union[pd.Series, pd.DataFrame]:
         """
-        Quantizes factors or targets using numpy rather than pandas qcut.
-
-        Quantization is the process of transforming a continuous variable into a discrete one by creating a set of bins
-        (or equivalently contiguous intervals/cuttoffs) that spans the range of the variable’s values.
-        Quantization creates an equal number of values in each bin.
-        See Discretize function for other types of discretization.
+        Quantize features.
 
         Parameters
         ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to quantize.
-        bins:
-            Number of bins.
+        bins: int, default 5
+            Number of bins to use for quantization.
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute dispersion, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
 
         Returns
         -------
-        quantiles: np.array
-            Array with quantized data.
+        quantized_features: pd.Series or pd.DataFrame
+            Series or DataFrame with quantized values.
         """
-        # percentile rank
-        perc = df.rank(pct=True)
-        # bins
+        if bins <= 1 or bins is None:
+            raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
+
+        # compute percentile
+        perc = self.compute_percentile(axis=axis, window_type=window_type, window_size=window_size,
+                                       min_periods=min_periods)
+
+        # quantize
         labels = np.arange(0, 1 + 1 / bins, 1 / bins)
         # mask nans
-        mask = np.isnan(df)
+        mask = np.isnan(perc)
         # quantize
         quantiles = np.digitize(perc, labels, right=True)
-        quantiles = np.where(mask, df, quantiles)
+        self.trans_df = np.where(mask, perc, quantiles)
 
-        return quantiles
+        # add to df
+        if self.index is not None:
+            self.trans_df = pd.DataFrame(self.trans_df, index=perc.index, columns=perc.columns)
 
-    def quantize(self, df, bins: int = 5, window_type='fixed', min_periods=2, window_size=30, axis=0):
+        return self.trans_df
+
+    #     elif method == 'cdf':
+    #         norm_df = (df - center) / mov_df.std()
+    #         norm_df = pd.DataFrame(stats.norm.cdf(norm_df), index=norm_df.index, columns=norm_df.columns)
+
+    @staticmethod
+    def quant(df: Union[pd.Series, pd.DataFrame],
+                 bins: int = 5,
+                 window_type: str = 'fixed',
+                 lookback: int = 10,
+                 _min_periods: int = 2,
+                 axis: int = 0,
+                 ) -> pd.DataFrame:
         """
         Quantizes factors or targets. Quantization is the process of transforming a continuous variable
         into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
@@ -777,10 +1067,11 @@ class Transform:
             Number of bins.
         window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
             Provide a window type. If None, all observations are used in the calculation.
-        min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        window_size: int, default 30
+        lookback: int, default 10
             Size of the moving window. This is the minimum number of observations used for the rolling or
+            expanding statistic.
+        _min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
         axis: int, default 0
             Axis along which to quantize. Defaults to each column.
 
@@ -789,21 +1080,49 @@ class Transform:
         quant_df: DataFrame
             Series or DataFrame with DatetimeIndex (index) and quantized features (columns).
         """
-        # quantize using moving window
-        def quant_mw(x, _bins=bins):
-            return self.quantize_np(x, bins=_bins)[-1]
+        # check bins
+        if bins <= 1 or bins is None:
+            raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
+        # convert to df
+        if isinstance(df, pd.Series):
+            df = df.to_frame().copy()
+
+        # quantize function
+        # def quantize(x, _bins=bins, _axis=axis):
+        #
+        #     # percentile rank
+        #     perc = x.rank(pct=True, axis=_axis)
+        #     # bins
+        #     labels = np.arange(0, 1, 1 / _bins)
+        #     quantiles = np.digitize(perc, labels, right=True)
+        #
+        #     return quantiles
+        #
+        # def quant_mw(x):
+        #     return quantize(x)[-1]
+
+        # quantize function
+        def quantize(x):
+            return pd.qcut(x, bins, labels=False, duplicates='drop') + 1
+
+        def quant_mw(x):
+            return (pd.qcut(x, bins, labels=False, duplicates='drop') + 1)[-1]
 
         # window type
         if window_type == 'rolling':
-            quant_df = getattr(df, window_type)(window_size, min_periods=min_periods).apply(quant_mw)
+            quant_df = getattr(df, window_type)(lookback, min_periods=_min_periods).apply(quant_mw)
         elif window_type == 'expanding':
-            quant_df = getattr(df, window_type)(min_periods=min_periods).apply(quant_mw)
+            quant_df = getattr(df, window_type)(min_periods=_min_periods).apply(quant_mw)
         else:
-            quant_df = df.apply(self.quantize_np, axis=axis, result_type='broadcast')
+            quant_df = df.apply(quantize, axis=axis)
 
         return quant_df
 
-    def quantize_ts(self, bins: int = 5, window_type='fixed', window_size=30, min_periods=2) -> Union[pd.DataFrame]:
+    def quant_ts(self,
+                    bins: int = 5,
+                    window_type: str = 'fixed',
+                    lookback: int = 10,
+                    _min_periods: int = 2) -> Union[pd.Series, pd.DataFrame]:
         """
         Quantizes features over the time series (rows).
 
@@ -813,9 +1132,10 @@ class Transform:
             Number of bins.
         window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
             Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 30
+        lookback: int, default 10
             Size of the moving window. This is the minimum number of observations used for the rolling or
-        min_periods: int, default 2
+            expanding statistic.
+        _min_periods: int, default 2
             Minimum number of observations in window required to have a value; otherwise, result is np.nan.
 
         Returns
@@ -825,190 +1145,149 @@ class Transform:
         """
         # multiindex
         if isinstance(self.df.index, pd.MultiIndex):
-            quant_df = self.quantize(self.df.unstack(),
+            quant_df = self.quant(self.df.unstack().dropna(how='all', axis=1),
                                      bins=bins,
                                      window_type=window_type,
-                                     window_size=window_size,
-                                     min_periods=min_periods,
-                                     axis=0).stack()
+                                     lookback=lookback,
+                                     _min_periods=_min_periods).stack()
         # single index
         else:
-            quant_df = self.quantize(self.df,
+            quant_df = self.quant(self.df.dropna(how='all', axis=1),
                                      bins=bins,
                                      window_type=window_type,
-                                     min_periods=min_periods,
-                                     axis=0)
+                                     lookback=lookback,
+                                     _min_periods=_min_periods)
 
         return quant_df
 
-    def quantize_cs(self, bins: int = 5) -> Union[pd.DataFrame]:
+    def quant_cs(self, bins: int = 5) -> Union[pd.Series, pd.DataFrame]:
         """
         Quantizes features over the cross-section (cols).
+
+        Parameters
+        ----------
+        bins: int, default 5
+            Number of bins.
 
         Returns
         -------
         quant_df: DataFrame
             Series or DataFrame with DatetimeIndex (level 0), tickers (level 1), and quantized features (columns).
         """
+        # df to store quantized cols
+        quant_df = pd.DataFrame()
+
         # multiindex
         if isinstance(self.df.index, pd.MultiIndex):
-            quant_df = pd.DataFrame()
+            # loop through cols
             for col in self.df.columns:
-                quant_df = pd.concat([quant_df,
-                                      self.quantize(self.df[[col]].unstack(), bins=bins, axis=1).stack()], axis=1)
+                df = self.quant(self.df[col].unstack().dropna(thresh=bins, axis=0), axis=1).stack().to_frame(col)
+                quant_df = pd.concat([quant_df, df], axis=1)
+
         # single index
         else:
-            quant_df = self.quantize(self.df, bins=bins, axis=1)
+            quant_df = self.quant(self.df.dropna(thresh=bins, axis=0), bins=5, axis=1)
 
-        return quant_df
+        return quant_df.sort_index()
 
-    # @staticmethod
-    # def quantize(df: Union[pd.Series, pd.DataFrame],
-    #              bins: int = 5,
-    #              window_type: str = 'fixed',
-    #              lookback: int = 10,
-    #              _min_periods: int = 2,
-    #              axis: int = 0,
-    #              ) -> pd.DataFrame:
-    #     """
-    #     Quantizes factors or targets. Quantization is the process of transforming a continuous variable
-    #     into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
-    #     the range of the variable’s values. Quantization creates an equal number of values in each bin.
-    #     See Discretize function for other types of discretization.
-    #
-    #     Parameters
-    #     ----------
-    #     df: pd.DataFrame or pd.Series
-    #         Dataframe or series to quantize.
-    #     bins: int, default 5
-    #         Number of bins.
-    #     window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-    #         Provide a window type. If None, all observations are used in the calculation.
-    #     lookback: int, default 10
-    #         Size of the moving window. This is the minimum number of observations used for the rolling or
-    #         expanding statistic.
-    #     _min_periods: int, default 2
-    #         Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-    #     axis: int, default 0
-    #         Axis along which to quantize. Defaults to each column.
-    #
-    #     Returns
-    #     -------
-    #     quant_df: DataFrame
-    #         Series or DataFrame with DatetimeIndex (index) and quantized features (columns).
-    #     """
-    #     # check bins
-    #     if bins <= 1 or bins is None:
-    #         raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
-    #     # convert to df
-    #     if isinstance(df, pd.Series):
-    #         df = df.to_frame().copy()
-    #
-    #     # quantize function
-    #     # def quantize(x, _bins=bins, _axis=axis):
-    #     #
-    #     #     # percentile rank
-    #     #     perc = x.rank(pct=True, axis=_axis)
-    #     #     # bins
-    #     #     labels = np.arange(0, 1, 1 / _bins)
-    #     #     quantiles = np.digitize(perc, labels, right=True)
-    #     #
-    #     #     return quantiles
-    #     #
-    #     # def quant_mw(x):
-    #     #     return quantize(x)[-1]
-    #
-    #     # quantize function
-    #     def quantize(x):
-    #         return pd.qcut(x, bins, labels=False, duplicates='drop') + 1
-    #
-    #     def quant_mw(x):
-    #         return (pd.qcut(x, bins, labels=False, duplicates='drop') + 1)[-1]
-    #
-    #     # window type
-    #     if window_type == 'rolling':
-    #         quant_df = getattr(df, window_type)(lookback, min_periods=_min_periods).apply(quant_mw)
-    #     elif window_type == 'expanding':
-    #         quant_df = getattr(df, window_type)(min_periods=_min_periods).apply(quant_mw)
-    #     else:
-    #         quant_df = df.apply(quantize, axis=axis)
-    #
-    #     return quant_df
-    #
-    # def quantize_ts(self,
-    #                 bins: int = 5,
-    #                 window_type: str = 'fixed',
-    #                 lookback: int = 10,
-    #                 _min_periods: int = 2) -> Union[pd.Series, pd.DataFrame]:
-    #     """
-    #     Quantizes features over the time series (rows).
-    #
-    #     Parameters
-    #     ----------
-    #     bins: int, default 5
-    #         Number of bins.
-    #     window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-    #         Provide a window type. If None, all observations are used in the calculation.
-    #     lookback: int, default 10
-    #         Size of the moving window. This is the minimum number of observations used for the rolling or
-    #         expanding statistic.
-    #     _min_periods: int, default 2
-    #         Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-    #
-    #     Returns
-    #     -------
-    #     quant_df: DataFrame
-    #         Series or DataFrame with DatetimeIndex (level 0), tickers (level 1) and quantized features (columns).
-    #     """
-    #     # multiindex
-    #     if isinstance(self.df.index, pd.MultiIndex):
-    #         quant_df = self.quantize(self.df.unstack().dropna(how='all', axis=1),
-    #                                  bins=bins,
-    #                                  window_type=window_type,
-    #                                  lookback=lookback,
-    #                                  _min_periods=_min_periods).stack()
-    #     # single index
-    #     else:
-    #         quant_df = self.quantize(self.df.dropna(how='all', axis=1),
-    #                                  bins=bins,
-    #                                  window_type=window_type,
-    #                                  lookback=lookback,
-    #                                  _min_periods=_min_periods)
-    #
-    #     return quant_df
-    #
-    # def quantize_cs(self, bins: int = 5) -> Union[pd.Series, pd.DataFrame]:
-    #     """
-    #     Quantizes features over the cross-section (cols).
-    #
-    #     Parameters
-    #     ----------
-    #     bins: int, default 5
-    #         Number of bins.
-    #
-    #     Returns
-    #     -------
-    #     quant_df: DataFrame
-    #         Series or DataFrame with DatetimeIndex (level 0), tickers (level 1), and quantized features (columns).
-    #     """
-    #     # df to store quantized cols
-    #     quant_df = pd.DataFrame()
-    #
-    #     # multiindex
-    #     if isinstance(self.df.index, pd.MultiIndex):
-    #         # loop through cols
-    #         for col in self.df.columns:
-    #             df = self.quantize(self.df[col].unstack().dropna(thresh=bins, axis=0), axis=1).stack().to_frame(col)
-    #             quant_df = pd.concat([quant_df, df], axis=1)
-    #
-    #     # single index
-    #     else:
-    #         quant_df = self.quantize(self.df.dropna(thresh=bins, axis=0), bins=5, axis=1)
-    #
-    #     return quant_df.sort_index()
+    def disc(self,
+             bins: int = 5,
+             axis: str = 'ts',
+             method: str = 'quantile',
+             window_type: str = 'fixed',
+             window_size: int = 30,
+             min_obs: int = 1
+             ) -> pd.DataFrame:
+        """
+        Discretizes normalized factors or targets. Discretization is the process of transforming a continuous variable
+        into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
+        the range of the variable’s values.
+
+        Parameters
+        ----------
+        bins: int, default 5
+            Number of bins.
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute median absolute deviation, time series or cross-section.
+        method: str, {'quantile', 'uniform', 'kmeans'}, default 'quantile'
+            quantile: all bins have the same number of values.
+            uniform: all bins have identical widths.
+            kmeans: values in each bin have the same nearest center of a 1D k-means cluster.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or
+            expanding statistic.
+        min_obs: int, default 1
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+
+        Returns
+        -------
+        disc_features: DataFrame
+            Series or DataFrame with DatetimeIndex and discretized features.
+        """
+        # check bins
+        if bins <= 1 or bins is None:
+            raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
+
+        # discretize features
+        discretize = KBinsDiscretizer(n_bins=bins, encode='ordinal', strategy=method)
+        # store discretized features
+        disc = None
+
+        # axis time series
+        if axis == 'ts':
+
+            if isinstance(self.index, pd.MultiIndex):
+                self.trans_df = self.df.unstack().copy()
+
+            if window_type == 'rolling':
+
+                # loop through rows of df
+                for row in range(self.trans_df.shape[0] - window_size + 1):
+                    # discretize features
+                    res = discretize.fit_transform(self.trans_df.iloc[row: row + window_size])
+                    # store results
+                    if row == 0:
+                        disc = res[-1]
+                    else:
+                        disc = np.vstack([disc, res[-1]])
+
+            elif window_type == 'expanding':
+
+                # loop through rows of df
+                for row in range(min_obs, self.trans_df.shape[0] + 1):
+                    # discretize features
+                    res = discretize.fit_transform(self.trans_df.iloc[:row])
+                    # store results
+                    if row == min_obs:
+                        disc = res[-1]
+                    else:
+                        disc = np.vstack([disc, res[-1]])
+
+            else:  # fixed window
+                disc = discretize.fit_transform(self.trans_df)
+
+            # convert to df
+            disc = pd.DataFrame(disc, index=self.trans_df.index[-disc.shape[0]:], columns=self.trans_df.columns)
+
+            if isinstance(self.index, pd.MultiIndex):
+                disc = disc.stack()
+
+        # axis 1 (cross-section)
+        else:
+            def discretization(df):
+                return pd.DataFrame(discretize.fit_transform(df), index=df.index, columns=df.columns)
+
+            disc = self.trans_df.groupby(level=0, group_keys=False).apply(lambda x: discretization(x))
+
+        # convert type to float
+        disc = disc.astype(float) + 1
+
+        return disc
 
     @staticmethod
-    def discretize(df: Union[pd.Series, pd.DataFrame],
+    def discretize(df: pd.DataFrame,
                    discretization: str = 'quantile',
                    bins: int = 5,
                    window_type: str = 'fixed',
