@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from typing import Union, Optional
-from scipy import stats
 from sklearn.preprocessing import KBinsDiscretizer
 
 
@@ -149,7 +148,8 @@ class Transform:
                 else:
                     self.trans_df = self.trans_df[mkt_field].to_frame('mkt_ret')
             else:
-                pass  # TODO: add other market computations
+                # TODO: add other market computations
+                raise ValueError("Market weighting not supported yet.")
 
         return self.trans_df.sort_index()
 
@@ -256,7 +256,6 @@ class Transform:
             Series or DataFrame with smoothed values.
         """
         # TODO: refactor to allow for more window functions in rolling
-
         # smoothing
         if window_type == 'ewm':
             if central_tendency == 'median':
@@ -346,7 +345,7 @@ class Transform:
                 else:
                     self.trans_df = self.df - getattr(self.df, central_tendency)()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             # fixed window
             if isinstance(self.df.index, pd.MultiIndex):
@@ -409,7 +408,7 @@ class Transform:
                 else:
                     self.trans_df = self.df.std()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             # fixed window
             if isinstance(self.df.index, pd.MultiIndex):
@@ -427,7 +426,7 @@ class Transform:
                     window_fcn: str = None
                     ) -> Union[pd.Series, pd.DataFrame]:
         """
-        Computes inter-quartile range.
+        Computes interquartile range.
 
         Parameters
         ----------
@@ -478,7 +477,7 @@ class Transform:
                 else:
                     self.trans_df = self.df.quantile(0.75) - self.df.quantile(0.25)
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             if isinstance(self.df.index, pd.MultiIndex):
                 self.trans_df = self.df.groupby(level=0).quantile(0.75) - self.df.groupby(level=0).quantile(0.25)
@@ -548,7 +547,7 @@ class Transform:
                 else:
                     self.trans_df = (self.df - self.df.median()).abs().median()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             if isinstance(self.df.index, pd.MultiIndex):
                 self.trans_df = (self.df - self.df.groupby(level=0).median()).abs().groupby(level=0).median()
@@ -614,7 +613,7 @@ class Transform:
                 else:
                     self.trans_df = self.df.max() - self.df.min()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             if isinstance(self.df.index, pd.MultiIndex):
                 self.trans_df = self.df.groupby(level=0).max() - self.df.groupby(level=0).min()
@@ -676,7 +675,7 @@ class Transform:
                 else:
                     self.trans_df = self.df.var()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             # fixed window
             if isinstance(self.df.index, pd.MultiIndex):
@@ -766,7 +765,7 @@ class Transform:
                 else:
                     self.trans_df = tr.mean()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             raise ValueError("Cross-section not supported for ATR computation.")
 
@@ -825,7 +824,7 @@ class Transform:
                 else:
                     self.trans_df = self.df.rank(pct=True)
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             # fixed window
             if isinstance(self.df.index, pd.MultiIndex):
@@ -1041,163 +1040,14 @@ class Transform:
 
         return self.trans_df
 
-    #     elif method == 'cdf':
-    #         norm_df = (df - center) / mov_df.std()
-    #         norm_df = pd.DataFrame(stats.norm.cdf(norm_df), index=norm_df.index, columns=norm_df.columns)
-
-    @staticmethod
-    def quant(df: Union[pd.Series, pd.DataFrame],
-                 bins: int = 5,
-                 window_type: str = 'fixed',
-                 lookback: int = 10,
-                 _min_periods: int = 2,
-                 axis: int = 0,
-                 ) -> pd.DataFrame:
-        """
-        Quantizes factors or targets. Quantization is the process of transforming a continuous variable
-        into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
-        the range of the variable’s values. Quantization creates an equal number of values in each bin.
-        See Discretize function for other types of discretization.
-
-        Parameters
-        ----------
-        df: pd.DataFrame or pd.Series
-            Dataframe or series to quantize.
-        bins: int, default 5
-            Number of bins.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        lookback: int, default 10
-            Size of the moving window. This is the minimum number of observations used for the rolling or
-            expanding statistic.
-        _min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-        axis: int, default 0
-            Axis along which to quantize. Defaults to each column.
-
-        Returns
-        -------
-        quant_df: DataFrame
-            Series or DataFrame with DatetimeIndex (index) and quantized features (columns).
-        """
-        # check bins
-        if bins <= 1 or bins is None:
-            raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
-        # convert to df
-        if isinstance(df, pd.Series):
-            df = df.to_frame().copy()
-
-        # quantize function
-        # def quantize(x, _bins=bins, _axis=axis):
-        #
-        #     # percentile rank
-        #     perc = x.rank(pct=True, axis=_axis)
-        #     # bins
-        #     labels = np.arange(0, 1, 1 / _bins)
-        #     quantiles = np.digitize(perc, labels, right=True)
-        #
-        #     return quantiles
-        #
-        # def quant_mw(x):
-        #     return quantize(x)[-1]
-
-        # quantize function
-        def quantize(x):
-            return pd.qcut(x, bins, labels=False, duplicates='drop') + 1
-
-        def quant_mw(x):
-            return (pd.qcut(x, bins, labels=False, duplicates='drop') + 1)[-1]
-
-        # window type
-        if window_type == 'rolling':
-            quant_df = getattr(df, window_type)(lookback, min_periods=_min_periods).apply(quant_mw)
-        elif window_type == 'expanding':
-            quant_df = getattr(df, window_type)(min_periods=_min_periods).apply(quant_mw)
-        else:
-            quant_df = df.apply(quantize, axis=axis)
-
-        return quant_df
-
-    def quant_ts(self,
-                    bins: int = 5,
-                    window_type: str = 'fixed',
-                    lookback: int = 10,
-                    _min_periods: int = 2) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Quantizes features over the time series (rows).
-
-        Parameters
-        ----------
-        bins: int, default 5
-            Number of bins.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        lookback: int, default 10
-            Size of the moving window. This is the minimum number of observations used for the rolling or
-            expanding statistic.
-        _min_periods: int, default 2
-            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
-
-        Returns
-        -------
-        quant_df: DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), tickers (level 1) and quantized features (columns).
-        """
-        # multiindex
-        if isinstance(self.df.index, pd.MultiIndex):
-            quant_df = self.quant(self.df.unstack().dropna(how='all', axis=1),
-                                     bins=bins,
-                                     window_type=window_type,
-                                     lookback=lookback,
-                                     _min_periods=_min_periods).stack()
-        # single index
-        else:
-            quant_df = self.quant(self.df.dropna(how='all', axis=1),
-                                     bins=bins,
-                                     window_type=window_type,
-                                     lookback=lookback,
-                                     _min_periods=_min_periods)
-
-        return quant_df
-
-    def quant_cs(self, bins: int = 5) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Quantizes features over the cross-section (cols).
-
-        Parameters
-        ----------
-        bins: int, default 5
-            Number of bins.
-
-        Returns
-        -------
-        quant_df: DataFrame
-            Series or DataFrame with DatetimeIndex (level 0), tickers (level 1), and quantized features (columns).
-        """
-        # df to store quantized cols
-        quant_df = pd.DataFrame()
-
-        # multiindex
-        if isinstance(self.df.index, pd.MultiIndex):
-            # loop through cols
-            for col in self.df.columns:
-                df = self.quant(self.df[col].unstack().dropna(thresh=bins, axis=0), axis=1).stack().to_frame(col)
-                quant_df = pd.concat([quant_df, df], axis=1)
-
-        # single index
-        else:
-            quant_df = self.quant(self.df.dropna(thresh=bins, axis=0), bins=5, axis=1)
-
-        return quant_df.sort_index()
-
-    def disc(self,
-             bins: int = 5,
-             axis: str = 'ts',
-             method: str = 'quantile',
-             window_type: str = 'fixed',
-             window_size: int = 30,
-             min_obs: int = 1
-             ) -> pd.DataFrame:
+    def discretize(self,
+                   bins: int = 5,
+                   axis: str = 'ts',
+                   method: str = 'quantile',
+                   window_type: str = 'fixed',
+                   window_size: int = 30,
+                   min_obs: int = 1
+                   ) -> pd.DataFrame:
         """
         Discretizes normalized factors or targets. Discretization is the process of transforming a continuous variable
         into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
@@ -1242,7 +1092,6 @@ class Transform:
                 self.trans_df = self.df.unstack().copy()
 
             if window_type == 'rolling':
-
                 # loop through rows of df
                 for row in range(self.trans_df.shape[0] - window_size + 1):
                     # discretize features
@@ -1254,7 +1103,6 @@ class Transform:
                         disc = np.vstack([disc, res[-1]])
 
             elif window_type == 'expanding':
-
                 # loop through rows of df
                 for row in range(min_obs, self.trans_df.shape[0] + 1):
                     # discretize features
@@ -1274,7 +1122,7 @@ class Transform:
             if isinstance(self.index, pd.MultiIndex):
                 disc = disc.stack()
 
-        # axis 1 (cross-section)
+        # axis cross-section
         else:
             def discretization(df):
                 return pd.DataFrame(discretize.fit_transform(df), index=df.index, columns=df.columns)
@@ -1285,177 +1133,3 @@ class Transform:
         disc = disc.astype(float) + 1
 
         return disc
-
-    @staticmethod
-    def discretize(df: pd.DataFrame,
-                   discretization: str = 'quantile',
-                   bins: int = 5,
-                   window_type: str = 'fixed',
-                   window_size: int = 7) -> pd.DataFrame:
-        """
-        Discretizes normalized factors or targets. Discretization is the process of transforming a continuous variable
-        into a discrete one by creating a set of bins (or equivalently contiguous intervals/cuttoffs) that spans
-        the range of the variable’s values.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-        discretization: str, {'quantile', 'uniform', 'kmeans'}, default 'quantile'
-            quantile: all bins have the same number of values.
-            uniform: all bins have identical widths.
-            kmeans: values in each bin have the same nearest center of a 1D k-means cluster.
-        bins: int, default 5
-            Number of bins.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 7
-            Size of the moving window. This is the minimum number of observations used for the rolling or
-            expanding statistic.
-
-        Returns
-        -------
-        disc_features: DataFrame
-            Series or DataFrame with DatetimeIndex and discretized features.
-        """
-        # check bins
-        if bins <= 1 or bins is None:
-            raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
-        # convert to df
-        if isinstance(df, pd.Series):
-            df = df.to_frame().copy()
-
-        # discretize features
-        discretize = KBinsDiscretizer(n_bins=bins, encode='ordinal', strategy=discretization)
-        # window size
-        window_size = window_size
-
-        # rolling or expanding window
-        if window_type != 'fixed':
-            # create empty df to store values
-            disc_df = pd.DataFrame(index=df.index, columns=df.columns)
-            # discretize features in window
-            while window_size <= df.shape[0]:
-                # discretize features
-                # rolling window
-                if window_type == 'rolling':
-                    disc_df.iloc[window_size - 1, :] = \
-                        discretize.fit_transform(df.iloc[window_size - window_size:window_size])[-1]
-                # expanding window
-                if window_type == 'expanding':
-                    disc_df.iloc[window_size - 1, :] = discretize.fit_transform(df.iloc[:window_size])[-1]
-                window_size += 1
-        # fixed window type
-        else:
-            disc_df = pd.DataFrame(discretize.fit_transform(df), index=df.index, columns=df.columns)
-
-        # convert type to float
-        disc_df = disc_df.astype(float) + 1
-
-        return disc_df.round(2)
-
-    def discretize_ts(self,
-                      discretization: str = 'quantile',
-                      bins: int = 5,
-                      window_type: str = 'fixed',
-                      window_size: int = 7) -> pd.DataFrame:
-        """
-        Discretizes features over the time series (rows).
-
-        Parameters
-        ----------
-        discretization: str, {'quantile', 'uniform', 'kmeans'}, default 'quantile'
-            quantile: all bins have the same number of values.
-            uniform: all bins have identical widths.
-            kmeans: values in each bin have the same nearest center of a 1D k-means cluster.
-        bins: int, default 5
-            Number of bins.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
-            Provide a window type. If None, all observations are used in the calculation.
-        window_size: int, default 7
-            Size of the moving window. This is the minimum number of observations used for the rolling or
-            expanding statistic.
-
-        Returns
-        -------
-        disc_features: DataFrame
-            Series or DataFrame with DatetimeIndex and discretized features.
-        """
-        # multiindex
-        if isinstance(self.df.index, pd.MultiIndex):
-            df = self.df.unstack().dropna(how='all', axis=1).dropna()  # dropna
-            disc_df = self.discretize(df,
-                                      discretization=discretization,
-                                      bins=bins,
-                                      window_type=window_type,
-                                      window_size=window_size).stack()
-        # single index
-        else:
-            df = self.df.dropna(how='all', axis=1).dropna()  # dropna
-            disc_df = self.discretize(df,
-                                      discretization=discretization,
-                                      bins=bins,
-                                      window_type=window_type,
-                                      window_size=window_size)
-        return disc_df
-
-    def discretize_cs(self,
-                      discretization: str = 'quantile',
-                      bins: int = 5
-                      ) -> Union[pd.Series, pd.DataFrame]:
-        """
-        Discretizes features over the time series (rows).
-
-        Parameters
-        ----------
-        discretization: str, {'quantile', 'uniform', 'kmeans'}, default 'quantile'
-            quantile: all bins have the same number of values.
-            uniform: all bins have identical widths.
-            kmeans: values in each bin have the same nearest center of a 1D k-means cluster.
-        bins: int, default 5
-            Number of bins.
-
-        Returns
-        -------
-        disc_features: DataFrame
-            Series or DataFrame with DatetimeIndex and discretized features.
-        """
-        # dropna
-        df = self.df.dropna(how='all', axis=1).dropna()
-        # discretize
-        disc_df = df.groupby(level=0, group_keys=False).apply(
-            lambda x: self.discretize(x, discretization=discretization, bins=bins))
-
-        return disc_df
-
-    def orthogonalize(self) -> pd.DataFrame:
-        """
-        Orthogonalize factors.
-
-        As described by Klein and Chow (2013) in Orthogonalized Factors and Systematic Risk Decompositions:
-        https://www.sciencedirect.com/science/article/abs/pii/S1062976913000185
-        They propose an optimal simultaneous orthogonal transformation of factors, following the so-called symmetric
-        procedure of Schweinler and Wigner (1970) and Löwdin (1970).  The data transformation allows the identification
-        of the underlying uncorrelated components of common factors without changing their correlation with the original
-        factors. It also facilitates the systematic risk decomposition by disentangling the coefficient of determination
-        (R²) based on factor volatilities, which makes it easier to distinguish the marginal risk contribution of each
-        common risk factor to asset returns.
-
-        Returns
-        -------
-        orthogonal_factors: pd.DataFrame
-            Orthogonalized factors.
-        """
-        # compute cov matrix
-        M = np.cov(self.arr.T)
-        # factorize cov matrix M
-        u, s, vh = np.linalg.svd(M)
-        # solve for symmetric matrix
-        S = u @ np.diag(s ** (-0.5)) @ vh
-        # rescale symmetric matrix to original variances
-        M[M < 0] = np.nan  # remove negative values
-        S_rs = S @ (np.diag(np.sqrt(M)) * np.eye(S.shape[0], S.shape[1]))
-        # convert to orthogonal matrix
-        orthogonal_factors = self.arr @ S_rs
-
-        return pd.DataFrame(orthogonal_factors, index=self.df.index[-orthogonal_factors.shape[0]:],
-                            columns=self.df.columns)
