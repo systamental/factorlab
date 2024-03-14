@@ -418,6 +418,71 @@ class Transform:
 
         return self.trans_df
 
+    def compute_quantile(self,
+                         q: float,
+                         axis: str = 'ts',
+                         window_type: str = 'fixed',
+                         window_size: int = 30,
+                         min_periods: int = 2,
+                         window_fcn: str = None
+                         ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes quantile.
+
+        Parameters
+        ----------
+        q: float
+            Quantile to compute.
+        axis : str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute quantile, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        window_fcn: str, default None
+            Provide a window function. If None, observations are equally-weighted in the rolling computation.
+
+        Returns
+        -------
+        quantile: pd.Series or pd.DataFrame
+            Series or DataFrame with quantile of values.
+        """
+        # axis time series
+        if axis == 'ts':
+            # rolling window
+            if window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                       win_type=window_fcn).quantile(q).droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).quantile(q)
+            # expanding window
+            elif window_type == 'expanding':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(q).\
+                        droplevel(0).sort_index()
+
+                else:
+                    self.trans_df = self.df.expanding(min_periods=min_periods).quantile(q)
+            # fixed window
+            else:
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).quantile(q)
+                else:
+                    self.trans_df = self.df.quantile(q)
+
+        # axis cross-section
+        else:
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = self.df.groupby(level=0).quantile(q)
+            else:
+                self.trans_df = self.df.quantile(q, axis=1)
+
+        return self.trans_df
+
     def compute_iqr(self,
                     axis: str = 'ts',
                     window_type: str = 'fixed',
