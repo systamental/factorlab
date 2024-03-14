@@ -455,6 +455,69 @@ class TestTransform:
             assert (actual_btc.index == self.btc_transform_instance.df.index).all()
             assert (actual.columns == self.btc_transform_instance.df.columns).all()  # cols
 
+    @pytest.mark.parametrize("q, axis, window_type",
+                             [(0.05, 'ts', 'fixed'), (0.05, 'ts', 'expanding'), (0.05, 'ts', 'rolling'),
+                              (0.05, 'cs', 'fixed')]
+                             )
+    def test_compute_quantile(self, q, axis, window_type) -> None:
+        """
+        Test compute_quantile method.
+        """
+        # get actual and expected
+        actual = self.default_transform_instance.compute_quantile(q, axis, window_type)
+        actual_btc = self.btc_transform_instance.compute_quantile(q, axis, window_type)
+
+        # window type
+        if axis == 'ts' and window_type == 'fixed':
+            assert actual.shape[0] == len(self.default_transform_instance.df.index.droplevel(0).unique())  # shape
+            assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[1]
+            assert np.allclose(actual.loc['BTC'], actual_btc, equal_nan=True)  # values
+            assert (actual.dtypes == np.float64).all()  # dtypes
+            assert actual_btc.dtypes == np.float64
+            assert set(actual.index.to_list()) == set(self.default_transform_instance.df.index.droplevel(0).unique())
+            assert (actual_btc.index == self.btc_transform_instance.df.columns).all()
+            assert (actual.columns == self.default_transform_instance.df.columns).all()  # cols
+
+        elif axis == 'ts' and window_type == 'expanding':
+            fixed_expected = self.default_transform_instance.compute_quantile(q, 'ts', 'fixed')
+            fixed_expected_btc = self.btc_transform_instance.compute_quantile(q, 'ts', 'fixed')
+            assert actual.shape[0] == self.default_transform_instance.df.shape[0]  # shape
+            assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
+            assert actual.shape[1] == self.default_transform_instance.df.shape[1]
+            assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
+            assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)  # values
+            assert np.allclose(actual.groupby('ticker').last(), fixed_expected, equal_nan=True)
+            assert np.allclose(actual_btc.iloc[-1], fixed_expected_btc, equal_nan=True)
+            assert (actual.dtypes == np.float64).all()  # dtypes
+            assert (actual_btc.dtypes == np.float64).all()
+            assert (actual.index == self.default_transform_instance.df.index).all()  # index
+            assert (actual_btc.index == self.btc_transform_instance.df.index).all()
+            assert (actual.columns == self.default_transform_instance.df.columns).all()  # cols
+            assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
+
+        elif axis == 'ts' and window_type == 'rolling':
+            assert actual.shape[0] == self.default_transform_instance.df.shape[0]  # shape
+            assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
+            assert actual.shape[1] == self.default_transform_instance.df.shape[1]
+            assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
+            assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)  # values
+            assert (actual.dtypes == np.float64).all()  # dtypes
+            assert (actual_btc.dtypes == np.float64).all()
+            assert (actual.index == self.default_transform_instance.df.index).all()  # index
+            assert (actual_btc.index == self.btc_transform_instance.df.index).all()
+            assert (actual.columns == self.default_transform_instance.df.columns).all()  # cols
+            assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
+
+        if axis == 'cs':
+            assert actual.shape[0] == self.btc_transform_instance.df.shape[0]  # shape
+            assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
+            assert actual.shape[1] == self.btc_transform_instance.df.shape[1]
+            assert (actual.dtypes == np.float64).all()  # dtypes
+            assert actual_btc.dtypes == np.float64
+            assert (actual.index == self.btc_transform_instance.df.index).all()  # index
+            assert (actual_btc.index == self.btc_transform_instance.df.index).all()
+            assert (actual.columns == self.btc_transform_instance.df.columns).all()  # cols
+
     @pytest.mark.parametrize("axis, window_type",
                              [('ts', 'fixed'), ('ts', 'expanding'), ('ts', 'rolling'), ('cs', 'fixed')]
                              )
