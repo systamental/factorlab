@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.feature_analysis.supervised_learning import LinearModel, SPCA
+from factorlab.signal_generation.supervised_learning import LinearModel, SPCA
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def macro_z_monthly():
     # macro df
     macro_df = pd.concat([pmi_df.unstack().actual.WL_Manuf_PMI, infl_df.actual], axis=1)
     macro_df.columns = ['growth', 'inflation']
-    macro_z_df = Transform(macro_df).normalize_ts(window_type='expanding').dropna()
+    macro_z_df = Transform(macro_df).normalize(axis='ts', window_type='expanding').dropna()
 
     return macro_z_df
 
@@ -43,7 +43,7 @@ def asset_rets_yoy_z_monthly():
     # yoy
     asset_class_yoy_ret = (asset_class_pr_df / asset_class_pr_df.shift(12)) - 1
     # zscore
-    asset_class_yoy_ret_z = Transform(asset_class_yoy_ret).normalize_ts(window_type='expanding').dropna()
+    asset_class_yoy_ret_z = Transform(asset_class_yoy_ret).normalize(axis='ts', window_type='expanding').dropna()
 
     return asset_class_yoy_ret_z
 
@@ -128,8 +128,8 @@ class TestLinearModel:
         # index
         assert all(self.default_lm_instance.yhat.index == self.default_lm_instance.features_window.index)
         # cols
-        assert self.default_lm_instance.yhat.columns[0] == self.default_lm_instance.target.name + '_fcst_t+' + \
-               str(self.default_lm_instance.h_lookahead)
+        assert self.default_lm_instance.yhat.columns[0] == f"{self.default_lm_instance.target.name}_fcst_t+" \
+                                                           f"{str(self.default_lm_instance.h_lookahead)}"
 
     @pytest.mark.parametrize("metric", ['mse', 'rmse', 'r2', 'adj_r2', 'chg_accuracy'])
     def test_compute_score(self, metric) -> None:
@@ -208,8 +208,8 @@ class TestLinearModel:
         # index
         assert all(self.default_lm_instance.yhat.index == self.default_lm_instance.features_window.index[-n_yhat:])
         # cols
-        assert self.default_lm_instance.yhat.columns[0] == self.default_lm_instance.target.name + '_fcst_t+' + \
-               str(self.default_lm_instance.h_lookahead)
+        assert self.default_lm_instance.yhat.columns[0] == f"{self.default_lm_instance.target.name}_fcst_t+" \
+                                                           f"{str(self.default_lm_instance.h_lookahead)}"
 
     def test_rolling_predict(self, window_size=120):
         """
@@ -227,8 +227,8 @@ class TestLinearModel:
         # index
         assert all(self.default_lm_instance.yhat.index == self.default_lm_instance.features.index[-n_yhat:])
         # cols
-        assert self.default_lm_instance.yhat.columns[0] == self.default_lm_instance.target.name + '_fcst_t+' + \
-               str(self.default_lm_instance.h_lookahead)
+        assert self.default_lm_instance.yhat.columns[0] == f"{self.default_lm_instance.target.name}_fcst_t+" \
+                                                           f"{str(self.default_lm_instance.h_lookahead)}"
 
 
 class TestSPCA:
@@ -318,8 +318,8 @@ class TestSPCA:
         assert all(self.default_spca_instance.yhat.index ==
                    self.default_spca_instance.pcs.index[self.default_spca_instance.t_lags:])
         # cols
-        assert self.default_spca_instance.yhat.columns[0] == self.default_spca_instance.target.name + '_fcst_t+' + \
-               str(self.default_spca_instance.h_lookahead)
+        assert self.default_spca_instance.yhat.columns[0] == f"{self.default_spca_instance.target.name}_fcst_t+" \
+                                                             f"{str(self.default_spca_instance.h_lookahead)}"
 
     @pytest.mark.parametrize("metric", ['mse', 'rmse', 'r2', 'adj_r2', 'chg_accuracy'])
     def test_compute_score(self, metric) -> None:
@@ -367,8 +367,8 @@ class TestSPCA:
         # index
         assert all(self.default_spca_instance.yhat.index == self.default_spca_instance.features.index[-n_yhat:])
         # cols
-        assert self.default_spca_instance.yhat.columns[0] == self.default_spca_instance.target.name + '_fcst_t+' + \
-               str(self.default_spca_instance.h_lookahead)
+        assert self.default_spca_instance.yhat.columns[0] == f"{self.default_spca_instance.target.name}_fcst_t+" \
+                                                             f"{str(self.default_spca_instance.h_lookahead)}"
 
     def test_rolling_predict(self, window_size=120):
         """
@@ -386,5 +386,5 @@ class TestSPCA:
         # index
         assert all(self.default_spca_instance.yhat.index == self.default_spca_instance.features.index[-n_yhat:])
         # cols
-        assert self.default_spca_instance.yhat.columns[0] == self.default_spca_instance.target.name + '_fcst_t+' + \
-               str(self.default_spca_instance.h_lookahead)
+        assert self.default_spca_instance.yhat.columns[0] == f"{self.default_spca_instance.target.name}_fcst_t+" \
+                                                             f"{str(self.default_spca_instance.h_lookahead)}"
