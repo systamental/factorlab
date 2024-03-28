@@ -9,20 +9,20 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.9"
 numpy = ">=1.23.3"
-pandas = ">=1.5.0"
+pandas = ">=2.2.1"
 matplotlib = ">=3.6.0"
-scipy = {version = "^1.9.1", python = ">=3.9, <3.12"}
-sklearn = "^0.0"
-statsmodels = "^0.13.2"
-seaborn = "^0.12.1"
-plotly = "^5.11.0"
-openpyxl = "^3.0.10"
-xgboost = "^2.0.3"
+scipy = {version = ">=1.9.1", python = ">=3.9, <3.12"}
+statsmodels = ">=0.13.2"
+seaborn = ">=0.12.1"
+plotly = ">=5.11.0"
+openpyxl = ">=3.0.10"
+xgboost = ">=2.0.3"
+scikit-learn = "^1.4.1"
 
 [tool.poetry.dev-dependencies]
-pytest = "^7.2.0"
-jupyter = "^1.0.0"
-google-generativeai = "^0.2.2"
+pytest = ">=7.2.0"
+jupyter = ">=1.0.0"
+google-generativeai = ">=0.2.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
