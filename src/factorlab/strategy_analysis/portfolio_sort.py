@@ -296,77 +296,6 @@ class PortfolioSort:
 
         return self.quantile_rets
 
-    # def double_sort(self) -> pd.DataFrame:
-    #     """
-    #     Double sorts factors into quantiles.
-    #
-    #     Returns
-    #     -------
-    #     quantile_rets: pd.DataFrame
-    #         Dataframe with double sorted factor quantiles.
-    #     """
-    #     if self.factors.shape[1] != 2:
-    #         raise ValueError("Only double sorts are supported.")
-    #
-    #     # quantile and returns
-    #     quant_df = self.join_quantile_rets()
-    #
-    #     # loop through quantiles
-    #     for quant1 in range(1, self.factor_bins[self.factor_names[0]][1] + 1):
-    #         for quant2 in range(1, self.factor_bins[self.factor_names[1]][1] + 1):
-    #             rets = quant_df[(quant_df[self.factor_names[0]] == quant1) &
-    #                             (quant_df[self.factor_names[1]] == quant2)].iloc[:, -1]
-    #             self.quantile_rets = pd.concat([self.quantile_rets, rets.to_frame(f"{quant1}{quant2}")], axis=1)
-    #
-    #     return self.quantile_rets
-    #
-    # def tripple_sort(self) -> pd.DataFrame:
-    #     """
-    #     Tripple sorts factors into quantiles.
-    #
-    #     Returns
-    #     -------
-    #     quantile_rets: pd.DataFrame
-    #         Dataframe with tripple sorted factor quantiles.
-    #     """
-    #     if self.factors.shape[1] != 3:
-    #         raise ValueError("Only tripple sorts are supported.")
-    #
-    #     # quantile and returns
-    #     quant_df = self.join_quantile_rets()
-    #
-    #     # loop through quantiles
-    #     for quant1 in range(1, self.factor_bins[self.factor_names[0]][1] + 1):
-    #         for quant2 in range(1, self.factor_bins[self.factor_names[1]][1] + 1):
-    #             for quant3 in range(1, self.factor_bins[self.factor_names[2]][1] + 1):
-    #                 rets = quant_df[(quant_df[self.factor_names[0]] == quant1) &
-    #                                 (quant_df[self.factor_names[1]] == quant2) &
-    #                                 (quant_df[self.factor_names[2]] == quant3)].iloc[:, -1]
-    #                 self.quantile_rets = pd.concat([self.quantile_rets, rets.to_frame(f"{quant1}{quant2}{quant3}")],
-    #                                                axis=1)
-    #
-    #     return self.quantile_rets
-    #
-    # def sort(self, conditional: bool = False) -> pd.DataFrame:
-    #     """
-    #     Sorts factors into quantiles.
-    #
-    #     Returns
-    #     -------
-    #     quantile_rets: pd.DataFrame
-    #         Dataframe with sorted factor quantiles.
-    #     """
-    #     if self.factors.shape[1] == 1:
-    #         self.single_sort()
-    #     elif self.factors.shape[1] == 2:
-    #         self.double_sort()
-    #     elif self.factors.shape[1] == 3:
-    #         self.tripple_sort()
-    #     else:
-    #         raise ValueError("Only single, double and tripple sorts are supported.")
-    #
-    #     return self.quantile_rets
-
     def compute_quantile_portfolios(self) -> pd.DataFrame:
         """
         Computes portfolio returns for each factor quantile.
@@ -410,9 +339,6 @@ class PortfolioSort:
         # unstack portfolio returns
         df = self.portfolio_rets.unstack()
 
-        # performance metric
-        metric_df = None
-
         # single sort
         if self.factors.shape[1] == 1:
             # store perf metric in df
@@ -423,7 +349,7 @@ class PortfolioSort:
                     quant_df = df[(factor, quantile)]
                     if self.fill_na:
                         quant_df.fillna(0, inplace=True)
-
+                    # compute performance metric
                     metric_df.loc[quantile, factor] = getattr(Performance(quant_df, ret_type='log', ann_factor=365),
                                                              metric)().values.round(decimals=4)
 
@@ -443,14 +369,35 @@ class PortfolioSort:
                     quant_df = pd.concat([df[(factor_1, quantile_1)], df[(factor_2, quantile_2)]], axis=1).mean(axis=1)
                     if self.fill_na:
                         quant_df.fillna(0, inplace=True)
-
+                    # compute performance metric
                     metric_df.loc[(factor_1, quantile_1), (factor_2, quantile_2)] = \
                         getattr(Performance(quant_df, ret_type='log', ann_factor=365), 'sharpe_ratio')().values.round(
                             decimals=4)
 
         # tripple sort
+        elif self.factors.shape[1] == 3:
+
+            # store perf metric in df
+            idx_list = []
+            for name in self.factor_names:
+                idx_list.append([f"{name}_{quant}" for quant in range(1, self.factor_bins[name][1] + 1)])
+            idx = pd.MultiIndex.from_product(idx_list)
+            metric_df = pd.DataFrame(index=idx, columns=['sharpe_ratio'])
+
+            # loop through factors
+            for row in metric_df.index:
+                factor_1 = ('_'.join(row[0].split('_')[:-1]), row[0].split('_')[-1])
+                factor_2 = ('_'.join(row[1].split('_')[:-1]), row[1].split('_')[-1])
+                factor_3 = ('_'.join(row[2].split('_')[:-1]), row[2].split('_')[-1])
+                quant_df = pd.concat([df[factor_1], df[factor_2], df[factor_3]], axis=1).mean(axis=1)
+                if self.fill_na:
+                    quant_df.fillna(0, inplace=True)
+                # compute performance metric
+                metric_df.loc['_'.join(factor_1), '_'.join(factor_2), '_'.join(factor_3)] = \
+                    getattr(Performance(quant_df, ret_type='log', ann_factor=365), 'sharpe_ratio')().values.round(
+                        decimals=4)
+
         else:
-            # TODO: implement tripple sort
-            pass
+            raise ValueError("Only single, double and tripple sorts are supported.")
 
         return metric_df.astype(float)
