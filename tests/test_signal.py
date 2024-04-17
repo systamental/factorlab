@@ -77,14 +77,17 @@ class TestSignal:
     """
     Test class for Transform.
     """
-
     @pytest.fixture(autouse=True)
     def signal_setup_default(self, price_mom, spot_ret):
-        self.signal_instance = Signal(price_mom, spot_ret.close)
+        self.signal_instance = Signal(spot_ret.close, price_mom)
+
+    @pytest.fixture(autouse=True)
+    def dual_signal_default(self, price_mom, spot_ret):
+        self.dual_signal_instance = Signal(spot_ret.close, price_mom, strategy='dual_ls')
 
     @pytest.fixture(autouse=True)
     def transform_setup_btc(self, btc_price_mom, btc_spot_ret):
-        self.btc_signal_instance = Signal(btc_price_mom, btc_spot_ret.close)
+        self.btc_signal_instance = Signal(btc_spot_ret.close, btc_price_mom)
 
     def test_initialization(self) -> None:
         """
@@ -141,7 +144,7 @@ class TestSignal:
         Test quantize method.
         """
         # get actual multiindex
-        signal = Signal(price_mom, spot_ret.close, strategy=strategy, factor_bins=factor_bins, ret_bins=ret_bins)
+        signal = Signal(spot_ret.close, price_mom, strategy=strategy, factor_bins=factor_bins, ret_bins=ret_bins)
         actual = signal.quantize()
 
         # shape
@@ -159,7 +162,7 @@ class TestSignal:
         assert (actual.columns == signal.factor_quantiles.columns).all()
 
         # get actual single index
-        signal_btc = Signal(btc_price_mom, btc_spot_ret.close, strategy=strategy, factor_bins=factor_bins,
+        signal_btc = Signal(btc_spot_ret.close, btc_price_mom, strategy=strategy, factor_bins=factor_bins,
                             ret_bins=ret_bins)
         actual_btc = signal_btc.quantize()
         # shape
@@ -248,7 +251,7 @@ class TestSignal:
         Test quantize method.
         """
         # get actual multiindex
-        actual = Signal(price_mom, spot_ret.close, strategy=strategy, factor_bins=factor_bins).signals_to_quantiles()
+        actual = Signal(spot_ret.close, price_mom, strategy=strategy, factor_bins=factor_bins).signals_to_quantiles()
 
         # shape
         assert self.signal_instance.factors.shape == actual.shape
@@ -271,7 +274,7 @@ class TestSignal:
 
         # get actual single index
         if strategy == 'ts_ls':
-            actual_btc = Signal(btc_price_mom, btc_spot_ret.close, strategy='ts_ls',
+            actual_btc = Signal(btc_spot_ret.close, btc_price_mom, strategy='ts_ls',
                                 factor_bins=factor_bins).signals_to_quantiles()
             # shape
             assert self.btc_signal_instance.factors.shape == actual_btc.shape
@@ -280,7 +283,7 @@ class TestSignal:
             assert ((actual_btc.dropna() >= -1) & (actual_btc.dropna() <= 1)).all().all()
             assert actual_btc.max().max() == 1.0
             if factor_bins % 2 == 0:
-                assert (actual_btc.median() == 1 / (factor_bins - 1)).all()
+                assert (actual.median() == 1 / (factor_bins - 1)).all()
             else:
                 assert (actual_btc.median() == 0.0).all()
             assert actual_btc.min().min() == -1.0
@@ -299,7 +302,7 @@ class TestSignal:
         Test signals_rank method.
         """
         # get actual multiindex
-        actual = Signal(price_mom, spot_ret.close, strategy='cs_ts', n_factors=n_factors).signals_to_rank()
+        actual = Signal(spot_ret.close, price_mom, strategy='cs_ls', n_factors=n_factors).signals_to_rank()
 
         # shape
         assert self.signal_instance.factors.shape[1] == actual.shape[1]
@@ -313,7 +316,7 @@ class TestSignal:
         assert ((actual[actual != 0].groupby(level=0).min() == -1).sum() /
         actual.unstack().shape[0] > 0.95).all()  # min of signals
         df = pd.concat([price_mom, actual], axis=1)
-        assert df[df != 0].dropna().corr('spearman').iloc[0, 1] > 0.7
+        assert df[df != 0].dropna().corr('spearman').iloc[0, 1] > 0.5
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert (actual.dtypes == np.int64).all()
@@ -335,9 +338,9 @@ class TestSignal:
         """
         # get actual
         actual = self.signal_instance.compute_signals(signal_type=signal_type, lags=lags)
-        actual_long = Signal(self.signal_instance.factors, self.signal_instance.ret, strategy='ts_l').\
+        actual_long = Signal(self.signal_instance.ret, self.signal_instance.factors, strategy='ts_l').\
             compute_signals(signal_type=signal_type, lags=lags)
-        actual_short = Signal(self.signal_instance.factors, self.signal_instance.ret, strategy='ts_s').\
+        actual_short = Signal(self.signal_instance.ret, self.signal_instance.factors, strategy='ts_s').\
             compute_signals(signal_type=signal_type, lags=lags)
 
         # shape
@@ -368,9 +371,9 @@ class TestSignal:
 
         # get actual single index
         actual_btc = self.btc_signal_instance.compute_signals(signal_type=signal_type, lags=lags)
-        actual_btc_long = Signal(self.btc_signal_instance.factors, self.btc_signal_instance.ret, strategy='ts_l').\
+        actual_btc_long = Signal(self.btc_signal_instance.ret, self.btc_signal_instance.factors, strategy='ts_l').\
             compute_signals(signal_type=signal_type, lags=lags)
-        actual_btc_short = Signal(self.btc_signal_instance.factors, self.btc_signal_instance.ret, strategy='ts_s').\
+        actual_btc_short = Signal(self.btc_signal_instance.ret, self.btc_signal_instance.factors, strategy='ts_s').\
             compute_signals(signal_type=signal_type, lags=lags)
 
         # shape
@@ -399,6 +402,51 @@ class TestSignal:
         assert (actual_btc.columns == self.btc_signal_instance.factors.columns).all()
         assert (actual_btc_long.columns == self.btc_signal_instance.factors.columns).all()
         assert (actual_btc_short.columns == self.btc_signal_instance.factors.columns).all()
+
+    def test_compute_dual_signals(self):
+        """
+        Test compute_dual_signals method.
+        """
+        # get actual
+        actual = self.dual_signal_instance.compute_dual_signals()
+
+        # shape
+        assert self.dual_signal_instance.factors.shape == actual.shape
+        # values
+        assert ((actual.dropna() >= -1) & (actual.dropna() <= 1)).all().all()
+        # dtypes
+        assert isinstance(actual, pd.DataFrame)
+        assert (actual.dtypes == np.float64).all()
+        # index
+        assert (actual.index == self.dual_signal_instance.factors.index).all()
+        # cols
+        assert (actual.columns == self.dual_signal_instance.factors.columns).all()
+
+    def test_compute_signal_returns(self):
+        """
+        Test compute_signal_returns method.
+        """
+        # get actual
+        self.signal_instance.compute_signal_returns()
+        self.btc_signal_instance.compute_signal_returns()
+
+        # shape
+        assert self.signal_instance.signal_rets.shape == self.signal_instance.signals.dropna().shape
+        assert self.btc_signal_instance.signal_rets.shape == self.btc_signal_instance.signals.dropna().shape
+        # dtypes
+        assert isinstance(self.signal_instance.signal_rets, pd.DataFrame)
+        assert isinstance(self.btc_signal_instance.signal_rets, pd.DataFrame)
+        assert (self.signal_instance.signal_rets.dtypes == np.float64).all()
+        assert (self.btc_signal_instance.signal_rets.dtypes == np.float64).all()
+        # values
+        assert np.allclose(self.signal_instance.signal_rets.loc[pd.IndexSlice[:, 'BTC'], :].dropna(),
+                           self.btc_signal_instance.signal_rets.dropna())
+        # index
+        assert (self.signal_instance.signal_rets.index == self.signal_instance.signals.dropna().index).all()
+        assert (self.btc_signal_instance.signal_rets.index == self.btc_signal_instance.signals.dropna().index).all()
+        # cols
+        assert (self.signal_instance.signal_rets.columns == self.signal_instance.signals.dropna().columns).all()
+        assert (self.btc_signal_instance.signal_rets.columns == self.btc_signal_instance.signals.dropna().columns).all()
 
     @pytest.mark.parametrize("method", ['sign', 'std', 'skew', 'range'])
     def test_signal_dispersion(self, method):

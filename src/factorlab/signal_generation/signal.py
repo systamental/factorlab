@@ -11,11 +11,11 @@ class Signal:
     Signal construction class.
     """
     def __init__(self,
-                 factors: pd.DataFrame,
                  ret: pd.Series,
+                 factors: pd.DataFrame,
                  strategy: str = 'ts_ls',
-                 factor_bins: int = 5,
                  ret_bins: int = 3,
+                 factor_bins: int = 5,
                  n_factors: int = 10,
                  disc_thresh: float = 0,
                  window_type: str = 'expanding',
@@ -26,10 +26,10 @@ class Signal:
 
         Parameters
         ----------
-        factors: pd.Series or pd.DataFrame - Single or MultiIndex
-            Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
         ret: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
+        factors: pd.Series or pd.DataFrame - Single or MultiIndex
+            Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
         strategy: str, {'ts_ls' 'ts_l', 'cs_ls', 'cs_l', 'dual_ls', 'dual_l', default 'ts_ls'
             Time series, cross-sectional or dual strategy, long/short, long-only or short-only.
         factor_bins: int, default 5
@@ -45,8 +45,8 @@ class Signal:
         window_size: int, default 90
             Minimal number of observations to include in moving window (rolling or expanding).
         """
-        self.factors = factors.to_frame() if isinstance(factors, pd.Series) else factors
         self.ret = ret.astype(float).to_frame() if isinstance(ret, pd.Series) else ret
+        self.factors = factors.to_frame() if isinstance(factors, pd.Series) else factors
         self.strategy = strategy
         self.factor_bins = factor_bins if factor_bins > 1 else self._raise_value_error()
         self.ret_bins = ret_bins if ret_bins > 1 else self._raise_value_error()
@@ -59,8 +59,8 @@ class Signal:
         self.factor_quantiles = None
         self.ret_quantiles = None
         self.signals = None
+        self.signal_rets = None
         self.signal_disp = None
-        self.signal_corr = None
 
     def _raise_value_error(self):
         raise ValueError(f"Number of bins must be larger than 1.")
@@ -124,25 +124,6 @@ class Signal:
                 self.norm_ret = Transform(self.ret).normalize(method=method, axis='cs', centering=centering,
                                                               winsorize=winsorize)
 
-        # dual strategy
-        else:
-            norm_ts = Transform(self.factors).normalize(method=method, axis='ts', centering=centering,
-                                                        window_type=self.window_type, window_size=self.window_size,
-                                                        winsorize=winsorize)
-            norm_cs = Transform(self.factors).normalize(method=method, axis='cs', centering=centering,
-                                                        winsorize=winsorize)
-
-            self.norm_ret = Transform(self.ret).normalize(method=method, axis='ts', centering=centering,
-                                                          window_type=self.window_type,
-                                                          window_size=self.window_size, winsorize=winsorize)
-            # empty df
-            self.norm_factors = pd.DataFrame()
-            # loop over columns
-            for factor in self.factors.columns:
-                factor_df = pd.concat([norm_ts[factor], norm_cs[factor]], axis=1, join='inner')
-                factor_df = factor_df.mean(axis=1).to_frame(factor)
-                self.norm_factors = pd.concat([self.norm_factors, factor_df], axis=1)
-
         return self.norm_factors
 
     def quantize(self, ts_norm: bool = False) -> pd.DataFrame:
@@ -180,23 +161,6 @@ class Signal:
             else:
                 self.factor_quantiles = Transform(self.factors).quantize(bins=self.factor_bins, axis='cs')
                 self.ret_quantiles = Transform(self.ret).quantize(bins=self.ret_bins, axis='cs')
-
-        # dual strategy
-        else:
-            quantiles_ts = Transform(self.factors).quantize(bins=self.factor_bins, axis='ts',
-                                                            window_type=self.window_type,
-                                                            window_size=self.window_size)
-            quantiles_cs = Transform(self.factors).quantize(bins=self.factor_bins, axis='cs')
-            self.ret_quantiles = Transform(self.ret).quantize(bins=self.ret_bins, axis='ts',
-                                                              window_type=self.window_type,
-                                                              window_size=self.window_size)
-            # empty df
-            self.factor_quantiles = pd.DataFrame()
-            # loop over columns
-            for factor in self.factors.columns:
-                factor_df = pd.concat([quantiles_ts[factor], quantiles_cs[factor]], axis=1, join='inner')
-                factor_df = factor_df.mean(axis=1).to_frame(factor).dropna().astype(int)
-                self.factor_quantiles = pd.concat([self.factor_quantiles, factor_df], axis=1)
 
         return self.factor_quantiles
 
@@ -446,6 +410,133 @@ class Signal:
 
         return self.signals
 
+    def compute_dual_signals(self,
+                             summary_stat: str = 'mean',
+                             signal_type: str = 'signal',
+                             pdf: str = 'norm',
+                             ts_norm: bool = False,
+                             winsorize: int = 3,
+                             leverage: Optional[int] = None,
+                             lags: Optional[int] = None
+                             ):
+        """
+        Computes dual signals by converting raw data to normalized signals (alpha factors).
+
+        Parameters
+        ----------
+        summary_stat: str, {'mean', 'median', 'min', 'max', 'sum', 'prod'}
+            Summary statistic to compute dual signals.
+        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'signal_rank'}, optional, default 'signal'
+            signal: factor inputs are converted to signals between -1 and 1 for l/s strategies, between 0 and 1 for long
+            only strategies, and between -1 and 0 for short only strategies.
+            disc_signal: factor inputs are converted to discrete signals -1, 0 and 1 for l/s strategies,
+            0 or 1 for long only strategies, and -1 or 0 for short only strategies.
+            signal_quantiles: factor inputs are converted to quantized signals between -1 and 1 for l/s strategies,
+            between 0 and 1 for long-only strategies, and between -1 and 0 for short only strategies, with n bins.
+            signal_rank: factor inputs are converted to signal ranks between -1 and 1, 0 or 1 for long only
+            strategies, and -1 or 0 for short only strategies, with n factors.
+        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
+            Probability density function to convert raw factor values to signals between 1 and -1.
+        ts_norm: bool, default False
+            Normalizes factors over the time series before quantization over the cross-section.
+        winsorize: int, default 3
+            Max/min value to use for winsorization/clipping for signals when method is z-score, iqr or mod z.
+        leverage: int, default None
+            Multiplies factors by integer to increase leverage.
+        lags: int, optional, default None
+            Number of periods to lag signals/forward returns.
+
+        Returns
+        -------
+        dual_signals: pd.DataFrame
+            Dataframe with DatetimeIndex (level 0), tickers (level 1) and computed dual signals (cols).
+        """
+        # check strategy
+        if self.strategy.split('_')[0] != 'dual':
+            raise ValueError("Dual strategy must be selected to compute dual signals.")
+
+        # strategy placeholder
+        strat = self.strategy
+
+        # compute signals
+        # ts
+        self.strategy = 'ts_ls'
+        signals_ts = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+                                leverage=leverage, lags=lags)
+        # cs
+        self.strategy = 'cs_ls'
+        signals_cs = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+                                leverage=leverage, lags=lags)
+
+        # dual
+        self.strategy = strat
+        self.signals = None
+        signals = pd.concat([signals_ts, signals_cs], axis=1, join='inner')
+        for factor in signals_ts.columns:
+            self.signals = pd.concat([self.signals, getattr(signals[factor], summary_stat)(axis=1).to_frame(factor)],
+                                     axis=1)
+
+        # long or short only
+        if self.strategy.split('_')[1] == 'l':
+            self.signals = self.signals.clip(lower=0)
+        elif self.strategy.split('_')[1] == 's':
+            self.signals = self.signals.clip(upper=0)
+
+        return self.signals
+
+    def compute_signal_returns(self,
+                               signal_type: str = 'signal',
+                               pdf: str = 'norm',
+                               ts_norm: bool = False,
+                               winsorize: int = 3,
+                               leverage: Optional[int] = None,
+                               lags: int = 1
+                               ):
+        """
+        Compute the signal returns.
+
+        Parameters
+        ----------
+        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'signal_rank'}, optional, default 'signal'
+            signal: factor inputs are converted to signals between -1 and 1 for l/s strategies, between 0 and 1 for long
+            only strategies, and between -1 and 0 for short only strategies.
+            disc_signal: factor inputs are converted to discrete signals -1, 0 and 1 for l/s strategies,
+            0 or 1 for long only strategies, and -1 or 0 for short only strategies.
+            signal_quantiles: factor inputs are converted to quantized signals between -1 and 1 for l/s strategies,
+             between 0 and 1 for long-only strategies, and between -1 and 0 for short only strategies, with n bins.
+            signal_rank: factor inputs are converted to signal ranks between -1 and 1, 0 or 1 for long only
+            strategies, and -1 or 0 for short only strategies, with n factors.
+        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
+            Probability density function to convert raw factor values to signals between 1 and -1.
+        ts_norm: bool, default False
+            Normalizes factors over the time series before quantization over the cross-section.
+        winsorize: int, default 3
+            Max/min value to use for winsorization/clipping for signals when method is z-score, iqr or mod z.
+        leverage: int, default None
+            Multiplies factors by integer to increase leverage.
+        lags: int, default 1
+            Number of periods to lag signals/forward returns.
+
+        Returns
+        -------
+        signal_rets: pd.DataFrame
+            Dataframe with DatetimeIndex (level 0), tickers (level 1) and computed signal returns (cols).
+        """
+        # compute signals
+        if self.strategy.split('_')[0] == 'dual':
+            self.compute_dual_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+                                      leverage=leverage, lags=lags)
+        else:
+            self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+                             leverage=leverage, lags=lags)
+
+        # concat signals and returns
+        df = pd.concat([self.signals, self.ret], axis=1, join='inner')
+        # multiply signals by returns
+        self.signal_rets = df.iloc[:, :-1].mul(df.iloc[:, -1].values, axis=0).dropna(how='all')
+
+        return self.signal_rets
+
     def signal_dispersion(self, method: str = 'sign'):
         """
         Computes dispersion in the signal cross-section.
@@ -487,5 +578,26 @@ class Signal:
                 self.signal_disp = self.signals.groupby(level=0).max() - self.signals.groupby(level=0).min()
             else:
                 self.signal_disp = self.signals.max(axis=1) - self.signals.min(axis=1)
+
+        return self.signal_disp
+
+    def signal_autocorrelation(self, lags: int = 1):
+        """
+        Computes the autocorrelation of the signal cross-section.
+
+        Parameters
+        ----------
+        lags: int, default 1
+            Number of periods to lag signals/forward returns.
+
+        Returns
+        -------
+        autocorr: Series
+            Series with DatetimeIndex and autocorrelation measure.
+        """
+        if isinstance(self.signals.index, pd.MultiIndex):
+            self.signal_disp = self.signals.groupby(level=0).apply(lambda x: x.corrwith(x.shift(lags)))
+        else:
+            self.signal_disp = self.signals.apply(lambda x: x.corrwith(x.shift(lags)))
 
         return self.signal_disp
