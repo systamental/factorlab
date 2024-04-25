@@ -6,8 +6,8 @@ from sklearn.linear_model import LinearRegression, Lasso, LassoCV, LassoLars, La
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
-from factorlab.signal_generation.time_series_analysis import add_lags
 from factorlab.signal_generation.unsupervised_learning import PCAWrapper
+from factorlab.signal_generation.time_series_analysis import add_lags
 
 
 class LinearModel:
@@ -50,9 +50,9 @@ class LinearModel:
 
         Parameters
         ----------
-        target: pd.Series, pd.DataFrame or np.array
+        target: pd.Series, pd.DataFrame or np.ndarray
             Factor to select features for.
-        features: pd.DataFrame or np.array
+        features: pd.DataFrame or np.ndarray
             Features to select from. If None, target is used as the only feature.
         method: str, {'ols', 'lasso', 'lasso_cv', 'lasso_lars', 'lasso_lars_cv', 'lasso_lars_ic', 'lars', 'lars_cv',
                         'ridge', 'ridge_cv', 'elastic_net', 'elastic_net_cv', 'random_forest', 'xgboost'}
@@ -93,7 +93,7 @@ class LinearModel:
 
         Returns
         -------
-        data: pd.DataFrame or np.array
+        data: pd.DataFrame or np.ndarray
             Data matrix.
         """
         if not isinstance(self.target, (pd.Series,  np.ndarray)):
@@ -102,8 +102,10 @@ class LinearModel:
             if self.features is None:
                 self.feature_lags = None
             else:
-                self.feature_lags = add_lags(self.features, self.t_lags).copy()  # features + L lags
-            self.target_lags = add_lags(self.target, self.t_lags).copy()  # target + L lags
+                # self.feature_lags = self.add_lags(self.features).copy()  # features + L lags
+                self.feature_lags = add_lags(self.features, n_lags=self.t_lags).copy()  # features + L lags
+            # self.target_lags = self.add_lags(self.target).copy()  # target + L lags
+            self.target_lags = add_lags(self.target, n_lags=self.t_lags).copy()  # target + L lags
             self.features = pd.concat([self.target_lags, self.feature_lags], axis=1).dropna().copy()  # features
             self.target_fcst = self.target.shift(-self.h_lookahead).\
                 rename(f"{self.target.name}_F{self.h_lookahead}").copy()  # target forecast
@@ -145,7 +147,7 @@ class LinearModel:
         elif self.method == 'lasso_lars_ic':
             self.model = LassoLarsIC(**self.kwargs).fit(self.predictors, self.target_fcst)
         elif self.method == 'lars':
-            self.model = Lars(**self.kwargs, normalize=False).fit(self.predictors, self.target_fcst)
+            self.model = Lars(**self.kwargs).fit(self.predictors, self.target_fcst)
         elif self.method == 'lars_cv':
             self.model = LarsCV(**self.kwargs).fit(self.predictors, self.target_fcst)
         elif self.method == 'ridge':
