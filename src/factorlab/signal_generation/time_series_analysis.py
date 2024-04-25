@@ -107,7 +107,7 @@ def expanding_window(callable_obj: Callable, data: Union[pd.DataFrame, np.ndarra
     ----------
     callable_obj: Callable
         Function or class to be implemented as rolling window.
-    data: DataFrame or np.array
+    data: DataFrame or np.ndarray
         DataFrame or array with data.
     min_obs: int
         Minimum number of observations in the expanding window.
@@ -182,6 +182,49 @@ def expanding_window(callable_obj: Callable, data: Union[pd.DataFrame, np.ndarra
     return out
 
 
+def add_lags(data: Union[pd.DataFrame, pd.Series], n_lags: int) -> pd.DataFrame:
+    """
+    Adds lags to time series data.
+
+    Parameters
+    ----------
+    data: DataFrame or Series
+        DataFrame or Series with time series data.
+    n_lags: int
+        Number of lags to include in the model.
+
+    Returns
+    -------
+    new_df: pd.DataFrame
+        DataFrame with the time series data and lags of those data added.
+    """
+    # check n lags
+    if n_lags < 1:
+        raise ValueError(f"Number of lags {n_lags} must be greater than 0.")
+
+    # convert series to dataframe
+    if isinstance(data, pd.Series):
+        data = data.to_frame()
+
+    # create emtpy list for lagged columns
+    lagged_cols_list = []
+
+    # loop through each column
+    for col in data.columns:
+        if isinstance(data.index, pd.MultiIndex):
+            lagged_cols = [data.groupby(level=1)[col].shift(lag).rename(f"{str(col)}_L{str(lag)}")
+                           for lag in range(1, n_lags + 1)]
+        else:
+            lagged_cols = [data[col].shift(lag).rename(f"{str(col)}_L{str(lag)}")
+                           for lag in range(1, n_lags + 1)]
+        lagged_cols_list.extend(lagged_cols)
+
+    # concat data and lagged values
+    new_df = pd.concat([data] + lagged_cols_list, axis=1)
+
+    return new_df
+
+
 class TimeSeriesAnalysis:
     """
     Class for time series analysis.
@@ -237,7 +280,7 @@ class TimeSeriesAnalysis:
         self.model = {}
         self.results = None
         self.preprocess_data()
-        self.add_lags()
+        self.create_lags()
         self.add_trend()
 
     def preprocess_data(self) -> pd.DataFrame:
@@ -292,9 +335,9 @@ class TimeSeriesAnalysis:
 
         return self.data
 
-    def add_lags(self) -> pd.DataFrame:
+    def create_lags(self) -> pd.DataFrame:
         """
-        Add lags to time series data.
+        Create lags for features and target.
 
         Returns
         -------
@@ -302,37 +345,9 @@ class TimeSeriesAnalysis:
             DataFrame with the time series data and lags of those data added.
         """
         if self.n_lags is not None:
-            if self.n_lags < 1:
-                raise ValueError(f"Number of lags {self.n_lags} must be greater than 0.")
-
-            # create emtpy list for lagged columns
-            lagged_feat_list = []
-
-            # create lagged target
-            if isinstance(self.target.index, pd.MultiIndex):
-                lagged_target_list = [self.target.groupby(level=1).shift(lag).
-                                      rename(f"{str(self.target.name)}_L{str(lag)}")
-                                      for lag in range(1, self.n_lags + 1)]
-            else:
-                lagged_target_list = [self.target.shift(lag).rename(f"{str(self.target.name)}_L{str(lag)}")
-                               for lag in range(1, self.n_lags + 1)]
-
-            # loop through each feature
-            if self.features is not None:
-                for feat in self.features.columns:
-                    # create lagged columns
-                    if isinstance(self.features.index, pd.MultiIndex):
-                        lagged_cols = [self.features.groupby(level=1)[feat].shift(lag).
-                                       rename(f"{str(feat)}_L{str(lag)}")
-                                       for lag in range(1, self.n_lags + 1)]
-                    else:
-                        lagged_cols = [self.features[feat].shift(lag).rename(f"{str(feat)}_L{str(lag)}")
-                                       for lag in range(1, self.n_lags + 1)]
-                    lagged_feat_list.extend(lagged_cols)
-
-            # concat data and lagged values
-            self.features = pd.concat(lagged_target_list + [self.features] + lagged_feat_list, axis=1)
-            self.data = pd.concat([self.target, self.features], axis=1).dropna()
+            self.features = add_lags(self.features, self.n_lags)
+            target = add_lags(self.target, self.n_lags)
+            self.data = pd.concat([target, self.features], axis=1).dropna()
             self.target = self.data.iloc[:, 0]
             self.features = self.data.iloc[:, 1:]
 
