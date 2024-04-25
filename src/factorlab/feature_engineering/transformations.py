@@ -85,6 +85,27 @@ class Transform:
 
         return self.trans_df
 
+    def diff(self, lags: int = 1) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes difference.
+
+        Parameters
+        ----------
+        lags: int, default 1
+            Number of periods to lag the difference.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with difference.
+        """
+        if isinstance(self.index, pd.MultiIndex):
+            self.trans_df = self.df.groupby(level=1).diff(lags)
+        else:
+            self.trans_df = self.df.diff(lags)
+
+        return self.trans_df.sort_index()
+
     def returns(self,
                 lags: int = 1,
                 forward: bool = False,
@@ -120,9 +141,9 @@ class Transform:
         # simple returns
         if method == 'simple':
             if isinstance(self.index, pd.MultiIndex):
-                self.trans_df = self.df.groupby(level=1).pct_change(lags)
+                self.trans_df = self.df.groupby(level=1).pct_change(lags, fill_method=None)
             else:
-                self.trans_df = self.df.pct_change(lags)
+                self.trans_df = self.df.pct_change(lags, fill_method=None)
 
         # log returns
         else:
@@ -416,6 +437,10 @@ class Transform:
             else:
                 self.trans_df = self.df.std(axis=1)
 
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
+
         return self.trans_df
 
     def compute_quantile(self,
@@ -480,6 +505,10 @@ class Transform:
                 self.trans_df = self.df.groupby(level=0).quantile(q)
             else:
                 self.trans_df = self.df.quantile(q, axis=1)
+
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
 
         return self.trans_df
 
@@ -548,6 +577,10 @@ class Transform:
                 self.trans_df = self.df.groupby(level=0).quantile(0.75) - self.df.groupby(level=0).quantile(0.25)
             else:
                 self.trans_df = self.df.quantile(0.75, axis=1) - self.df.quantile(0.25, axis=1)
+
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
 
         return self.trans_df
 
@@ -619,6 +652,10 @@ class Transform:
             else:
                 self.trans_df = (self.df - self.df.median(axis=1)).abs().median(axis=1)
 
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
+
         return self.trans_df
 
     def compute_range(self,
@@ -685,6 +722,10 @@ class Transform:
             else:
                 self.trans_df = self.df.max(axis=1) - self.df.min(axis=1)
 
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
+
         return self.trans_df
 
     def compute_var(self,
@@ -747,6 +788,10 @@ class Transform:
                 self.trans_df = self.df.groupby(level=0).var()
             else:
                 self.trans_df = self.df.var(axis=1)
+
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
 
         return self.trans_df
 
@@ -834,6 +879,10 @@ class Transform:
         else:
             raise ValueError("Cross-section not supported for ATR computation.")
 
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
+
         return self.trans_df
 
     def compute_percentile(self,
@@ -896,6 +945,10 @@ class Transform:
                 self.trans_df = self.df.groupby(level=0).rank(pct=True)
             else:
                 self.trans_df = self.df.rank(pct=True, axis=1)
+
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
 
         return self.trans_df
 
@@ -980,78 +1033,60 @@ class Transform:
         norm_features: pd.Series or pd.DataFrame
             Series or DataFrame with dispersion of values.
         """
-        #  method
-        if method == 'z-score':
-            # center
+        if method == 'percentile':
+            self.trans_df = self.compute_percentile(axis=axis, window_type=window_type,
+                                                    window_size=window_size, min_periods=min_periods)
+        else:
+            # centering
             if centering:
-                center = self.center(axis=axis, central_tendency='mean', window_type=window_type,
-                                     window_size=window_size, min_periods=min_periods)
+                if method == 'iqr' or method == 'mod_z':
+                    center = self.center(axis=axis, central_tendency='median', window_type=window_type,
+                                         window_size=window_size, min_periods=min_periods)
+                elif method == 'min-max':
+                    center = self.center(axis=axis, central_tendency='min', window_type=window_type,
+                                         window_size=window_size, min_periods=min_periods)
+                else:
+                    center = self.center(axis=axis, central_tendency='mean', window_type=window_type,
+                                         window_size=window_size, min_periods=min_periods)
             else:
                 center = self.df
+
+            # disp
+            if method == 'iqr':
+                disp = self.compute_iqr(axis=axis, window_type=window_type, window_size=window_size,
+                                        min_periods=min_periods)
+            elif method == 'mod_z':
+                disp = self.compute_mad(axis=axis, window_type=window_type, window_size=window_size,
+                                        min_periods=min_periods)
+            elif method == 'min-max':
+                disp = self.compute_range(axis=axis, window_type=window_type, window_size=window_size,
+                                          min_periods=min_periods)
+            else:
+                disp = self.compute_std(axis=axis, window_type=window_type, window_size=window_size,
+                                        min_periods=min_periods)
+
             # normalize
-            if axis == 'cs':
-                self.trans_df = center.divide(self.compute_std(axis=axis, window_type=window_type,
-                                                               window_size=window_size, min_periods=min_periods),
-                                              axis=0)
-            else:
-                self.trans_df = center / self.compute_std(axis=axis, window_type=window_type, window_size=window_size,
-                                                          min_periods=min_periods)
-        elif method == 'iqr':
-            # center
-            if centering:
-                center = self.center(axis=axis, central_tendency='median', window_type=window_type,
-                                     window_size=window_size, min_periods=min_periods)
-            else:
-                center = self.df
-            # normalize
-            if axis == 'cs':
-                self.trans_df = center.divide(self.compute_iqr(axis=axis, window_type=window_type,
-                                                               window_size=window_size, min_periods=min_periods),
-                                              axis=0)
-            else:
-                self.trans_df = center / self.compute_iqr(axis=axis, window_type=window_type, window_size=window_size,
-                                                          min_periods=min_periods)
-        elif method == 'mod_z':
-            # center
-            if centering:
-                center = self.center(axis=axis, central_tendency='median', window_type=window_type,
-                                     window_size=window_size, min_periods=min_periods)
-            else:
-                center = self.df
-            # normalize
-            if axis == 'cs':
-                self.trans_df = center.divide(self.compute_mad(axis=axis, window_type=window_type,
-                                                               window_size=window_size, min_periods=min_periods),
-                                              axis=0)
-            else:
-                self.trans_df = center / self.compute_mad(axis=axis, window_type=window_type, window_size=window_size,
-                                                          min_periods=min_periods)
+            if isinstance(self.df.index, pd.MultiIndex):  # multiindex
+                self.trans_df = center / disp
+            else:  # single index
+                if axis == 'ts':
+                    if window_type == 'fixed':
+                        self.trans_df = center / disp.iloc[:, 0]
+                    else:
+                        self.trans_df = center / disp
+                else:
+                    self.trans_df = center / disp.values
+
+        if method == 'mod_z':
             self.trans_df = 0.6745 * self.trans_df
-
-        elif method == 'min-max':
-            # center
-            if centering:
-                center = self.center(axis=axis, central_tendency='min', window_type=window_type,
-                                     window_size=window_size, min_periods=min_periods)
-            else:
-                center = self.df
-            # normalize
-            if axis == 'cs':
-                self.trans_df = center.divide(self.compute_range(axis=axis, window_type=window_type,
-                                                               window_size=window_size, min_periods=min_periods),
-                                              axis=0)
-            else:
-                self.trans_df = center / self.compute_range(axis=axis, window_type=window_type,
-                                                          window_size=window_size,
-                                                          min_periods=min_periods)
-
-        elif method == 'percentile':
-            self.trans_df = self.compute_percentile(axis=axis, window_type=window_type, window_size=window_size,
-                                                    min_periods=min_periods)
 
         # winsorize
         if winsorize is not None and method in ['z-score', 'iqr', 'mod_z']:
             self.trans_df = self.trans_df.clip(winsorize * -1, winsorize)
+
+        # convert to df
+        if isinstance(self.trans_df, pd.Series):
+            self.trans_df = self.trans_df.to_frame()
 
         return self.trans_df
 
@@ -1092,12 +1127,7 @@ class Transform:
                                        min_periods=min_periods)
 
         # quantize
-        labels = np.arange(0, 1 + 1 / bins, 1 / bins)
-        # mask nans
-        mask = np.isnan(perc)
-        # quantize
-        quantiles = np.digitize(perc, labels, right=True)
-        self.trans_df = np.where(mask, perc, quantiles)
+        self.trans_df = (perc * bins).apply(np.ceil).astype(float)
 
         # add to df
         if self.index is not None:
