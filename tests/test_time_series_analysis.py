@@ -4,7 +4,8 @@ import numpy as np
 
 import statsmodels
 
-from factorlab.signal_generation.time_series_analysis import rolling_window, expanding_window, TimeSeriesAnalysis as TSA
+from factorlab.signal_generation.time_series_analysis import add_lags, rolling_window, expanding_window, \
+    TimeSeriesAnalysis as TSA
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
 
@@ -169,6 +170,61 @@ def test_expanding_window_size_param_errors(fx_returns_monthly) -> None:
         expanding_window(compute_mean, fx_returns_monthly, 1.5)
 
 
+@pytest.mark.parametrize("n_lags", [1, 2, 3])
+def test_create_lags(spot_ret, btc_spot_ret, n_lags) -> None:
+    """
+    Test create_lags method.
+    """
+    # get actual and expected
+    actual = add_lags(spot_ret.close, n_lags)
+    actual_btc = add_lags(btc_spot_ret.close, n_lags)
+
+    # test shape
+    assert actual.shape[1] == 1 + (n_lags * 1)
+    assert actual_btc.shape[1] == 1 + (n_lags * 1)
+    # test dtypes
+    assert isinstance(actual, pd.DataFrame)
+    assert isinstance(actual_btc, pd.DataFrame)
+    assert (actual.dtypes == np.float64).all()
+    assert (actual_btc.dtypes == np.float64).all()
+
+    # test values
+    np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[:, 0].values, actual_btc.iloc[:, 0].values)
+    np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[:-1, 0].values,
+                actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[1:, 1].values)
+    np.allclose(actual_btc.iloc[:-1, 0].values, actual_btc.iloc[1:, 1].values)
+    if n_lags > 1:
+        np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[1:, 1].values, actual_btc.iloc[1:, 1].values)
+        np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[:-2, 0].values,
+                    actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[2:, 2].values)
+    if n_lags > 2:
+        np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[2:, 2].values,
+                    actual_btc.iloc[2:, 2].values)
+        np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[:-3, 0].values,
+                    actual.loc[pd.IndexSlice[:, 'BTC'], :].iloc[3:, 3].values)
+
+    # test index
+    assert (actual.index[-100:] == spot_ret.index[-100:]).all()
+    assert (actual_btc.index[-100:] == btc_spot_ret.index[-100:]).all()
+
+    # test col names
+    assert actual.columns[0] == 'close'
+    assert actual.columns[1] == 'close_L1'
+    if n_lags > 1:
+        assert actual.columns[2] == 'close_L2'
+    if n_lags > 2:
+        assert actual.columns[3] == 'close_L3'
+
+
+def test_create_lags_param_errors(spot_ret, n_lags=0) -> None:
+    """
+    Test create_lags method parameter errors.
+    """
+    # test if lags is less than 1
+    with pytest.raises(ValueError):
+        add_lags(spot_ret.close, n_lags=n_lags)
+
+
 class TestTimeSeriesAnalysis:
     """
     Test class for time series analysis methods.
@@ -194,9 +250,9 @@ class TestTimeSeriesAnalysis:
         assert isinstance(self.btc_tsa_instance.target, pd.Series)
 
     @pytest.mark.parametrize("n_lags", [1, 2, 3])
-    def test_add_lags(self, n_lags) -> None:
+    def test_create_lags(self, n_lags) -> None:
         """
-        Test add lags function.
+        Test create_lags method.
         """
         # get actual and expected
         actual = TSA(self.tsa_instance.target, self.tsa_instance.features, n_lags=n_lags)
@@ -241,13 +297,13 @@ class TestTimeSeriesAnalysis:
         if n_lags > 2:
             assert actual.data.columns[3] == 'close_L3'
 
-    def test_add_lags_param_errors(self, price_mom, spot_ret, n_lags=0) -> None:
+    def test_create_lags_param_errors(self, price_mom, spot_ret, n_lags=0) -> None:
         """
-        Test add lags function parameter errors.
+        Test create_lags method parameter errors.
         """
         # test if lags is less than 1
         with pytest.raises(ValueError):
-            TSA(spot_ret.close, price_mom, n_lags=n_lags).add_lags()
+            TSA(spot_ret.close, price_mom, n_lags=n_lags).create_lags()
 
     @pytest.mark.parametrize("trend", [None, 'n', 'c', 't', 'ct', 'ctt'])
     def test_add_trend(self, spot_ret, price_mom, btc_spot_ret, btc_price_mom, trend) -> None:
@@ -598,4 +654,3 @@ class TestTimeSeriesAnalysis:
         # test if target is not a pd.Series
         with pytest.raises(TypeError):
             self.tsa_instance.granger_causality()
-

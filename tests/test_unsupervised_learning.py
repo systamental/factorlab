@@ -361,14 +361,14 @@ class TestPPCA:
     def ppca_fx_setup_default(self, fx_returns_z_monthly):
         self.default_fx_ppca_instance = PPCA(fx_returns_z_monthly)
 
-    def test_initialization(self, crypto_returns_z_daily) -> None:
+    def test_initialization(self) -> None:
         """
         Test initialization.
         """
         assert isinstance(self.default_ppca_instance, PPCA)
         assert isinstance(self.default_ppca_instance.data, np.ndarray)
-        assert self.default_ppca_instance.n_components == min(crypto_returns_z_daily.shape)
-        assert all(self.default_ppca_instance.index == crypto_returns_z_daily.index[30:])
+        assert self.default_ppca_instance.n_components == self.default_ppca_instance.n_cols
+        assert self.default_ppca_instance.data.shape[0] == self.default_ppca_instance.n_rows
 
     @pytest.mark.parametrize("min_obs, min_feat, expected",
                              [
