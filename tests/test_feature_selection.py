@@ -212,7 +212,7 @@ class TestFeatureSelection:
         assert all(self.fs_norm_instance.target.columns == self.fs_norm_instance.data.columns[-1])
         assert all(self.fs_btc_norm_instance.target.columns == self.fs_btc_norm_instance.data.columns[-1])
 
-    def test_quantize(self) -> None:
+    def test_quantize_data(self) -> None:
         """
         Test quantize method.
         """
