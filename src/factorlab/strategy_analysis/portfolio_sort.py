@@ -8,12 +8,10 @@ from factorlab.strategy_backtesting.performance import Performance
 class PortfolioSort:
     """
     Portfolio sort class.
-
-    This class is used to analyze the transaction cost of a trading strategy.
     """
     def __init__(self,
-                 factors: Union[pd.Series, pd.DataFrame],
                  ret: Union[pd.Series, pd.DataFrame],
+                 factors: Union[pd.Series, pd.DataFrame],
                  factor_bins: Dict[str, Tuple[str, int]],
                  lags: int = 1,
                  conditional: bool = False,
@@ -30,13 +28,14 @@ class PortfolioSort:
 
         Parameters
         ----------
-        factors: pd.Series or pd.DataFrame - Single or MultiIndex
-            Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
         ret: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
+        factors: pd.Series or pd.DataFrame - Single or MultiIndex
+            Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
         factor_bins: dict
-            Number of bins to use for quantization. If a dictionary is passed, it must have the number of bins for each
-            factor.
+            Strategy and number of bins to use for quantization. Factor_bins must be a dictionary with the name of each
+            factor (key) along with the strategy ('ts' or 'cs') and  the number of quantiles (int)
+            as a key-values pairs, e.g. {'factor1': ('cs', 5), 'factor2': ('ts', 10)}.
         lags: int, default 1
             Number of lags to apply to the factors.
         conditional: bool, default False

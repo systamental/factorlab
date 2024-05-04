@@ -46,7 +46,7 @@ def btc_spot_ret(spot_ret):
     Fixture for spot returns.
     """
     # get btc returns
-    btc_spot_ret = spot_ret.loc[pd.IndexSlice[:, 'BTC'], :].droplevel(1)
+    btc_spot_ret = spot_ret.loc[:, 'BTC', :]
 
     return btc_spot_ret
 
@@ -71,7 +71,7 @@ def btc_price_mom(price_mom):
     Fixture for BTC price momentum.
     """
     # compute btc price mom
-    btc_price_mom = price_mom.loc[pd.IndexSlice[:, 'BTC'], :].droplevel(1)
+    btc_price_mom = price_mom.loc[:, 'BTC', :]
 
     return btc_price_mom
 
@@ -83,53 +83,54 @@ class TestPortfolioSort:
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_single(self, price_mom, spot_ret):
-        self.sort_single_instance = PortfolioSort(price_mom[['price_mom_5']], spot_ret.close,
+        self.sort_single_instance = PortfolioSort(spot_ret.close, price_mom[['price_mom_5']],
                                                   factor_bins={'price_mom_5': ('ts', 3)})
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_double(self, price_mom, spot_ret):
-        self.sort_double_instance = PortfolioSort(price_mom[['price_mom_5', 'price_mom_20']], spot_ret.close,
+        self.sort_double_instance = PortfolioSort(spot_ret.close, price_mom[['price_mom_5', 'price_mom_20']],
                                                   factor_bins={'price_mom_5': ('ts', 3),
                                                                'price_mom_20': ('cs', 3)})
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_tripple(self, price_mom, spot_ret):
-        self.sort_tripple_instance = PortfolioSort(price_mom, spot_ret.close,
+        self.sort_tripple_instance = PortfolioSort(spot_ret.close, price_mom,
                                                    factor_bins={'price_mom_5': ('cs', 3),
                                                                 'price_mom_20': ('cs', 3),
                                                                 'price_mom_60': ('cs', 3)})
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_conditional(self, price_mom, spot_ret):
-        self.sort_conditional_instance = PortfolioSort(price_mom[['price_mom_5', 'price_mom_20']], spot_ret.close,
+        self.sort_conditional_instance = PortfolioSort(spot_ret.close, price_mom[['price_mom_5', 'price_mom_20']],
                                                        factor_bins={'price_mom_5': ('ts', 3),
                                                                     'price_mom_20': ('cs', 3)},
                                                        conditional=True)
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_btc_single(self, btc_price_mom, btc_spot_ret):
-        self.btc_sort_instance = PortfolioSort(btc_price_mom[['price_mom_5']], btc_spot_ret.close,
+        self.btc_sort_instance = PortfolioSort(btc_spot_ret.close, btc_price_mom[['price_mom_5']],
                                                factor_bins={'price_mom_5': ('ts', 3)})
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_btc_double(self, btc_price_mom, btc_spot_ret):
-        self.btc_sort_double_instance = PortfolioSort(btc_price_mom[['price_mom_5', 'price_mom_20']],
-                                                      btc_spot_ret.close,
+        self.btc_sort_double_instance = PortfolioSort(btc_spot_ret.close,
+                                                      btc_price_mom[['price_mom_5', 'price_mom_20']],
                                                       factor_bins={'price_mom_5': ('ts', 3),
                                                                    'price_mom_20': ('ts', 3)})
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_btc_tripple(self, btc_price_mom, btc_spot_ret):
-        self.btc_sort_tripple_instance = PortfolioSort(btc_price_mom, btc_spot_ret.close,
+        self.btc_sort_tripple_instance = PortfolioSort(btc_spot_ret.close, btc_price_mom,
                                                        factor_bins={'price_mom_5': ('ts', 3),
                                                                     'price_mom_20': ('ts', 3),
                                                                     'price_mom_60': ('ts', 3)})
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_btc_conditional(self, btc_price_mom, btc_spot_ret):
-        self.btc_sort_conditional_instance = PortfolioSort(btc_price_mom[['price_mom_5', 'price_mom_20']],
-                                                           btc_spot_ret.close, factor_bins={'price_mom_5': ('ts', 3),
-                                                                                            'price_mom_20': ('ts', 3)},
+        self.btc_sort_conditional_instance = PortfolioSort(btc_spot_ret.close,
+                                                           btc_price_mom[['price_mom_5', 'price_mom_20']],
+                                                           factor_bins={'price_mom_5': ('ts', 3),
+                                                                        'price_mom_20': ('ts', 3)},
                                                            conditional=True)
 
     def test_initialization(self) -> None:
@@ -154,9 +155,9 @@ class TestPortfolioSort:
         """
         # check factor bins
         with pytest.raises(ValueError):
-            PortfolioSort(price_mom, spot_ret, factor_bins={'price_mom_5': ('ts', 3)}).check_factor_bins()
+            PortfolioSort(spot_ret,  price_mom, factor_bins={'price_mom_5': ('ts', 3)}).check_factor_bins()
         with pytest.raises(ValueError):
-            PortfolioSort(btc_price_mom, btc_spot_ret.close, factor_bins=[5, 6]).check_factor_bins()
+            PortfolioSort(btc_spot_ret.close, btc_price_mom, factor_bins=[5, 6]).check_factor_bins()
 
     def test_preprocess_data(self) -> None:
         """
