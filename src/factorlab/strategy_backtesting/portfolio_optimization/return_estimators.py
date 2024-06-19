@@ -86,19 +86,19 @@ class ReturnEstimators:
         if self.window_size is None:
             self.window_size = self.ann_factor
 
-    def compute_historical_mean_returns(self):
+    def historical_mean_returns(self):
         """
         Compute expected returns using mean method.
         """
         self.exp_returns = self.returns.mean()
 
-    def compute_historical_median_returns(self):
+    def historical_median_returns(self):
         """
         Compute expected returns using median method.
         """
         self.exp_returns = self.returns.median()
 
-    def compute_ewma_returns(self):
+    def ewma_returns(self):
         """
         Compute expected returns using EWMA method.
         """
@@ -135,11 +135,11 @@ class ReturnEstimators:
 
         # expected returns
         if self.method == 'mean':
-            self.compute_historical_mean_returns()
+            self.historical_mean_returns()
         elif self.method == 'median':
-            self.compute_historical_median_returns()
+            self.historical_median_returns()
         elif self.method == 'ewma':
-            self.compute_ewma_returns()
+            self.ewma_returns()
         else:
             raise ValueError('Invalid method. Please choose from: median, mean, ewma.')
 
