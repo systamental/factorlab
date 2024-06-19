@@ -75,7 +75,7 @@ class TestReturnEstimators:
         """
         Test compute historical mean returns.
         """
-        self.default_ret_est_instance.compute_historical_mean_returns()
+        self.default_ret_est_instance.historical_mean_returns()
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.mean()).all()
 
@@ -83,7 +83,7 @@ class TestReturnEstimators:
         """
         Test compute historical median returns.
         """
-        self.default_ret_est_instance.compute_historical_median_returns()
+        self.default_ret_est_instance.historical_median_returns()
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.median()).all()
 
@@ -91,7 +91,7 @@ class TestReturnEstimators:
         """
         Test compute EWMA returns.
         """
-        self.default_ret_est_instance.compute_ewma_returns()
+        self.default_ret_est_instance.ewma_returns()
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.ewm(
             span=self.default_ret_est_instance.window_size).mean().iloc[-1]).all()
