@@ -131,6 +131,26 @@ class TestMetrics:
         # shape
         assert ann_ret.shape[0] == self.metrics_log_ret_instance.returns.shape[1]
 
+    @pytest.mark.parametrize("window_type", ['rolling', 'expanding', 'fixed'])
+    def test_winning_percentage(self, window_type) -> None:
+        """
+        Test winning percentage computation.
+        """
+        self.metrics_log_ret_instance.window_type = window_type
+        win_perc = self.metrics_log_ret_instance.winning_percentage()
+        # dtypes
+        assert isinstance(win_perc, (pd.Series, pd.DataFrame))
+        if window_type == 'fixed':
+            assert win_perc.dtypes == np.float64
+        else:
+            assert (win_perc.dtypes == np.float64).all()
+        # shape
+        if window_type == 'fixed':
+            assert win_perc.shape[0] == self.metrics_log_ret_instance.returns.shape[1]
+        else:
+            assert win_perc.shape[0] == self.metrics_log_ret_instance.returns.shape[0]
+            assert win_perc.shape[1] == self.metrics_log_ret_instance.returns.shape[1]
+
     def test_drawdown(self) -> None:
         """
         Test drawdown computation.
@@ -313,6 +333,26 @@ class TestMetrics:
         else:
             assert sr.shape[0] == self.metrics_log_ret_instance.returns.shape[0]
             assert sr.shape[1] == self.metrics_log_ret_instance.returns.shape[1]
+
+    @pytest.mark.parametrize("window_type", ['rolling', 'expanding', 'fixed'])
+    def test_profit_factor(self, window_type) -> None:
+        """
+        Test sharpe ratio computation.
+        """
+        self.metrics_log_ret_instance.window_type = window_type
+        pf = self.metrics_log_ret_instance.profit_factor()
+        # dtypes
+        assert isinstance(pf, (pd.Series, pd.DataFrame))
+        if window_type == 'fixed':
+            assert pf.dtypes == np.float64
+        else:
+            assert (pf.dtypes == np.float64).all()
+        # shape
+        if window_type == 'fixed':
+            assert pf.shape[0] == self.metrics_log_ret_instance.returns.shape[1]
+        else:
+            assert pf.shape[0] == self.metrics_log_ret_instance.returns.shape[0]
+            assert pf.shape[1] == self.metrics_log_ret_instance.returns.shape[1]
 
     @pytest.mark.parametrize("window_type", ['rolling', 'expanding', 'fixed'])
     def test_sortino_ratio(self, window_type) -> None:
