@@ -149,6 +149,24 @@ class Metrics:
 
         return ann_ret
 
+    def winning_percentage(self) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes the winning percentage of returns.
+
+        Returns
+        -------
+        wp: pd.Series or pd.DataFrame
+            Winning percentage.
+        """
+        if self.window_type == 'rolling':
+            wp = getattr(self.returns, self.window_type)(window=self.window_size).apply(lambda x: (x > 0).mean())
+        elif self.window_type == 'expanding':
+            wp = getattr(self.returns, self.window_type)().apply(lambda x: (x > 0).mean())
+        else:
+            wp = self.returns.apply(lambda x: (x > 0).mean())
+
+        return wp
+
     def drawdown(self) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes drawdowns for an asset or strategy.
@@ -347,23 +365,14 @@ class Metrics:
             Sharpe ratio for each asset or strategy.
         """
         if self.window_type == 'rolling':
-            try:
-                sr = (getattr(self.returns, self.window_type)(window=self.window_size).mean() /
-                      getattr(self.returns, self.window_type)(window=self.window_size).std()) \
-                     * np.sqrt(self.ann_factor)
-            except ZeroDivisionError:
-                sr = np.nan
+            sr = (getattr(self.returns, self.window_type)(window=self.window_size).mean() /
+                  getattr(self.returns, self.window_type)(window=self.window_size).std()) * np.sqrt(self.ann_factor)
+
         elif self.window_type == 'expanding':
-            try:
-                sr = (getattr(self.returns, self.window_type)().mean() /
-                      getattr(self.returns, self.window_type)().std()) * np.sqrt(self.ann_factor)
-            except ZeroDivisionError:
-                sr = np.nan
+            sr = (getattr(self.returns, self.window_type)().mean() /
+                  getattr(self.returns, self.window_type)().std()) * np.sqrt(self.ann_factor)
         else:
-            try:
-                sr = (self.returns.mean() / self.returns.std()) * np.sqrt(self.ann_factor)
-            except ZeroDivisionError:
-                sr = np.nan
+            sr = (self.returns.mean() / self.returns.std()) * np.sqrt(self.ann_factor)
 
         return sr
 
@@ -420,6 +429,26 @@ class Metrics:
             omega = self.returns[self.returns > 0].sum() / (self.returns[self.returns < 0].sum() * -1)
 
         return omega
+
+    def profit_factor(self) -> Union[float, pd.Series, pd.DataFrame]:
+        """
+        Computes the profit factor of asset or strategy returns.
+
+        Returns
+        -------
+        pf: float, pd.Series or pd.DataFrame
+            Profit factor.
+        """
+        if self.window_type == 'rolling':
+            pf = getattr(self.returns[self.returns > 0], self.window_type)(window=self.window_size).mean() / \
+                 getattr(self.returns[self.returns < 0], self.window_type)(window=self.window_size).mean() * -1
+        elif self.window_type == 'expanding':
+            pf = getattr(self.returns[self.returns > 0], self.window_type)().mean() / \
+                 getattr(self.returns[self.returns < 0], self.window_type)().mean() * -1
+        else:
+            pf = self.returns[self.returns > 0].mean() / (self.returns[self.returns < 0].mean() * -1)
+
+        return pf
 
     def stability(self) -> Union[pd.Series, pd.DataFrame]:
         """
