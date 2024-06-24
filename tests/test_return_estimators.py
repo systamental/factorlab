@@ -32,7 +32,7 @@ class TestReturnEstimators:
     """
 
     @pytest.fixture(autouse=True)
-    def transform_setup_default(self, btc_spot_ret, risk_free_rates):
+    def re_default_instance(self, btc_spot_ret, risk_free_rates):
         self.default_ret_est_instance = ReturnEstimators(btc_spot_ret, risk_free_rate=risk_free_rates,
                                                          as_excess_returns=True)
 
