@@ -17,10 +17,7 @@ class RiskEstimators:
     """
     def __init__(self,
                  returns: pd.DataFrame,
-                 weights: Optional[Union[np.array, pd.Series, pd.DataFrame]] = None,
                  asset_names: Optional[List[str]] = None,
-                 as_ann_risk: bool = False,
-                 ann_factor: Optional[int] = None,
                  window_type: str = 'fixed',
                  window_size: Optional[int] = None
                  ):
@@ -31,29 +28,19 @@ class RiskEstimators:
         ----------
         returns: pd.DataFrame or pd.Series
             The returns of the assets or strategies. If not provided, the returns are computed from the prices.
-        weights: np.array, pd.Series, pd.DataFrame, default None
-            Portfolio weights.
         asset_names: list, default None
             Names of the assets or strategies.
-        as_ann_risk: bool, default False
-            Whether to annualize the risk metrics.
-        ann_factor: int, default None
-            Annualization factor.
         window_type: str, {'fixed', 'expanding', 'rolling'}, default 'fixed'
             Type of window for risk estimation.
         window_size: int, default 252
             Window size for risk estimation.
         """
         self.returns = returns
-        self.weights = weights
         self.asset_names = asset_names
-        self.as_ann_risk = as_ann_risk
-        self.ann_factor = ann_factor
         self.window_type = window_type
         self.window_size = window_size
+        self.ann_factor = None
         self.cov_matrix = None
-        self.freq = None
-        self.pts = None
         self.preprocess_data()
 
     def preprocess_data(self):
@@ -70,26 +57,20 @@ class RiskEstimators:
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
         self.returns = self.returns.dropna(how='all')  # drop missing rows
 
-        # weights
-        if self.weights is None:
-            self.weights = np.ones(self.returns.shape[1]) / self.returns.shape[1]
-        else:
-            self.returns = np.sum(self.weights * self.returns, axis=1)
-
         # asset names
         if self.asset_names is None:
             self.asset_names = self.returns.columns.tolist()
 
-        # freq
-        self.freq = pd.infer_freq(self.returns.index)
-
-        # ann_factor
+        # annualization factor
         if self.ann_factor is None:
             self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
 
         # window size
         if self.window_size is None:
             self.window_size = self.ann_factor
+
+        # cov matrix
+        self.cov_matrix = self.covariance()
 
     def covariance(self) -> pd.DataFrame:
         """
@@ -322,8 +303,9 @@ class RiskEstimators:
         self.cov_matrix = ret_demeaned.ewm(span=self.window_size).cov()
         # last date
         last_date = self.cov_matrix.index.get_level_values('date').max()
+        self.cov_matrix = self.cov_matrix.loc[last_date].values
 
-        return self.cov_matrix.loc[last_date]
+        return self.cov_matrix
 
     @staticmethod
     def mp_pdf(var: float, q: float, pts: int) -> pd.Series:
@@ -685,8 +667,13 @@ class RiskEstimators:
 
         return corr
 
-    def denoised_covariance(self, cov_matrix: np.ndarray, q: float, method: str = 'constant_residual_eigenval',
-                            bwidth: float = 0.01, alpha: float = 0, detone: bool = False) -> np.ndarray:
+    def denoised_covariance(self,
+                            method: str = 'constant_residual_eigenval',
+                            bwidth: float = 0.01,
+                            alpha: float = 0,
+                            detone: bool = False,
+                            q: Optional[float] = None,
+                            ) -> np.ndarray:
         """
         Compute the denoised covariance matrix.
 
@@ -694,8 +681,6 @@ class RiskEstimators:
 
         Parameters
         ----------
-        cov_matrix: np.ndarray
-            Covariance matrix.
         q: float
             Number of observations T over number of variables N.
         method: str, {'constant_residual_eigenval', 'targeted_shrinkage'}, default 'constant_residual_eigenval'
@@ -712,8 +697,12 @@ class RiskEstimators:
         cov_matrix: np.ndarray
             Denoised covariance matrix.
         """
+        # q
+        if q is None:
+            q = self.returns.shape[0] / self.returns.shape[1]
+
         # correlation matrix
-        corr_matrix = self.cov_to_corr(cov_matrix)
+        corr_matrix = self.cov_to_corr(self.cov_matrix)
 
         # eigenvalues and eigenvectors
         eigenvalues, eigenvectors = self.get_pca(corr_matrix)
@@ -732,9 +721,9 @@ class RiskEstimators:
             corr = self.detone_corr(eigenvalues, eigenvectors, n_factors)
 
         # denoised covariance matrix
-        cov_matrix = self.corr_to_cov(corr, np.sqrt(np.diag(cov_matrix)))
+        self.cov_matrix = self.corr_to_cov(corr, np.sqrt(np.diag(self.cov_matrix)))
 
-        return cov_matrix
+        return self.cov_matrix
 
     def compute_covariance_matrix(self, method: str = 'covariance', **kwargs) -> Union[pd.DataFrame, np.ndarray]:
         """
@@ -743,7 +732,8 @@ class RiskEstimators:
         Parameters
         ----------
         method: str, {'covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
-                       'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant'}, default 'covariance'
+                       'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+                          'exponential_covariance', 'denoised_covariance'}, default 'covariance'
             Method to compute the covariance matrix.
 
         Returns
@@ -753,12 +743,17 @@ class RiskEstimators:
         """
         # compute covariance matrix
         if method in ['empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas', 'graphical_lasso',
-                      'graphical_lasso_cv', 'minimum_covariance_determinant']:
+                      'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+                      'exponential_covariance', 'denoised_covariance']:
             self.cov_matrix = getattr(self, method)(**kwargs)
+
         else:
             raise ValueError("Method is not supported. Valid methods are: 'covariance', 'empirical_covariance', "
                              "'shrunk_covariance', 'ledoit_wolf', 'oas', 'graphical_lasso', 'graphical_lasso_cv', "
-                             "'minimum_covariance_determinant'")
+                             "'minimum_covariance_determinant', 'semi_covariance', 'exponential_covariance', "
+                             "'denoised_covariance'")
+
+        return self.cov_matrix
 
     def compute_turbulence_index(self) -> pd.Series:
         """
@@ -772,20 +767,8 @@ class RiskEstimators:
         # demean returns
         ret_demeaned = (self.returns - self.returns.mean()).values
         # inv cov matrix
-        cov_matrix = self.returns.cov().values
-        inv_cov_matrix = np.linalg.pinv(cov_matrix)
+        inv_cov_matrix = np.linalg.pinv(self.cov_matrix)
         # mahalanobis distance
         turb = np.diagonal(ret_demeaned @ inv_cov_matrix @ ret_demeaned.T)
 
-        return pd.Series(turb, index=self.returns.index)
-
-    def compute_portfolio_risk(self) -> pd.Series:
-        """
-        Compute the portfolio risk.
-
-        Returns
-        -------
-        pd.Series
-            Portfolio risk.
-        """
-        pass
+        return pd.DataFrame(turb, index=self.returns.index, columns=['turbulence_index'])
