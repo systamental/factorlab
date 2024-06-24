@@ -742,8 +742,8 @@ class RiskEstimators:
             Portfolio variance.
         """
         # compute covariance matrix
-        if method in ['empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas', 'graphical_lasso',
-                      'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+        if method in ['covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
+                      'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
                       'exponential_covariance', 'denoised_covariance']:
             self.cov_matrix = getattr(self, method)(**kwargs)
 
