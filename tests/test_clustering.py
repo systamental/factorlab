@@ -201,7 +201,6 @@ class TestHRP:
         assert (self.default_hrp_instance.weights <= 1).all().all()
         assert self.default_hrp_instance.weights.sum().sum() == 1.0
 
-
 class TestHERC:
     """
     Test class for Hierarchical Equal Risk Contribution.
