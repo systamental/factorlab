@@ -737,7 +737,6 @@ class HERC:
             clusters_weights[right_cluster_idxs] *= 1 - allocation_factor
 
         # get weights
-        print(clusters_weights)
         self.get_cluster_weights(clusters_weights)
 
     def compute_weights(self):
