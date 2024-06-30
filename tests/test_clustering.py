@@ -200,6 +200,11 @@ class TestHRP:
         assert (self.default_hrp_instance.weights >= 0).all().all()
         assert (self.default_hrp_instance.weights <= 1).all().all()
         assert self.default_hrp_instance.weights.sum().sum() == 1.0
+        # col
+        assert set(self.default_hrp_instance.weights.columns.to_list()) == set(self.default_hrp_instance.asset_names)
+        # index
+        assert self.default_hrp_instance.weights.index == ['weights']
+
 
 class TestHERC:
     """
@@ -272,7 +277,7 @@ class TestHERC:
         # types
         assert isinstance(self.default_herc_instance.n_clusters, np.int64)
         # vals
-        assert self.default_herc_instance.n_clusters == 7
+        assert self.default_herc_instance.n_clusters == 3
 
     def test_get_cluster_children(self) -> None:
         """
@@ -285,10 +290,10 @@ class TestHERC:
         # types
         assert isinstance(self.default_herc_instance.cluster_children, dict)
         # vals
-        assert len(self.default_herc_instance.cluster_children) == 7
-        assert self.default_herc_instance.cluster_children == {0: [9, 11, 13, 14], 1: [18], 2: [20],
-                                                               3: [4, 5, 6, 7, 8, 10, 16], 4: [1, 12, 15, 19],
-                                                               5: [0, 2, 3], 6: [17]}
+        assert len(self.default_herc_instance.cluster_children) == 3
+        assert self.default_herc_instance.cluster_children == {0: [11, 13, 14, 18, 20],
+                                                               1: [4, 5, 6, 7, 8],
+                                                               2: [0, 1, 2, 3, 9, 10, 12, 15, 16, 17, 19]}
 
     def test_quasi_diagnalization(self) -> None:
         """
@@ -302,7 +307,7 @@ class TestHERC:
         # types
         assert isinstance(idxs, list)
         # vals
-        assert idxs == [13, 9, 11, 14, 18, 20, 8, 7, 5, 6, 16, 4, 10, 1, 19, 12, 15, 17, 2, 0, 3]
+        assert idxs == [13, 11, 14, 18, 20, 4, 8, 5, 6, 7, 17, 0, 3, 1, 2, 15, 12, 19, 16, 9, 10]
 
     def test_get_intersection(self) -> None:
         """
@@ -328,7 +333,7 @@ class TestHERC:
         # types
         assert isinstance(children_idxs, tuple)
         # vals
-        assert children_idxs == ([0, 1, 2], [3, 4, 5, 6])
+        assert children_idxs == ([0], [1, 2])
 
     def test_compute_inverse_variance_weights(self) -> None:
         """
@@ -384,7 +389,7 @@ class TestHERC:
         # types
         assert isinstance(cv, float)
         # vals
-        assert cv == 6.004083645323564e-05
+        assert cv == 0.00011824325726538254
 
     def test_compute_cluster_expected_shortfall(self) -> None:
         """
@@ -395,7 +400,7 @@ class TestHERC:
         # types
         assert isinstance(ces, float)
         # vals
-        assert ces == -0.018634653817268552
+        assert ces == -0.022608352278124317
 
     def test_compute_cluster_conditional_drawdown_risk(self) -> None:
         """
@@ -406,7 +411,7 @@ class TestHERC:
         # types
         assert isinstance(cddr, float)
         # vals
-        assert cddr == -0.5062995916399896
+        assert cddr == -0.5457410254053806
 
     @pytest.mark.parametrize("risk_measure", ['variance', 'std', 'cvar', 'cdar'])
     def test_compute_cluster_risk_contribution(self, risk_measure) -> None:
@@ -423,7 +428,7 @@ class TestHERC:
         assert isinstance(self.default_herc_instance.clusters_contribution, np.ndarray)
         assert self.default_herc_instance.clusters_contribution.dtype == np.float64
         # shape
-        assert self.default_herc_instance.clusters_contribution.shape == (7,)
+        assert self.default_herc_instance.clusters_contribution.shape == (3,)
         # vals
         assert np.all(self.default_herc_instance.clusters_contribution >= 0)
 
@@ -445,7 +450,7 @@ class TestHERC:
         assert w.dtype == np.float64
         # shape
         if risk_measure == 'equal_weight':
-            assert w.shape == (4,)
+            assert w.shape == (5,)
         else:
             assert w.shape == (self.default_herc_instance.n_assets,)
         # vals
@@ -486,3 +491,7 @@ class TestHERC:
         assert (self.default_herc_instance.weights >= 0).all().all()
         assert (self.default_herc_instance.weights <= 1).all().all()
         assert self.default_herc_instance.weights.sum().sum() == 1.0
+        # col
+        assert set(self.default_herc_instance.weights.columns.to_list()) == set(self.default_herc_instance.asset_names)
+        # index
+        assert self.default_herc_instance.weights.index == ['weights']

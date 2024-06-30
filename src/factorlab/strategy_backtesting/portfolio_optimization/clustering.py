@@ -89,7 +89,6 @@ class HRP:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns  # drop na
 
         # method
         if self.linkage_method not in ['single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']:
@@ -351,7 +350,6 @@ class HERC:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna()  # drop na
 
         # risk measure
         if self.risk_measure not in ['variance', 'standard_deviation', 'equal_weight', 'expected_shortfall',
