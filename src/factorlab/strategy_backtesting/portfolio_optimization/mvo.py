@@ -2,8 +2,10 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Union, List
 import cvxpy as cp
+from scipy.optimize import minimize
 
 from factorlab.strategy_backtesting.portfolio_optimization.return_estimators import ReturnEstimators
+from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
 from factorlab.data_viz.data_viz import plot_bar
 
 
@@ -14,28 +16,14 @@ class MVO:
     This class computes the optimized portfolio weights based on the returns of the assets or strategies
     using mean-variance optimization techniques.
 
-    The mean-variance optimization problem is formulated as follows:
-
-    min w'Σw
-    s.t. w'μ >= r_min
-            w'μ <= r_max
-            sum(w) = 1
-            w >= 0
-
-    where:
-    w is the vector of weights
-    Σ is the covariance matrix
-    μ is the vector of returns
-    r_min is the minimum return
-    r_max is the maximum return
-
     The mean-variance optimization problem can be solved using the following methods:
     - Minimum volatility
     - Maximum return minimum volatility
     - Maximum Sharpe ratio
     - Maximum diversification ratio
-    - Efficient return
-    - Efficient risk
+    - Return targeting
+    - Risk budgeting
+    - Risk parity
     """
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
@@ -60,7 +48,7 @@ class MVO:
         returns: pd.DataFrame
             The returns of the assets or strategies. If not provided, the returns are computed from the prices.
         method: str, {'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification', 'return_targeting',
-        'risk_budgeting'}, default 'min_vol'
+        'risk_budgeting', 'risk_parity}, default 'min_vol'
             Optimization method to compute weights.
         max_weight: float, default 1
             Maximum weight of the asset.
@@ -76,7 +64,9 @@ class MVO:
             List of asset names.
         exp_ret_method: str, {'mean', 'median', 'ewm'}, default None
             Method to compute expected returns.
-        cov_matrix_method: str, {'sample', 'ewm', 'shrinkage'}, default None
+        cov_matrix_method: str, {'covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
+                      'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+                      'exponential_covariance', 'denoised_covariance'}, default None
             Method to compute covariance matrix.
         target_ret: float, default None
             Target return.
@@ -108,6 +98,7 @@ class MVO:
         self.corr_matrix = None
         self.objective = None
         self.constraints = None
+        self.bounds = None
         self.portfolio_ret = None
         self.portfolio_risk = None
         self.portfolio_corr = None
@@ -129,9 +120,9 @@ class MVO:
 
         # method
         if self.method not in ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                               'return_targeting', 'risk_budgeting']:
+                               'return_targeting', 'risk_budgeting', 'risk_parity']:
             raise ValueError("Method is not supported. Valid methods are: 'min_vol', 'max_return_min_vol', "
-                             "'max_sharpe', 'max_diversification', 'return_targeting', 'risk_budgeting'")
+                             "'max_sharpe', 'max_diversification', 'return_targeting', 'risk_budgeting', 'risk_parity")
 
         # risk-free rate
         if self.risk_free_rate is None:
@@ -141,12 +132,17 @@ class MVO:
         if self.asset_names is None:
             self.asset_names = self.returns.columns.tolist()
 
+        # exp_ret_method
+        if self.exp_ret_method is None:
+            self.exp_ret_method = 'mean'
+
+        # cov_matrix_method
+        if self.cov_matrix_method is None:
+            self.cov_matrix_method = 'covariance'
+
         # n_assets
         if self.n_assets is None:
             self.n_assets = self.returns.shape[1]
-
-        # freq
-        self.freq = pd.infer_freq(self.returns.index)
 
         # ann_factor
         if self.ann_factor is None:
@@ -166,11 +162,11 @@ class MVO:
             else:
                 self.freq = 'D'
 
-    def get_start_weights(self) -> np.ndarray:
+    def get_initial_weights(self) -> np.ndarray:
         """
-        Get start weights.
+        Get initial weights.
         """
-        # start weights
+        # initial weights
         if self.weights is None:
             self.weights = cp.Variable(self.n_assets)
             self.weights.value = np.ones(self.n_assets) * 1 / self.n_assets
@@ -180,22 +176,21 @@ class MVO:
             self.y = cp.Variable(self.n_assets)
             self.y.value = np.ones(self.n_assets) * 1 / self.n_assets
 
+        # risk parity
+        if self.method == 'risk_parity':
+            self.weights = np.ones(self.n_assets) * 1 / self.n_assets
+
     def compute_estimators(self, window_size: int = 30) -> None:
         """
         Compute estimators.
         """
         # expected returns
-        if self.exp_ret_method == 'exponential':
-            self.exp_ret = ReturnEstimators(self.returns, method='ewma', as_ann_returns=True,
-                                            ann_factor=self.ann_factor,
-                                            window_size=window_size).compute_expected_returns().values
-        else:
-            self.exp_ret = ReturnEstimators(self.returns, method='mean', as_ann_returns=True,
-                                            ann_factor=self.ann_factor).compute_expected_returns().values
+        self.exp_ret = ReturnEstimators(self.returns, method=self.exp_ret_method, as_ann_returns=True,
+                                        ann_factor=self.ann_factor,
+                                        window_size=window_size).compute_expected_returns().values
 
         # covariance matrix
-        if self.cov_matrix is None:
-            self.cov_matrix = self.returns.cov().values
+        self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method=self.cov_matrix_method)
 
         # correlation matrix
         if self.corr_matrix is None:
@@ -238,9 +233,19 @@ class MVO:
             self.portfolio_risk = cp.quad_form(self.weights, self.cov_matrix)
             self.objective = cp.Maximize(self.portfolio_ret)
 
+        elif self.method == 'risk_parity':
+            def risk_parity_obj(weights, cov_matrix):
+                portfolio_var = np.dot(weights.T, np.dot(cov_matrix, weights))
+                mrc = np.dot(cov_matrix, weights)
+                rc = weights * mrc / portfolio_var
+                return np.sum((rc - self.weights) ** 2)
+            self.objective = risk_parity_obj
+            self.portfolio_ret = np.dot(self.weights, self.exp_ret)
+            self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
+
         else:
             raise ValueError("Method is not supported. Valid methods are: 'min_vol', 'max_return_min_vol', "
-                             "'max_sharpe', 'max_diversification', 'return_targeting', 'risk_budgeting'")
+                             "'max_sharpe', 'max_diversification', 'return_targeting', 'risk_budgeting', 'risk_parity'")
 
         return self.objective
 
@@ -279,6 +284,10 @@ class MVO:
                     self.portfolio_risk <= self.target_risk
                 ]
 
+        elif self.method == 'risk_parity':
+            self.constraints = ({'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1})
+            self.bounds = tuple((0, 1) for _ in range(self.n_assets))
+
         else:
             self.constraints = [
                 self.weights <= self.max_weight,
@@ -303,20 +312,29 @@ class MVO:
             Optimized portfolio weights.
         """
         # optimization problem
-        prob = cp.Problem(objective=self.objective, constraints=self.constraints)
-        prob.solve(solver=solver, **kwargs)
+        if self.method != 'risk_parity':
+            prob = cp.Problem(objective=self.objective, constraints=self.constraints)
+            prob.solve(solver=solver, **kwargs)
 
-        if self.weights.value is None:
-            raise ValueError('Could not find optimal weights.')
+            if self.weights.value is None:
+                raise ValueError('Could not find optimal weights.')
+            else:
+                self.weights = self.weights.value
+                self.portfolio_risk = self.portfolio_risk.value
+                self.portfolio_ret = self.portfolio_ret.value
+
+            # max diversification ratio
+            if self.method == 'max_diversification':
+                self.weights /= np.diag(self.cov_matrix)
+                self.weights /= np.sum(self.weights)
+                self.portfolio_risk = self.weights @ self.cov_matrix @ self.weights.T
+                self.portfolio_ret = self.exp_ret.T @ self.weights
+
+        # risk parity
         else:
-            self.weights = self.weights.value
-            self.portfolio_risk = self.portfolio_risk.value
-            self.portfolio_ret = self.portfolio_ret.value
-
-        # max diversification ratio
-        if self.method == 'max_diversification':
-            self.weights /= np.diag(self.cov_matrix)
-            self.weights /= np.sum(self.weights)
+            result = minimize(self.objective, self.weights, args=self.cov_matrix, constraints=self.constraints,
+                           bounds=self.bounds, method='SLSQP')
+            self.weights = result.x
             self.portfolio_risk = self.weights @ self.cov_matrix @ self.weights.T
             self.portfolio_ret = self.exp_ret.T @ self.weights
 
@@ -357,7 +375,7 @@ class MVO:
         Computes optimal portfolio weights.
         """
         # get start weights
-        self.get_start_weights()
+        self.get_initial_weights()
 
         # compute estimators
         self.compute_estimators()

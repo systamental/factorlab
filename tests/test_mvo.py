@@ -67,12 +67,12 @@ class TestMVO:
         # cols
         assert self.mvo_instance.returns.columns.to_list() == self.mvo_instance.asset_names
 
-    def test_get_start_weights(self) -> None:
+    def test_get_initial_weights(self) -> None:
         """
         Test get_start_weights.
         """
         # get start weights
-        self.mvo_instance.get_start_weights()
+        self.mvo_instance.get_initial_weights()
 
         # shape
         assert self.mvo_instance.weights.value.shape[0] == self.mvo_instance.n_assets
@@ -84,7 +84,7 @@ class TestMVO:
         assert isinstance(self.mvo_instance.weights.value, np.ndarray)
         assert isinstance(self.mvo_instance.weights.value[0], np.float64)
 
-    @pytest.mark.parametrize("exp_ret, window_size", [('mean', 30), ('exponential', 252)])
+    @pytest.mark.parametrize("exp_ret, window_size", [('mean', 30), ('ewma', 252)])
     def test_compute_estimators(self, exp_ret, window_size) -> None:
         """
         Test compute_estimators.
@@ -101,7 +101,7 @@ class TestMVO:
         if exp_ret == 'mean':
             assert np.allclose(self.mvo_instance.exp_ret, self.mvo_instance.returns.mean().values *
                                self.mvo_instance.ann_factor)
-        elif exp_ret == 'exponential':
+        elif exp_ret == 'ewma':
             assert np.allclose(self.mvo_instance.exp_ret,
                                self.mvo_instance.returns.ewm(span=window_size).mean().iloc[-1].values *
                                self.mvo_instance.ann_factor)
@@ -114,7 +114,7 @@ class TestMVO:
         assert self.mvo_instance.corr_matrix.dtype == np.float64
 
     @pytest.mark.parametrize("method", ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                                        'return_targeting', 'risk_budgeting'])
+                                        'return_targeting', 'risk_budgeting', 'risk_parity'])
     def test_objective_function(self, method) -> None:
         """
         Test objective_function.
@@ -122,7 +122,7 @@ class TestMVO:
         # method
         self.mvo_instance.method = method
         # get start weights
-        self.mvo_instance.get_start_weights()
+        self.mvo_instance.get_initial_weights()
         # compute estimators
         self.mvo_instance.compute_estimators()
         # objective function
@@ -131,12 +131,16 @@ class TestMVO:
         # dtypes
         if method == 'risk_budgeting':
             assert isinstance(self.mvo_instance.objective, cp.problems.objective.Maximize)
+            assert isinstance(self.mvo_instance.portfolio_ret, cp.atoms.affine.binary_operators.MulExpression)
+        elif method == 'risk_parity':
+            assert callable(self.mvo_instance.objective)
+            assert isinstance(self.mvo_instance.portfolio_ret, np.float64)
         else:
             assert isinstance(self.mvo_instance.objective, cp.problems.objective.Minimize)
-        assert isinstance(self.mvo_instance.portfolio_ret, cp.atoms.affine.binary_operators.MulExpression)
+            assert isinstance(self.mvo_instance.portfolio_ret, cp.atoms.affine.binary_operators.MulExpression)
 
     @pytest.mark.parametrize("method", ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                                        'return_targeting', 'risk_budgeting'])
+                                        'return_targeting', 'risk_budgeting', 'risk_parity'])
     def test_get_constraints(self, method) -> None:
         """
         Test get_constraints.
@@ -144,7 +148,7 @@ class TestMVO:
         # method
         self.mvo_instance.method = method
         # get start weights
-        self.mvo_instance.get_start_weights()
+        self.mvo_instance.get_initial_weights()
         # compute estimators
         self.mvo_instance.compute_estimators()
         # objective function
@@ -177,6 +181,13 @@ class TestMVO:
             assert isinstance(self.mvo_instance.constraints[1], cp.constraints.nonpos.Inequality)
             assert isinstance(self.mvo_instance.constraints[2], cp.constraints.zero.Equality)
             assert isinstance(self.mvo_instance.constraints[3], cp.constraints.nonpos.Inequality)
+        elif self.mvo_instance.method == 'risk_parity':
+            # shape
+            assert len(self.mvo_instance.constraints) == 2
+            # dtypes
+            assert isinstance(self.mvo_instance.constraints, dict)
+            # values
+            assert self.mvo_instance.constraints['type'] == 'eq'
         else:
             # shape
             assert len(self.mvo_instance.constraints) == 3
@@ -186,7 +197,7 @@ class TestMVO:
             assert isinstance(self.mvo_instance.constraints[2], cp.constraints.zero.Equality)
 
     @pytest.mark.parametrize("method", ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                                        'return_targeting', 'risk_budgeting'])
+                                        'return_targeting', 'risk_budgeting', 'risk_parity'])
     def test_optimize(self, method) -> None:
         """
         Test optimize.
@@ -194,7 +205,7 @@ class TestMVO:
         # method
         self.mvo_instance.method = method
         # get start weights
-        self.mvo_instance.get_start_weights()
+        self.mvo_instance.get_initial_weights()
         # compute estimators
         self.mvo_instance.compute_estimators()
         # objective function
@@ -219,7 +230,7 @@ class TestMVO:
         # method
         self.mvo_instance.method = 'risk_budgeting'
         # get start weights
-        self.mvo_instance.get_start_weights()
+        self.mvo_instance.get_initial_weights()
         # compute estimators
         self.mvo_instance.compute_estimators()
         # objective function
@@ -241,7 +252,7 @@ class TestMVO:
         assert (self.mvo_instance.weights == 1).sum() == 1
 
     @pytest.mark.parametrize("method", ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                                        'return_targeting', 'risk_budgeting'])
+                                        'return_targeting', 'risk_budgeting', 'risk_parity'])
     def test_get_optimal_weights(self, method) -> None:
         """
         Test get_optimal_weights.
@@ -259,6 +270,10 @@ class TestMVO:
         # dtypes
         assert isinstance(self.mvo_instance.weights, pd.DataFrame)
         assert (self.mvo_instance.weights.dtypes == np.float64).all().all()
+        # col
+        assert self.mvo_instance.weights.columns.to_list() == self.mvo_instance.asset_names
+        # index
+        assert self.mvo_instance.weights.index == ['weights']
 
 
 
