@@ -3,6 +3,9 @@ import numpy as np
 from typing import Optional, Union, List
 import cvxpy as cp
 
+from factorlab.strategy_backtesting.portfolio_optimization.return_estimators import ReturnEstimators
+from factorlab.data_viz.data_viz import plot_bar
+
 
 class MVO:
     """
@@ -147,14 +150,21 @@ class MVO:
 
         # ann_factor
         if self.ann_factor is None:
-            if self.freq == 'D':
-                self.ann_factor = 252
-            elif self.freq == 'W':
-                self.ann_factor = 52
-            elif self.freq == 'M':
-                self.ann_factor = 12
+            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
+
+        # freq
+        self.freq = pd.infer_freq(self.returns.index)
+        if self.freq is None:
+            if self.ann_factor == 1:
+                self.freq = 'Y'
+            elif self.ann_factor == 4:
+                self.freq = 'Q'
+            elif self.ann_factor == 12:
+                self.freq = 'M'
+            elif self.ann_factor == 52:
+                self.freq = 'W'
             else:
-                self.ann_factor = 252
+                self.freq = 'D'
 
     def get_start_weights(self) -> np.ndarray:
         """
@@ -176,9 +186,12 @@ class MVO:
         """
         # expected returns
         if self.exp_ret_method == 'exponential':
-            self.exp_ret = self.returns.ewm(span=window_size).mean().iloc[-1].values * self.ann_factor
+            self.exp_ret = ReturnEstimators(self.returns, method='ewma', as_ann_returns=True,
+                                            ann_factor=self.ann_factor,
+                                            window_size=window_size).compute_expected_returns().values
         else:
-            self.exp_ret = self.returns.mean().values * self.ann_factor
+            self.exp_ret = ReturnEstimators(self.returns, method='mean', as_ann_returns=True,
+                                            ann_factor=self.ann_factor).compute_expected_returns().values
 
         # covariance matrix
         if self.cov_matrix is None:
@@ -334,7 +347,7 @@ class MVO:
                 # Create a rounded weights array
                 rounded_weights = np.zeros_like(self.weights)
                 rounded_weights[close_to_one_index] = 1
-                return rounded_weights
+                self.weights = rounded_weights
 
         # If conditions are not met, return the original weights
         return self.weights
@@ -361,4 +374,12 @@ class MVO:
         # check weights
         self.weights = self.check_weights()
 
+        self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=['weights']).T
+
         return self.weights
+
+    def plot_weights(self):
+        """
+        Plot the optimized portfolio weights.
+        """
+        plot_bar(self.weights.T.sort_values(by='weights'), axis='horizontal', x_label='weights')

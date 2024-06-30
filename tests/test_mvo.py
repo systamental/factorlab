@@ -43,10 +43,6 @@ class TestMVO:
     def mvo(self, asset_returns):
         self.mvo_instance = MVO(asset_returns, target_ret=0.1, target_risk=0.05)
 
-    @pytest.fixture(autouse=True)
-    def mvo_exp(self, asset_returns):
-        self.mvo_instance_exp = MVO(asset_returns, exp_ret_method='exponential', target_ret=0.1, target_risk=0.05)
-
     def test_initialization(self) -> None:
         """
         Test initialization.
@@ -63,7 +59,7 @@ class TestMVO:
         assert isinstance(self.mvo_instance.asset_names, list)
         assert isinstance(self.mvo_instance.returns.index, pd.DatetimeIndex)
         assert isinstance(self.mvo_instance.n_assets, int)
-        assert isinstance(self.mvo_instance.ann_factor, int)
+        assert isinstance(self.mvo_instance.ann_factor, np.int64)
         assert (self.mvo_instance.returns.dtypes == np.float64).all()
         # data shape
         assert self.mvo_instance.returns.shape[1] == self.mvo_instance.n_assets
@@ -103,11 +99,12 @@ class TestMVO:
         assert self.mvo_instance.corr_matrix.shape == (self.mvo_instance.n_assets, self.mvo_instance.n_assets)
         # values
         if exp_ret == 'mean':
-            assert (self.mvo_instance.exp_ret ==
-                    self.mvo_instance.returns.mean().values * self.mvo_instance.ann_factor).all()
+            assert np.allclose(self.mvo_instance.exp_ret, self.mvo_instance.returns.mean().values *
+                               self.mvo_instance.ann_factor)
         elif exp_ret == 'exponential':
-            assert (self.mvo_instance.exp_ret ==
-                    self.mvo_instance.returns.ewm(span=window_size).mean().iloc[-1].values * self.mvo_instance.ann_factor).all()
+            assert np.allclose(self.mvo_instance.exp_ret,
+                               self.mvo_instance.returns.ewm(span=window_size).mean().iloc[-1].values *
+                               self.mvo_instance.ann_factor)
         # dtypes
         assert isinstance(self.mvo_instance.exp_ret, np.ndarray)
         assert self.mvo_instance.exp_ret.dtype == np.float64
@@ -219,17 +216,29 @@ class TestMVO:
         """
         Test check_weights.
         """
+        # method
+        self.mvo_instance.method = 'risk_budgeting'
+        # get start weights
+        self.mvo_instance.get_start_weights()
+        # compute estimators
+        self.mvo_instance.compute_estimators()
+        # objective function
+        self.mvo_instance.objective_function()
+        # constraints
+        self.mvo_instance.get_constraints()
         # optimize
         self.mvo_instance.optimize()
-
         # check weights
         self.mvo_instance.check_weights()
 
         # shape
-        assert self.mvo_instance.weights.value.shape[0] == self.mvo_instance.n_assets
+        assert self.mvo_instance.weights.shape[0] == self.mvo_instance.n_assets
         # values
-        assert np.allclose(self.mvo_instance.weights.value.sum(), 1)
-        assert np.allclose(self.mvo_instance.weights.value, self.mvo_instance.weights.value.clip(0, 1))
+        assert np.allclose(self.mvo_instance.weights.sum(), 1)
+        # dtypes
+        assert isinstance(self.mvo_instance.weights, np.ndarray)
+        assert self.mvo_instance.weights.dtype == np.float64
+        assert (self.mvo_instance.weights == 1).sum() == 1
 
     @pytest.mark.parametrize("method", ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
                                         'return_targeting', 'risk_budgeting'])
@@ -243,12 +252,13 @@ class TestMVO:
         self.mvo_instance.get_optimal_weights()
 
         # shape
-        assert self.mvo_instance.weights.shape[0] == self.mvo_instance.n_assets
+        assert self.mvo_instance.weights.shape[1] == self.mvo_instance.n_assets
         # values
-        assert np.allclose(self.mvo_instance.weights.sum(), 1)
+        assert np.allclose(self.mvo_instance.weights.sum(axis=1), 1)
+        assert (self.mvo_instance.weights >= 0).all().all()
         # dtypes
-        assert isinstance(self.mvo_instance.weights, np.ndarray)
-        assert self.mvo_instance.weights.dtype == np.float64
+        assert isinstance(self.mvo_instance.weights, pd.DataFrame)
+        assert (self.mvo_instance.weights.dtypes == np.float64).all().all()
 
 
 
