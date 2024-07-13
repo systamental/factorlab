@@ -1,11 +1,14 @@
 import pandas as pd
+import numpy as np
 from math import ceil
 from typing import Optional, Union
 from importlib import resources
 from pathlib import Path
 from PIL import Image
+from matplotlib.offsetbox import OffsetImage, AnchoredOffsetbox
 import matplotlib.pyplot as plt
 from matplotlib import font_manager as fm
+import seaborn as sns
 
 
 def add_fonts():
@@ -95,9 +98,6 @@ def plot_series(data: Union[pd.Series, pd.DataFrame],
     # remove splines
     ax.spines[['top', 'right', 'left']].set_visible(False)
 
-    # format x-axis
-    ax.set_xlim(data.index.get_level_values('date')[0], data.index.get_level_values('date')[-1])
-
     # format y-axis
     ax.set_ylabel(y_label)
     ax.yaxis.tick_right()
@@ -149,12 +149,14 @@ def plot_series(data: Union[pd.Series, pd.DataFrame],
     if add_logo:
         with resources.path("factorlab", "systamental_logo.png") as f:
             img_path = f
-        img = Image.open(img_path)
-        plt.figimage(img, origin='upper')
+        logo = Image.open(img_path)
+        # plt.figimage(logo, origin='upper')
+        # ax.imshow(logo, origin='upper')
+        fig.figimage(logo, 0, -1, origin='upper')
 
     # set source text
     if source is not None:
-        ax.text(x=0.125, y=0.05, s=f"""Source: {source}""", transform=fig.transFigure, ha='left', fontsize=10,
+        ax.text(x=0.135, y=0.05, s=f"""Source: {source}""", transform=fig.transFigure, ha='left', fontsize=10,
                 alpha=.8, fontdict=source_font)
 
 
@@ -280,7 +282,7 @@ def plot_bar(data: Union[pd.Series, pd.DataFrame],
         ax.tick_params(left=False)
         ax.margins(y=0)
 
-        # add in line and tag
+    # add in line and tag
     line_colors = ['black', '#758D99', '#006BA2', '#DB444B', '#3EBCD2', '#379A8B', '#EBB434', '#B4BA39', '#9A607F',
                    '#D1B07C', '#758D99']
     if add_line:
@@ -432,6 +434,202 @@ def plot_table(data: pd.DataFrame,
     plt.show()
 
 
+def plot_scatter(data: pd.DataFrame,
+                 x: str,
+                 y: str,
+                 hue: Optional[str] = None,
+                 fit: bool = False,
+                 fit_method: str = 'linear',
+                 fig_size: tuple = (15, 7),
+                 font: str = 'Lato',
+                 title: Optional[str] = None,
+                 subtitle: Optional[str] = None,
+                 title_font: Optional[str] = None,
+                 add_line: bool = False,
+                 line_color: Optional[int] = None,
+                 add_logo: bool = False,
+                 source: Optional[str] = None,
+                 source_font: Optional[str] = None
+                 ):
+    """
+    Creates a scatter plot from a data object (dataframe or series) with the x and y-axis labeled.
+
+    Parameters
+    ----------
+    data: pd.Series or pd.DataFrame
+        Data object from which to create scatter plot.
+    x: str
+        Column name for the x-axis.
+    y: str
+        Column name for the y-axis.
+    hue: str, optional, default None
+        Column name for the hue.
+    fit: bool, default False
+        Adds a line of best fit to the scatter plot.
+    fit_method: str, {'linear', 'lowess', 'logistic'}, default 'linear'
+        Method used to fit the line to the scatter plot.
+    fig_size: tuple
+        Tuple (width, height) of figure object.
+    font: str, optional, default None
+        Font used for all text in the plot.
+    title: str, optional, default None
+        Title to use for the plot.
+    subtitle: str, optional, default None
+        Subtitle to use for the plot.
+    title_font: str, optional, default None
+        Font used for the text in the title and subtitle.
+    add_line: bool, default False
+        Adds a horizontal line running from the top left to top right of the plot.
+    line_color: int, optional, default None
+        Color of added line.
+    add_logo: bool, default False
+        Adds the Systamental logo to the bottom left corner of the plot.
+    source: str, optional, default None
+        Adds text for the source of the data in the plot.
+    source_font: str, optional, default None
+        Font used for the source text.
+    """
+    # plot size
+    fig, ax = plt.subplots(figsize=fig_size)
+
+    # plot
+    if fit:
+        if fit_method == 'linear':
+            sns.regplot(data=data, x=x, y=y, fit_reg=True, ax=ax,
+                        scatter_kws={'color': '#006BA2'}, line_kws={'color': '#FF6B6C'})
+        elif fit_method == 'logistic':
+            sns.regplot(data=data, x=x, y=y, logistic=True, ax=ax,
+                        scatter_kws={'color': '#006BA2'}, line_kws={'color': '#FF6B6C'})
+        elif fit_method == 'lowess':
+            sns.regplot(data=data, x=x, y=y, lowess=True, ax=ax,
+                        scatter_kws={'color': '#006BA2'}, line_kws={'color': '#FF6B6C'})
+        elif fit_method == 'robust':
+            sns.regplot(data=data, x=x, y=y, robust=True, ax=ax,
+                       scatter_kws={'color': '#006BA2'}, line_kws={'color': '#FF6B6C'})
+    else:
+        sns.scatterplot(data=data, x=x, y=y, hue=hue, legend=False, ax=ax)
+
+    # font
+    add_fonts()
+    plt.rcParams['font.sans-serif'] = font
+
+    # grid
+    ax.grid(which="major", axis='x', color='#758D99', alpha=0.6, zorder=1)
+    ax.set_facecolor("whitesmoke")
+
+    # remove splines
+    ax.spines[['top', 'right', 'left']].set_visible(False)
+
+    # format y-axis
+    ax.yaxis.tick_right()
+    ax.ticklabel_format(style='plain', axis='y')
+
+    # add in title and subtitle
+    if subtitle is None:
+        ax.text(x=0.125, y=0.89, s=f"{title}", transform=fig.transFigure, ha='left',
+                fontsize=16, weight='bold', alpha=.8, fontdict=title_font)
+    else:
+        ax.text(x=0.125, y=0.93, s=f"{title}", transform=fig.transFigure, ha='left',
+                fontsize=16, weight='bold', alpha=.8, fontdict=title_font)
+        ax.text(x=0.125, y=.89, s=f"{subtitle}", transform=fig.transFigure, ha='left',
+                fontsize=14, alpha=.8, fontdict=title_font)
+
+    # add in line and tag
+    line_colors = ['black', '#758D99', '#006BA2', '#DB444B', '#3EBCD2', '#379A8B', '#EBB434', '#B4BA39', '#9A607F',
+                   '#D1B07C', '#758D99']
+    if add_line:
+        if line_color is not None:
+            line_color = line_colors[line_color]
+        else:
+            line_color = line_colors[0]
+        # create line
+        ax.plot([0.12, .9],  # set line width
+                [.98, .98],  # set line height
+                transform=fig.transFigure,  # set location relative to plot
+                clip_on=False,
+                color=line_color,
+                linewidth=.6)
+
+    # add systamental logo
+    if add_logo:
+        with resources.path("factorlab", "systamental_logo.png") as f:
+            img_path = f
+        logo = Image.open(img_path)
+        fig.figimage(logo, 0, -1, origin='upper')
+
+    # set source text
+    if source is not None:
+        ax.text(x=0.135, y=0.05, s=f"""Source: {source}""", transform=fig.transFigure, ha='left', fontsize=10,
+                alpha=.8, fontdict=source_font)
+
+
 def plot_heatmap():
 
     pass
+
+
+def monthly_returns_heatmap(
+        returns: Union[pd.Series, pd.DataFrame],
+        series: str = None,
+        ret_type: str = 'log',
+        logo: bool = True
+) -> None:
+    """
+    Creates a heatmap of monthly and yearly returns.
+
+    Parameters
+    ----------
+    returns: pd.Series or pd.DataFrame
+        Dataframe or series with DatetimeIndex and returns (cols).
+    series: str, default None
+        Name of the col/series to compute monthly returns.
+    ret_type: str, {'log', 'simple'}, default 'log'
+        Type of returns.
+    logo: bool, default True
+        Adds systamental logo to plot.
+    """
+    if series is None:
+        raise ValueError("Please provide a series to compute monthly returns.")
+
+    # plot size
+    fig, ax = plt.subplots(figsize=(15, 15))
+
+    # returns, %
+    if ret_type == 'simple':
+        ret_df = np.log(returns + 1) * 100
+    else:
+        ret_df = returns * 100
+
+    # reset index
+    ret_df.reset_index(inplace=True)
+    # get year and month
+    ret_df["year"] = ret_df.date.apply(lambda x: x.year)
+    ret_df["month"] = ret_df.date.apply(lambda x: x.strftime("%B"))
+
+    # create table
+    table = ret_df.pivot_table(index="year", columns="month", values=series, aggfunc="sum").fillna(0)
+    # rename cols, index
+    table.columns.name, table.index.name = '', ''
+    cols = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+            "November", "December"]
+    table = table.reindex(columns=cols)
+    table.columns = [col[:3] for col in cols]
+    # compute yearly return
+    table.loc[:, 'Year'] = table.sum(axis=1)
+    table = table.round(decimals=2)  # round
+
+    # plot heatmap
+    sns.heatmap(table, annot=True, cmap='RdYlGn', center=0, square=True, cbar=False, fmt='g')
+    plt.yticks(rotation=0) # rotate y-ticks
+
+    # add systamental logo
+    if logo:
+        with resources.path("factorlab", "systamental_logo.png") as f:
+            img_path = f
+        img = Image.open(img_path)
+        plt.figimage(img, origin='upper')
+
+    # Adding title
+    ax.set_title('Monthly Returns (%)', loc='left', weight='bold', pad=20, fontsize=14, family='georgia')
+    ax.text(x=0, y=-0.05, s=f"{series.title()}", ha='left', fontsize=12, alpha=.8, fontdict=None, family='georgia')
+
