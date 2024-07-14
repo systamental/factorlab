@@ -4,7 +4,7 @@ import numpy as np
 import inspect
 from typing import Union, Optional
 
-from factorlab.signal_generation.time_series_analysis import linear_reg
+from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
 from factorlab.feature_engineering.transformations import Transform
 
 
@@ -50,10 +50,7 @@ class Trend:
         lags: int, default 0
             Number of periods to lag values by.
         """
-        # convert data types
-        if isinstance(df, pd.Series):
-            df = df.to_frame()
-
+        self.df = df.to_frame() if isinstance(df, pd.Series) else df
         self.df = df.copy()
         self.vwap = vwap
         self.log = log
@@ -178,13 +175,8 @@ class Trend:
             DataFrame with DatetimeIndex and time trend values (cols).
         """
         # fit linear regression
-        if isinstance(self.price.index, pd.MultiIndex):
-            coeff = self.price.groupby(level=1, group_keys=False).apply(lambda x: linear_reg(x, None,
-                                       window_type='rolling', output='coef', log=False, trend='ct',
-                                       window_size=self.lookback))
-        else:
-            coeff = linear_reg(self.price, None, window_type='rolling', output='coef', log=False, trend='ct',
-                               window_size=self.lookback)
+        coeff = TSA(self.price, trend='ct', window_type='rolling',
+                    window_size=self.lookback).linear_regression(output='params')
 
         # time trend
         self.trend = coeff[['trend']]
@@ -207,13 +199,8 @@ class Trend:
             DataFrame with DatetimeIndex and price acceleration values (cols).
         """
         # fit linear regression
-        if isinstance(self.price.index, pd.MultiIndex):
-            coeff = self.price.groupby(level=1, group_keys=False).apply(lambda x: linear_reg(x, None,
-                                       window_type='rolling', output='coef', log=False, trend='ctt',
-                                       window_size=self.lookback))
-        else:
-            coeff = linear_reg(self.price, None, window_type='rolling', output='coef', log=False, trend='ctt',
-                               window_size=self.lookback)
+        coeff = TSA(self.price, trend='ctt', window_type='rolling',
+                    window_size=self.lookback).linear_regression(output='params')
 
         # price acceleration
         self.trend = coeff[['trend_squared']]
@@ -247,16 +234,11 @@ class Trend:
             ret = Transform(self.price).returns()
 
         # compute mean ret for all assets
-        mkt_ret = ret.groupby(level=0).mean()
-
-        # merge y, X
-        data = pd.merge(ret, mkt_ret, right_index=True, left_index=True).dropna()
-        data.columns = ['y', 'X']
+        mkt_ret = ret.groupby(level=0).mean().reindex(ret.index, level=0)
 
         # fit linear regression
-        alpha = data.groupby(level=1, group_keys=False).apply(lambda x: linear_reg(x.y, x.X, window_type='rolling',
-                                                                                   output='coef', log=False, trend='c',
-                                                                                   window_size=self.lookback))
+        alpha = TSA(ret, mkt_ret, trend='c', window_type='rolling',
+                    window_size=self.lookback).linear_regression(output='params')
 
         # alpha
         self.trend = alpha[['const']]
@@ -491,15 +473,11 @@ class Trend:
         # create emtpy df
         factor_df = pd.DataFrame()
 
-        # multi-index
-        # if isinstance(self.price.index, pd.MultiIndex):
-        #     self.price = self.price.unstack()
-
         # compute ewma diff for short, medium and long windows
         for i in range(0, len(s_k)):
             if isinstance(self.price.index, pd.MultiIndex):
                 factor_df[f"x_k{i}"] = (self.price.unstack().ewm(halflife=hl_s[i]).mean() -
-                                        self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack()
+                                        self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack(future_stack=True)
             else:
                 factor_df[f"x_k{i}"] = (self.price.ewm(halflife=hl_s[i]).mean() -
                                         self.price.ewm(halflife=hl_l[i]).mean())
@@ -507,7 +485,8 @@ class Trend:
         # normalize by std of price
         for i in range(0, len(s_k)):
             if isinstance(self.price.index, pd.MultiIndex):
-                factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() / self.price.unstack().rolling(90).std()).stack()
+                factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
+                                        self.price.unstack().rolling(90).std()).stack(future_stack=True)
             else:
                 factor_df[f"y_k{i}"] = factor_df[[f"x_k{i}"]].divide(self.price.rolling(90).std().values, axis=0)
 
@@ -515,7 +494,7 @@ class Trend:
         for i in range(0, len(s_k)):
             if isinstance(self.price.index, pd.MultiIndex):
                 factor_df[f"z_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
-                                        factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack()
+                                        factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack(future_stack=True)
             else:
                 factor_df[f"z_k{i}"] = factor_df[[f"x_k{i}"]].divide(factor_df[[f"x_k{i}"]].rolling(365).std().values,
                                                                      axis=0)
@@ -589,3 +568,68 @@ class Trend:
         self.trend = self.trend.sort_index()
 
         return self.trend
+
+
+# TODO: add hurst exponent, fractal dimension, detrended fluctuation analysis, wavelet transform, etc.
+
+# def he(series: pd.Series, window_size: int):
+#     """
+#
+#     Parameters
+#     ----------
+#     series: pd.Series
+#         Series with time series.
+#     window_size: int
+#         Lookback window for hurst exponent calculation.
+#
+#     Returns
+#     -------
+#     hurst_exp: float
+#         Hurst exponent.
+#     """
+#     # create the range of lag values
+#     lags = range(2, window_size)
+#
+#     # calculate the array of the variances of the lagged differences
+#     tau = [np.sqrt(np.std(np.subtract(series[lag:].values, series[:-lag].values))) for lag in lags]
+#
+#     # use a linear fit to estimate the Hurst Exponent
+#     poly = np.polyfit(np.log(lags), np.log(tau), 1)
+#
+#     return poly[0] * 2.0
+#
+#
+# def hurst(df: pd.DataFrame, window_size: int = 365) -> pd.DataFrame:
+#     """
+#     Computes the hurst exponent of a time series.
+#
+#     Parameters
+#     ----------
+#     df: pd.DataFrame
+#         DataFrame with time series.
+#     window_size: int
+#         Lookback window for hurst exponent calculation.
+#
+#     Returns
+#     -------
+#     hurst: pd.DataFrame
+#         DataFrame with Hurst exponents for each series/col.
+#     """
+#     # convert to df
+#     if isinstance(df, pd.Series):
+#         df = df.to_frame()
+#
+#     # store results in df
+#     res_df = pd.DataFrame()
+#
+#     # loop through cols
+#     for col in df.columns:
+#         hurst_exp = {'hurst': he(df[col], window_size)}
+#         res_df = res_df.append(hurst_exp, ignore_index=True)
+#
+#     # add index
+#     res_df.index = [df.columns]
+#
+#     return res_df.sort_values(by='hurst')
+#
+#
