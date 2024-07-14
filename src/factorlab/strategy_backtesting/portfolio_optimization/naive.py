@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 
+from factorlab.strategy_backtesting.portfolio_optimization.return_estimators import ReturnEstimators
+from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
+from factorlab.data_viz.plot import plot_bar
+
 
 class NaiveOptimization:
     """
@@ -14,11 +18,9 @@ class NaiveOptimization:
                  returns: pd.DataFrame,
                  method: str = 'equal_weight',
                  asset_names: Optional[str] = None,
-                 cov_matrix_method: Optional[str] = None,
-                 ann_factor: Optional[int] = None,
                  leverage: Optional[float] = None,
                  target_vol: Optional[float] = None,
-                 window_size: Optional[int] = None
+                 ann_factor: Optional[int] = None,
                  ):
         """
         Constructor
@@ -27,31 +29,27 @@ class NaiveOptimization:
         ----------
         returns: pd.DataFrame or pd.Series
             The returns of the assets or strategies. If not provided, the returns are computed from the prices.
-        method: str, {'equal', 'inverse_volatility'}, default 'equal'
+        method: str, {'equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random'},
+        default 'equal_weight'
             Optimization method to compute weights.
         asset_names: list, default None
             Names of the assets or strategies.
-        cov_matrix_method: str, default None
-            Method to compute the covariance matrix.
-        ann_factor: int, default None
-            Annualization factor.
         leverage: float, default None
             Leverage factor.
         target_vol: float, default None
             Target volatility for portfolio returns.
-        window_size: int, default None
-            Window size for volatility computation.
+        ann_factor: int, default None
+            Annualization factor.
         """
         self.returns = returns
         self.method = method
         self.asset_names = asset_names
-        self.cov_matrix_method = cov_matrix_method
-        self.ann_factor = ann_factor
         self.leverage = leverage
         self.target_vol = target_vol
-        self.window_size = window_size
-        self.n_assets = None
+        self.ann_factor = ann_factor
         self.freq = None
+        self.n_assets = None
+        self.exp_ret = None
         self.cov_matrix = None
         self.weights = None
         self.portfolio_ret = None
@@ -69,12 +67,14 @@ class NaiveOptimization:
             self.returns = self.returns.to_frame()
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
-        self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna()  # drop na
+        if not isinstance(self.returns.index, pd.DatetimeIndex):  # convert to single index
+            self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+        self.returns = self.returns.dropna()  # drop missing rows
 
         # method
-        if self.method not in ['equal_weight', 'inverse_vol']:
-            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_vol'")
+        if self.method not in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
+            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance', "
+                             "'inverse_vol', 'target_vol, 'random'")
 
         # asset names
         if self.asset_names is None:
@@ -83,6 +83,14 @@ class NaiveOptimization:
         # n_assets
         if self.n_assets is None:
             self.n_assets = self.returns.shape[1]
+
+        # leverage
+        if self.leverage is None:
+            self.leverage = 1.0
+
+        # target_vol
+        if self.target_vol is None:
+            self.target_vol = 0.15
 
         # ann_factor
         if self.ann_factor is None:
@@ -102,31 +110,30 @@ class NaiveOptimization:
             else:
                 self.freq = 'D'
 
-        # cov matrix
-        if self.cov_matrix is None:
-            self.cov_matrix = self.returns.cov().values
+    def compute_estimators(self) -> None:
+        """
+        Compute estimators.
+        """
+        # expected returns
+        self.exp_ret = ReturnEstimators(self.returns, method='mean').compute_expected_returns().values
 
-        # leverage
-        if self.leverage is None:
-            self.leverage = 1.0
-
-        # target_vol
-        if self.target_vol is None:
-            self.target_vol = 0.15
-
-        # window_size
-        if self.window_size is None:
-            self.window_size = self.ann_factor
+        # covariance matrix
+        self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method='covariance')
 
     def compute_equal_weight(self):
         """
         Compute equal weights for assets or strategies.
         """
+        # estimators
+        self.compute_estimators()
+
+        # weights
         self.weights = np.ones(self.n_assets) * 1 / self.n_assets
-        # compute portfolio risk and return
-        self.portfolio_ret = np.dot(self.weights, self.returns.mean())
-        self.portfolio_risk = np.sqrt(np.dot(self.weights.T, np.dot(self.returns.cov(), self.weights)))
-        self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=['weight']).T
+        self.weights = self.weights * self.leverage
+
+        # portfolio risk and return
+        self.portfolio_ret = np.dot(self.weights, self.exp_ret)
+        self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
 
         return self.weights
 
@@ -139,13 +146,114 @@ class NaiveOptimization:
         pd.DataFrame
             The inverse variance weights.
         """
-        # compute inverse variance weights
+        # estimators
+        self.compute_estimators()
+
+        # weights
         ivp = 1. / np.diag(self.cov_matrix)
         ivp /= ivp.sum()
         self.weights = ivp
-        # compute portfolio risk and return
-        self.portfolio_risk = np.dot(self.weights, np.dot(self.cov_matrix, self.weights.T))
-        self.portfolio_ret = np.dot(self.weights, self.returns.mean())
-        self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=['weight']).T
+        self.weights = self.weights * self.leverage
 
-        return self.weights * self.leverage
+        # portfolio risk and return
+        self.portfolio_ret = np.dot(self.weights, self.exp_ret)
+        self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
+
+        return self.weights
+
+    def compute_inverse_vol(self) -> pd.DataFrame:
+        """
+        Compute inverse volatility weights for assets or strategies.
+
+        Returns
+        -------
+        pd.DataFrame
+            The inverse variance weights.
+        """
+        # estimators
+        self.compute_estimators()
+
+        # weights
+        ivp = 1. / np.sqrt(np.diag(self.cov_matrix))
+        ivp /= ivp.sum()
+        self.weights = ivp
+        self.weights = self.weights * self.leverage
+
+        # portfolio risk and return
+        self.portfolio_ret = np.dot(self.weights, self.exp_ret)
+        self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
+
+        return self.weights
+
+    def compute_target_vol(self) -> pd.DataFrame:
+        """
+        Compute target volatility weights for assets or strategies.
+
+        Returns
+        -------
+        pd.DataFrame
+            The target volatility weights.
+        """
+        # compute target volatility weights
+        self.compute_inverse_vol()
+
+        # compute annualized volatility
+        ann_vol = np.sqrt(self.portfolio_risk) * np.sqrt(self.ann_factor)
+
+        # adjust weights by target volatility
+        self.leverage = self.target_vol / ann_vol
+        self.weights = self.weights * self.leverage
+
+        # portfolio risk and return
+        self.portfolio_ret = np.dot(self.weights, self.exp_ret)
+        self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
+
+        return self.weights
+
+    def compute_random(self) -> pd.DataFrame:
+        """
+        Compute random weights for assets or strategies using Dirichlet distribution.
+
+        Returns
+        -------
+        pd.DataFrame
+            The random weights.
+        """
+        # estimators
+        self.compute_estimators()
+
+        # random weights
+        self.weights = np.random.dirichlet(np.ones(self.n_assets))
+        self.weights = self.weights * self.leverage
+
+        # portfolio risk and return
+        self.portfolio_ret = np.dot(self.weights, self.exp_ret)
+        self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
+
+        return self.weights
+
+    def compute_weights(self) -> pd.DataFrame:
+        """
+        Compute the portfolio weights based on the optimization method.
+
+        Returns
+        -------
+        pd.DataFrame
+            The portfolio weights.
+        """
+        # compute weights
+        if self.method in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
+            getattr(self, f'compute_{self.method}')()
+        else:
+            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance', "
+                             "'inverse_vol', 'target_vol', 'random'")
+
+        self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=[self.returns.index[-1]]).T
+
+        return self.weights
+
+    def plot_weights(self):
+        """
+        Plot the optimized portfolio weights.
+        """
+        plot_bar(self.weights.T.sort_values(by=[self.returns.index[-1]]), axis='horizontal', x_label='weights')

@@ -8,7 +8,7 @@ from scipy.spatial.distance import squareform
 
 from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
 from factorlab.strategy_backtesting.metrics import Metrics
-from factorlab.data_viz.data_viz import plot_bar
+from factorlab.data_viz.plot import plot_bar
 
 
 class HRP:
@@ -32,7 +32,7 @@ class HRP:
                  linkage_method: str = 'single',
                  distance_metric: str = 'euclidean',
                  side_weights: Optional[pd.Series] = None,
-                 max_weight: float = 1.0,
+                 leverage: float = 1.0,
                  asset_names: Optional[List[str]] = None
                  ):
         """
@@ -56,8 +56,8 @@ class HRP:
             Metric to compute the distance matrix.
         side_weights : pd.Series, default None
             Side/direction weights for the assets or strategies (e.g. 1 for long, -1 for short).
-        max_weight : float, default 1
-            Maximum weight for the assets or strategies.
+        leverage : float, default 1.0
+            Leverage factor.
         asset_names : list, default None
             Names of the assets or strategies.
         """
@@ -66,7 +66,7 @@ class HRP:
         self.linkage_method = linkage_method
         self.distance_metric = distance_metric
         self.side_weights = side_weights
-        self.max_weight = max_weight
+        self.leverage = leverage
         self.asset_names = asset_names
         self.n_assets = None
         self.cov_matrix = None
@@ -89,6 +89,7 @@ class HRP:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+        self.returns = self.returns.dropna()  # drop missing rows
 
         # method
         if self.linkage_method not in ['single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']:
@@ -224,7 +225,7 @@ class HRP:
         # reorder asset names
         self.asset_names = [self.asset_names[i] for i in self.idxs]
 
-        self.weights = pd.DataFrame(self.weights.values, index=self.asset_names, columns=['weights'])
+        self.weights = pd.DataFrame(self.weights.values, index=self.asset_names, columns=[self.returns.index[-1]])
 
     def create_portfolio(self):
         """
@@ -238,11 +239,14 @@ class HRP:
         if len(short_port) > 0:
             # Short half size
             self.weights.loc[short_port] /= self.weights.loc[short_port].sum().values[0]
-            self.weights.loc[short_port] *= self.max_weight * -1
+            self.weights.loc[short_port] *= self.leverage * -1
 
             # Buy other half
             self.weights.loc[long_port] /= self.weights.loc[long_port].sum().values[0]
-            self.weights.loc[long_port] *= self.max_weight
+            self.weights.loc[long_port] *= self.leverage
+
+        else:
+            self.weights *= self.leverage
 
         self.weights = self.weights.T
 
@@ -267,6 +271,30 @@ class HRP:
 
         return self.weights
 
+    def plot_clusters(self):
+        """
+        Plot the clusters.
+        """
+        plt.figure(figsize=(15, 7))
+        plt.title('Hierarchical Clustering Dendrogram')
+        plt.xlabel('Assets')
+        plt.ylabel('Distance')
+        dendrogram(
+            self.clusters,
+            labels=self.asset_names,
+            orientation='left',
+            leaf_rotation=0.,  # rotates the x axis labels
+            leaf_font_size=8.,  # font size for the x axis labels
+        )
+        plt.tight_layout()
+        plt.show()
+
+    def plot_weights(self):
+        """
+        Plot the optimized portfolio weights.
+        """
+        plot_bar(self.weights.T.sort_values(by=[self.returns.index[-1]]), axis='horizontal', x_label='weights')
+
 
 class HERC:
     """
@@ -284,12 +312,13 @@ class HERC:
     """
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
+                 risk_measure: str = 'equal_weight',
                  alpha: float = 0.05,
-                 risk_measure: str = 'variance',
+                 cov_matrix_method: str = 'covariance',
                  n_clusters: Optional[int] = None,
                  linkage_method: str = 'ward',
                  distance_metric: str = 'euclidean',
-                 max_weight: float = 1.0,
+                 leverage: float = 1.0,
                  asset_names: Optional[List[str]] = None
                  ):
         """
@@ -299,11 +328,15 @@ class HERC:
         ----------
         returns : pd.DataFrame or pd.Series
             Returns of the assets or strategies.
-        alpha : float, default 0.05
-            Confidence level/threshold for the tails of the distribution of returns.
-        risk_measure : str, {'variance', 'standard_deviation', 'equal_weight', 'expected_shortfall',
-        'conditional_drawdown_risk'}, default 'variance'
+        risk_measure : str, {'equal_weight', 'variance', 'std', 'expected_shortfall', 'conditional_drawdown_risk'},
+        default 'equal_weight'
             Risk measure to compute the risk contribution.
+        alpha : float, default 0.05
+            Confidence level/threshold for the tails of the distribution of returns for risk measure.
+        cov_matrix_method : str, {'covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
+                        'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+                        'exponential_covariance', 'denoised_covariance'}, default 'covariance'
+            Method to compute the covariance matrix.
         n_clusters : int, default None
             Number of clusters.
         linkage_method : str, {'single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward'},
@@ -314,17 +347,18 @@ class HERC:
         ‘rogerstanimoto’, ‘russellrao’, ‘seuclidean’, ‘sokalmichener’, ‘sokalsneath’,
         ‘sqeuclidean’, ‘yule'}, default 'euclidean'
             Metric to compute the distance matrix.
-        max_weight : float, default 1
-            Maximum weight for the assets or strategies.
+        leverage : float, default 1.0
+            Leverage factor.
         asset_names : list, default None
             Names of the assets or strategies.
         """
         self.returns = returns
-        self.alpha = alpha
         self.risk_measure = risk_measure
+        self.alpha = alpha
+        self.cov_matrix_method = cov_matrix_method
         self.linkage_method = linkage_method
         self.distance_metric = distance_metric
-        self.max_weight = max_weight
+        self.leverage = leverage
         self.asset_names = asset_names
         self.n_assets = None
         self.cov_matrix = None
@@ -350,13 +384,13 @@ class HERC:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+        self.returns = self.returns.dropna()  # drop missing rows
 
         # risk measure
-        if self.risk_measure not in ['variance', 'standard_deviation', 'equal_weight', 'expected_shortfall',
-                 'conditional_drawdown_risk']:
-            raise ValueError("Unknown allocation metric specified. Supported metrics are - variance, "
-                             "standard_deviation, equal_weight, expected_shortfall, "
-                             "conditional_drawdown_risk")
+        if self.risk_measure not in ['equal_weight', 'variance', 'std', 'expected_shortfall',
+                                     'conditional_drawdown_risk']:
+            raise ValueError("Unknown allocation metric specified. Supported metrics are - equal_weight, "
+                             "variance, std, expected_shortfall, conditional_drawdown_risk")
 
         # method
         if self.linkage_method not in ['single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']:
@@ -377,7 +411,7 @@ class HERC:
         """
         # covariance matrix
         if self.cov_matrix is None:
-            self.cov_matrix = self.returns.cov().values
+            self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method=self.cov_matrix_method)
 
         # correlation matrix
         if self.corr_matrix is None:
@@ -521,6 +555,25 @@ class HERC:
         w /= w.sum()
         return w
 
+    @staticmethod
+    def compute_inverse_volatility_weights(cov_matrix) -> np.ndarray:
+        """
+        Compute the inverse volatility weights.
+
+        Parameters
+        ----------
+        cov_matrix : np.ndarray
+            The covariance matrix.
+
+        Returns
+        -------
+        w: np.ndarray
+            The inverse volatility weights.
+        """
+        w = 1 / np.sqrt(np.diag(cov_matrix))
+        w /= w.sum()
+        return w
+
     def compute_inverse_cvar_weights(self, returns) -> np.ndarray:
         """
         Compute the inverse CVaR weights.
@@ -535,9 +588,8 @@ class HERC:
         w: np.ndarray
             The inverse CVaR weights.
         """
-        w = Metrics(returns).expected_shortfall(alpha=self.alpha)
-        w = (1 / w)
-        w /= w.sum()\
+        w = 1 / Metrics(returns).expected_shortfall(alpha=self.alpha)
+        w /= w.sum()
 
         return w.values
 
@@ -555,8 +607,7 @@ class HERC:
         w: np.ndarray
             The inverse CDaR weights.
         """
-        w = Metrics(returns).conditional_drawdown_risk(alpha=self.alpha)
-        w = (1 / w)
+        w = 1 / Metrics(returns).conditional_drawdown_risk(alpha=self.alpha)
         w /= w.sum()
 
         return w.values
@@ -673,8 +724,10 @@ class HERC:
         if self.risk_measure == 'equal_weight':
             n_assets_in_cluster = len(self.cluster_children[cluster_idx])
             parity_weights = np.ones(n_assets_in_cluster) / n_assets_in_cluster
-        elif self.risk_measure in ['variance', 'std']:
+        elif self.risk_measure == 'variance':
             parity_weights = self.compute_inverse_variance_weights(cov_matrix)
+        elif self.risk_measure == 'std':
+            parity_weights = self.compute_inverse_volatility_weights(cov_matrix)
         elif self.risk_measure == 'expected_shortfall':
             parity_weights = self.compute_inverse_cvar_weights(returns)
         else:
@@ -760,7 +813,8 @@ class HERC:
         self.recursive_bisection()
 
         # weights
-        self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=['weights']).iloc[self.idxs].T
+        self.weights = pd.DataFrame(self.weights * self.leverage, index=self.asset_names,
+                                    columns=[self.returns.index[-1]]).iloc[self.idxs].T
 
         return self.weights
 
@@ -786,7 +840,7 @@ class HERC:
         """
         Plot the optimized portfolio weights.
         """
-        plot_bar(self.weights.T.sort_values(by='weights'), axis='horizontal', x_label='weights')
+        plot_bar(self.weights.T.sort_values(by=[self.returns.index[-1]]), axis='horizontal', x_label='weights')
 
 
 class NCO:

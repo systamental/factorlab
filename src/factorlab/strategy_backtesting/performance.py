@@ -66,7 +66,7 @@ class Performance:
             DataFrame with computed performance metrics.
         """
         return Metrics(self.returns, risk_free_rate=self.risk_free_rate, as_excess_returns=self.as_excess_returns,
-                       mkt_ret=self.mkt_ret, ret_type= self.ret_type, window_type=self.window_type,
+                       mkt_ret=self.mkt_ret, ret_type=self.ret_type, window_type=self.window_type,
                        window_size=self.window_size, ann_factor=self.ann_factor)
 
     def get_table(self, metrics: Union[str, List[str]] = 'key_metrics', rank_on: str = None) -> pd.DataFrame:
