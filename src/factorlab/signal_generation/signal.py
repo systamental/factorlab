@@ -193,20 +193,24 @@ class Signal:
             self.signals = pd.DataFrame(norm.cdf(self.norm_factors), index=self.norm_factors.index,
                                         columns=self.norm_factors.columns)
             self.signals = (self.signals * 2) - 1
+
         # uniform distribution
         elif pdf == 'min-max':
             self.normalize(method='min-max', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             self.signals = (self.norm_factors * 2) - 1
+
         # percentile rank
         elif pdf == 'percentile':
             self.normalize(method='percentile', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             self.signals = (self.norm_factors * 2) - 1
+
         # logistic
         elif pdf == 'logistic':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             self.signals = pd.DataFrame(logistic.cdf(self.norm_factors), index=self.norm_factors.index,
                                         columns=self.norm_factors.columns)
             self.signals = (self.signals * 2) - 1
+
         # adjusted normal distribution
         else:
             self.normalize(method='adj_norm', centering=True, ts_norm=ts_norm, winsorize=winsorize)
