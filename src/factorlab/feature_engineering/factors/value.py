@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from typing import Union, Optional
 
-from factorlab.feature_analysis.time_series_analysis import linear_reg
+from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
 from factorlab.feature_engineering.transformations import Transform
 
 
@@ -57,16 +57,7 @@ class Value:
         res_window_size: int, default 7
             Number of observations in moving window.
         """
-        # convert data types
-        if isinstance(df, pd.Series):
-            df = df.to_frame()
-        if not isinstance(df.index, pd.MultiIndex):
-            df = df.stack()
-        # check fields
-        if all([col not in df.columns for col in ['ratio', 'spot', 'mkt_cap']]):
-            raise ValueError("'spot' price, 'mkt_cap' or 'ratio' series must be provided to compute value factor.")
-
-        self.df = df.copy()
+        self.df = df.to_frame() if isinstance(df, pd.Series) else df
         self.method = method
         self.value_fcn = value_fcn
         self.ratio = ratio
@@ -79,6 +70,35 @@ class Value:
         self.res_window_type = res_window_type
         self.res_window_size = res_window_size
         self.resid = None
+        self.value_factor = None
+        self.check_fields()
+        self.convert_to_multiindex()
+
+    def check_fields(self) -> None:
+        """
+        Checks if required fields are in dataframe.
+
+        Returns
+        -------
+        None
+        """
+        # check fields
+        if all([col not in self.df.columns for col in ['ratio', 'spot', 'mkt_cap']]):
+            raise ValueError("'spot' price, 'mkt_cap' or 'ratio' series must be provided to compute value factor.")
+
+    def convert_to_multiindex(self) -> pd.DataFrame:
+        """
+        Converts DataFrame to MultiIndex.
+
+        Returns
+        -------
+        df: pd.DataFrame
+            DataFrame with MultiIndex.
+        """
+        if not isinstance(self.df.index, pd.MultiIndex):
+            self.df = self.df.stack(future_stack=True)
+
+        return self.df
 
     def remove_empty_cols(self, price: str = 'mkt_cap', value_metric: str = 'add_act') -> pd.DataFrame:
         """
@@ -103,7 +123,7 @@ class Value:
             self.df = self.df.loc[:, [price, value_metric]]
 
         # remove empty cols
-        self.df = self.df.unstack().dropna(how='all', axis=1).stack()
+        self.df = self.df.unstack().dropna(how='all', axis=1).stack(future_stack=True)
 
         # keep common tickers
         tickers = list(set(self.df[price].unstack().columns).intersection(self.df[value_metric].unstack().columns))
@@ -160,14 +180,11 @@ class Value:
 
             # remove empty cols
             self.remove_empty_cols(price, value_metric)
-
             # value fcn
             self.value_function(value_metric)
-
             # log
             if self.log:
                 self.df = Transform(self.df).log()
-
             # ratio
             self.ratio = self.df[value_metric].divide(self.df[price])
 
@@ -204,9 +221,8 @@ class Value:
             self.df = Transform(self.df).log()
 
         # fit linear regression
-        self.resid = self.df.groupby(level=1, group_keys=False).apply(lambda x: linear_reg(x[price], x[value_metric],
-                                     window_type=self.res_window_type, output='resid', log=False, trend='c',
-                                     window_size=self.res_window_size)) * -1
+        self.resid = TSA(self.df[price], self.df[value_metric], window_type=self.res_window_type, trend='c',
+                         window_size=self.res_window_size).linear_regression(output='resid')
 
         return self.resid
 
@@ -260,30 +276,32 @@ class Value:
         """
         # compute value factor
         if self.method == 'ratio':  # ratio
-            value_factor = self.compute_ratio(price, value_metric)
+            self.value_factor = self.compute_ratio(price, value_metric)
         else:
             # fit linear regression
-            value_factor = self.compute_residual(price, value_metric)
+            self.value_factor = self.compute_residual(price, value_metric)
 
         # normalize
         if self.ts_norm:
-            value_factor = Transform(value_factor).normalize_ts(method=self.norm_method, window_type='expanding')
+            self.value_factor = Transform(self.value_factor).normalize(axis='ts', method=self.norm_method,
+                                                                       window_type='expanding')
 
         # smoothing
         if self.smoothing is not None:
-            value_factor = Transform(value_factor).smooth(self.sm_window_size, window_type=self.smoothing,
-                                                          central_tendency=self.sm_central_tendency)
+            self.value_factor = Transform(self.value_factor).smooth(self.sm_window_size, window_type=self.smoothing,
+                                                               central_tendency=self.sm_central_tendency)
 
         # name factor
         factor_name = self.name_factor(name)
 
         # return df
-        if isinstance(value_factor, pd.Series):
-            value_factor = value_factor.to_frame(factor_name)
+        if isinstance(self.value_factor, pd.Series):
+            self.value_factor = self.value_factor.to_frame(factor_name).dropna().sort_index()
         else:
-            value_factor.columns = [factor_name]
+            self.value_factor = self.value_factor.dropna().sort_index()
+            self.value_factor.columns = [factor_name]
 
-        return value_factor.dropna().sort_index()
+        return self.value_factor
 
     def nvt(self,
             price: str = 'mkt_cap',
@@ -351,7 +369,7 @@ class Value:
 
         # sf ratio
         self.df['sf'] = (self.df[value_metric].unstack().diff(periods=365) /
-                         self.df[value_metric].unstack()).stack() * -1
+                         self.df[value_metric].unstack()).stack(future_stack=True) * -1
         value_metric = 'sf'
         # compute value factor
         nvsf = self.compute_value_factor(price, value_metric, name)
@@ -407,10 +425,8 @@ class Value:
         """
         # log
         log_price = Transform(self.df[price]).log()
-
         # negative price mom
-        npm = log_price.groupby(level=1).diff(lookback) * -1
-
+        npm = log_price.groupby(level=1).diff(lookback).to_frame() * -1
         # rename
         npm.columns = [f"{name}_{lookback}"]
 
