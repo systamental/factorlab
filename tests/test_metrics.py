@@ -7,18 +7,27 @@ from factorlab.strategy_backtesting.metrics import Metrics
 
 
 @pytest.fixture
-def crypto_log_returns():
+def binance_spot():
     """
     Fixture for crypto OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=['date']).loc[:, : 'close']
 
+    return df
+
+
+@pytest.fixture
+def crypto_log_returns(binance_spot):
+    """
+    Fixture for crypto OHLCV prices.
+    """
+
     # drop tickers with nobs < ts_obs
-    obs = df.groupby(level=1).count().min(axis=1)
+    obs = binance_spot.groupby(level=1).count().min(axis=1)
     drop_tickers_list = obs[obs < 365].index.to_list()
-    df = df.drop(drop_tickers_list, level=1, axis=0)
+    df = binance_spot.drop(drop_tickers_list, level=1, axis=0)
 
     ret = Transform(df).returns().close.unstack()
 
@@ -26,19 +35,14 @@ def crypto_log_returns():
 
 
 @pytest.fixture
-def crypto_simple_returns():
+def crypto_simple_returns(binance_spot):
     """
     Fixture for crypto OHLCV prices.
     """
-    # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
-                     parse_dates=['date']).loc[:, : 'close']
-
     # drop tickers with nobs < ts_obs
-    # drop tickers with nobs < ts_obs
-    obs = df.groupby(level=1).count().min(axis=1)
+    obs = binance_spot.groupby(level=1).count().min(axis=1)
     drop_tickers_list = obs[obs < 365].index.to_list()
-    df = df.drop(drop_tickers_list, level=1, axis=0)
+    df = binance_spot.drop(drop_tickers_list, level=1, axis=0)
 
     ret = Transform(df).returns(method='simple').close.unstack()
 

@@ -12,7 +12,7 @@ def ohlcv():
     Fixture for daily OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv('../src/factorlab/datasets/data/cc_spot_prices.csv', index_col=['date', 'ticker'],
+    df = pd.read_csv('../src/factorlab/datasets/data/binance_spot_prices.csv', index_col=['date', 'ticker'],
                      parse_dates=True)
 
     # drop tickers with nobs < ts_obs
@@ -246,7 +246,7 @@ class TestTrend:
         # shape
         assert actual.shape[1] == 1
         assert actual_btc.shape[1] == 1
-        assert actual.shape[0] == self.trend_instance.df.shape[0] - 1
+        assert actual.shape[0] == self.trend_instance.df.shape[0]
         assert actual_btc.shape[0] == self.btc_trend_instance.df.shape[0]
 
         # dtypes
@@ -284,7 +284,7 @@ class TestTrend:
         # shape
         assert actual.shape[1] == 1
         assert actual_btc.shape[1] == 1
-        assert actual.shape[0] == self.trend_instance.df.shape[0] - 1
+        assert actual.shape[0] == self.trend_instance.df.shape[0]
         assert actual_btc.shape[0] == self.btc_trend_instance.df.shape[0]
 
         # dtypes

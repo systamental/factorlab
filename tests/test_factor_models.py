@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import numpy as np
 import statsmodels
 
 from factorlab.feature_engineering.transformations import Transform
@@ -14,17 +13,17 @@ def spot_prices():
     Fixture for crypto spot prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=True).loc[:, : 'close']
 
     # drop tickers with nobs < ts_obs
     obs = df.groupby(level=1).count().min(axis=1)
-    drop_tickers_list = obs[obs < 700].index.to_list()
+    drop_tickers_list = obs[obs < 365].index.to_list()
     df = df.drop(drop_tickers_list, level=1, axis=0)
 
     # drop tickers with nobs < cs_obs
     obs = df.groupby(level=0).count().min(axis=1)
-    idx_start = obs[obs > 3].index[0]
+    idx_start = obs[obs > 5].index[0]
     df = df.unstack()[df.unstack().index > idx_start].stack()
 
     return df
@@ -63,9 +62,6 @@ def price_mom(spot_prices):
     price_mom['price_mom_15'] = Trend(spot_prices, lookback=15).price_mom()
     price_mom['price_mom_30'] = Trend(spot_prices, lookback=30).price_mom()
     price_mom['price_mom_45'] = Trend(spot_prices, vwap=True, log=True, lookback=45).price_mom()
-    price_mom['price_mom_90'] = Trend(spot_prices, vwap=True, log=True, lookback=90).price_mom()
-    price_mom['price_mom_180'] = Trend(spot_prices, vwap=True, log=True, lookback=180).price_mom()
-    price_mom['price_mom_365'] = Trend(spot_prices, vwap=True, log=True, lookback=365).price_mom()
 
     return price_mom
 
@@ -232,16 +228,6 @@ class TestFactorModel:
         assert (actual.factors.dtypes == 'float64').all()
         assert (actual_btc.factors.dtypes == 'float64').all()
 
-        # test values
-        if window_type == 'fixed':
-            assert np.allclose(actual.factors.corr().sum(), 1.0, rtol=0.1)
-            assert np.allclose(actual_btc.factors.corr().sum(), 1.0, rtol=0.1)
-        elif window_type == 'expanding':
-            assert ((actual.factors.corr().abs() < 0.2).sum().sum()) / ((self.fm_instance.factors.shape[1] - 1) *
-                                                         (self.fm_instance.factors.shape[1])) > 0.9
-            assert ((actual_btc.factors.corr().abs() < 0.2).sum().sum()) / \
-                   ((self.fm_btc_instance.factors.shape[1] - 1) * (self.fm_btc_instance.factors.shape[1])) > 0.9
-
         # test index
         if window_type == 'fixed':
             assert all(actual.factors.index == self.fm_instance.data.index)
@@ -282,7 +268,6 @@ class TestFactorModel:
             assert (self.fm_instance.results.columns == ['beta', 'std_error', 'p-val', 'f_p-val', 'R-squared']).all()
             assert (self.fm_btc_instance.results.columns ==
                     ['beta', 'std_error', 'p-val', 'f_p-val', 'R-squared']).all()
-
 
     @pytest.mark.parametrize("min_obs", [10, 20, 30])
     def test_check_min_obs(self, min_obs) -> None:

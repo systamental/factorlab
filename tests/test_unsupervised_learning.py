@@ -19,47 +19,12 @@ def fx_returns_z_monthly():
 
 
 @pytest.fixture
-def us_eqty_returns_z_daily():
-    """
-    Fixture for standardized (z-score) daily US equity returns.
-    """
-    # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/us_equities_top3000_close_adj_daily.csv",
-                     index_col=['date', 'ticker'], parse_dates=True)
-    # drop tickers with nobs < ts_obs
-    obs = df.unstack().iloc[-2500:].close_adj.count()
-    drop_tickers_list = obs[obs < 2500].index.to_list()
-    df1 = df.drop(drop_tickers_list, level=1, axis=0)  # drop tickers with nobs < ts_obs
-    # compute standardized returns and return dataframe with single index
-    eqty_ret_df = Transform(df1.unstack().close_adj).returns()
-    return Transform(eqty_ret_df).normalize(axis='ts', window_type='expanding').dropna()
-
-
-@pytest.fixture
-def us_eqty_returns_monthly_yoy():
-    """
-    Fixture for monthly US equity returns, yoy % chg.
-    """
-    # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/us_equities_top3000_close_adj_daily.csv",
-                     index_col=['date', 'ticker'], parse_dates=True)
-    # drop tickers with nobs < ts_obs
-    obs = df.unstack().iloc[-2500:].close_adj.count()
-    drop_tickers_list = obs[obs < 2500].index.to_list()
-    df1 = df.drop(drop_tickers_list, level=1, axis=0)  # drop tickers with nobs < ts_obs
-    # resample to monthly
-    eqty_ret_df = df1.unstack().close_adj.resample('M').last().pct_change(12).dropna()
-
-    return eqty_ret_df
-
-
-@pytest.fixture
 def crypto_returns_z_daily():
     """
     Fixture for daily cryptoasset returns.
     """
     # read csv from datasets/data
-    df = pd.read_csv('../src/factorlab/datasets/data/crypto_market_data.csv', index_col=['date', 'ticker'],
+    df = pd.read_csv('../src/factorlab/datasets/data/binance_spot_prices.csv', index_col=['date', 'ticker'],
                      parse_dates=True)
     ret = Transform(df).returns()
     # compute standardized returns and return dataframe with single index
@@ -122,13 +87,10 @@ class TestPCAWrapper:
 
         # test sign of pc1
         assert pd.concat([actual.iloc[:, 0], cs_mean], axis=1).corr().iloc[0, 1] > 0
-
         # test shape
         assert actual.shape == fx_returns_z_monthly.shape
-
         # index
         assert all(actual.index == fx_returns_z_monthly.index)
-
         # cols
         assert all(actual.columns == range(fx_returns_z_monthly.shape[1]))
 
@@ -142,13 +104,10 @@ class TestPCAWrapper:
 
         # test pc1 correl
         assert pd.concat([fixed[0], rolling[0]], axis=1).corr().iloc[0, 1] > 0.9
-
         # test shape
         assert (fixed.shape[0] - rolling.shape[0]) < window_size
-
         # index
         assert all(rolling.index == fixed.iloc[-rolling.shape[0]:].index)
-
         # cols
         assert all(rolling.columns == range(fx_returns_z_monthly.shape[1]))
 
@@ -162,13 +121,10 @@ class TestPCAWrapper:
 
         # test values
         assert all(np.abs(fixed - rolling.mean()) < 0.15)
-
         # test shape
         assert (fixed.shape[0] - rolling.shape[0]) < 60
-
         # index
         assert all(rolling.index == fx_returns_z_monthly.iloc[-rolling.shape[0]:].index)
-
         # cols
         assert all(rolling.columns == range(fx_returns_z_monthly.shape[1]))
 
@@ -184,13 +140,10 @@ class TestPCAWrapper:
         assert pd.concat([fixed[0], exp[0]], axis=1).corr().iloc[0, 1] > 0.9
         # test values
         assert np.allclose(fixed.iloc[-1], exp.iloc[-1])
-
         # test shape
         assert (fixed.shape[0] - exp.shape[0]) < min_obs
-
         # index
         assert all(exp.index == fixed.iloc[-exp.shape[0]:].index)
-
         # cols
         assert all(exp.columns == range(fx_returns_z_monthly.shape[1]))
 
@@ -205,13 +158,10 @@ class TestPCAWrapper:
         # test values
         assert all(np.abs(fixed - exp.mean()) < 0.15)
         assert np.allclose(exp.iloc[-1].values, fixed)
-
         # test shape
         assert (exp.shape[0] - fx_returns_z_monthly.shape[0]) < min_obs
-
         # index
         assert all(exp.index == fx_returns_z_monthly.iloc[-exp.shape[0]:].index)
-
         # cols
         assert all(exp.columns == range(fx_returns_z_monthly.shape[1]))
 
@@ -253,13 +203,10 @@ class TestR2PCA:
 
         # test sign of pc1
         assert pd.concat([actual.iloc[:, 0], cs_mean], axis=1).corr().iloc[0, 1] > 0
-
         # test shape
         assert actual.shape == fx_returns_z_monthly.shape
-
         # index
         assert all(actual.index == fx_returns_z_monthly.index)
-
         # cols
         assert all(actual.columns == range(self.default_pca_instance.n_components))
 
@@ -273,14 +220,11 @@ class TestR2PCA:
 
         # test pc1 correl
         assert pd.concat([fixed[0], rolling[0]], axis=1).corr().iloc[0, 1] > 0.9
-
         # test shape
         assert (fx_returns_z_monthly.shape[0] - rolling.shape[0]) < window_size
         assert rolling.shape[1] == self.default_pca_instance.n_components
-
         # index
         assert all(rolling.index == fx_returns_z_monthly.iloc[-rolling.shape[0]:].index)
-
         # cols
         assert all(rolling.columns == range(self.default_pca_instance.n_components))
 
@@ -294,14 +238,11 @@ class TestR2PCA:
 
         # test values
         assert all(np.abs(fixed - rolling.mean()) < 0.15)
-
         # test shape
         assert (fx_returns_z_monthly.shape[0] - rolling.shape[0]) < 60
         assert rolling.shape[1] == self.default_pca_instance.n_components
-
         # index
         assert all(rolling.index == fx_returns_z_monthly.iloc[-rolling.shape[0]:].index)
-
         # cols
         assert all(rolling.columns == range(self.default_pca_instance.n_components))
 
@@ -315,14 +256,11 @@ class TestR2PCA:
 
         # test pc1 correl
         assert pd.concat([fixed[0], exp[0]], axis=1).corr().iloc[0, 1] > 0.9
-
         # test shape
         assert (fx_returns_z_monthly.shape[0] - exp.shape[0]) < min_obs
         assert exp.shape[1] == self.default_pca_instance.n_components
-
         # index
         assert all(exp.index == fx_returns_z_monthly.iloc[-exp.shape[0]:].index)
-
         # cols
         assert all(exp.columns == range(self.default_pca_instance.n_components))
 
@@ -337,14 +275,11 @@ class TestR2PCA:
         # test values
         assert all(np.abs(fixed - exp.mean()) < 0.15)
         assert np.allclose(exp.iloc[-1].values, fixed)
-
         # test shape
         assert (exp.shape[0] - fx_returns_z_monthly.shape[0]) < min_obs
         assert exp.shape[1] == self.default_pca_instance.n_components
-
         # index
         assert all(exp.index == fx_returns_z_monthly.iloc[-exp.shape[0]:].index)
-
         # cols
         assert all(exp.columns == range(self.default_pca_instance.n_components))
 
@@ -372,9 +307,9 @@ class TestPPCA:
 
     @pytest.mark.parametrize("min_obs, min_feat, expected",
                              [
-                                 (10, 5, (2870, 142)),
-                                 (10, 8, (2866, 142)),
-                                 (365, 5, (2870, 131))
+                                 (10, 5, (357, 225)),
+                                 (10, 8, (357, 225)),
+                                 (30, 5, (357, 223))
                              ]
                              )
     def test_preprocess_data(self, crypto_returns_z_daily, min_obs, min_feat, expected) -> None:
@@ -383,7 +318,6 @@ class TestPPCA:
         """
         # actual
         actual = PPCA(crypto_returns_z_daily, min_obs=min_obs, min_feat=min_feat).preprocess_data().shape
-
         # test shape
         assert actual == expected
 
@@ -394,9 +328,8 @@ class TestPPCA:
         # actual
         actual = self.default_ppca_instance.em_algo()
         actual_fx = self.default_fx_ppca_instance.em_algo()
-
         # test shape
-        assert actual.shape == (142, 142)
+        assert actual.shape == (225, 225)
         assert actual_fx.shape == (27, 27)
 
     def test_decompose(self) -> None:
@@ -406,9 +339,8 @@ class TestPPCA:
         # actual
         actual = self.default_ppca_instance.decompose()
         actual_fx = self.default_fx_ppca_instance.decompose()
-
         # test shape
-        assert actual.shape[0] == 142
+        assert actual.shape[0] == 225
         assert actual_fx.shape == (27, 27)
 
     def test_get_eig(self, fx_returns_z_monthly) -> None:
@@ -420,10 +352,8 @@ class TestPPCA:
 
         # test values
         assert np.allclose(np.abs(actual_ppca_fx), np.abs(actual_pca_fx), rtol=0.25, atol=0.25)
-
         # test shape
         assert actual_ppca_fx.shape == actual_pca_fx.shape
-
         # test type
         assert isinstance(actual_ppca_fx, np.ndarray)
 
@@ -437,10 +367,8 @@ class TestPPCA:
 
         # test values
         assert np.allclose(np.abs(actual_ppca_fx), np.abs(actual_pca_fx), rtol=0.25, atol=0.25)
-
         # test shape
         assert actual_ppca_fx.shape == actual_pca_fx.shape
-
         # test type
         assert isinstance(actual_ppca_fx, np.ndarray) or isinstance(actual_pca_fx, pd.DataFrame)
 
@@ -454,9 +382,7 @@ class TestPPCA:
 
         # test values
         assert np.allclose(actual_ppca_fx, actual_pca_fx)
-
         # test shape
         assert actual_ppca_fx.shape == actual_pca_fx.shape
-
         # test type
         assert isinstance(actual_ppca_fx, np.ndarray)

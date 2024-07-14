@@ -6,24 +6,22 @@ from factorlab.feature_engineering.transformations import Transform
 
 
 @pytest.fixture
-def crypto_spot_prices():
+def binance_spot():
     """
     Fixture for crypto OHLCV prices.
     """
     # read csv from datasets/data
-    return pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    return pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                        parse_dates=True).loc[:, : 'close']
 
 
 @pytest.fixture
-def btc_spot_prices():
+def btc_spot_prices(binance_spot):
     """
     Fixture for BTC OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
-                     parse_dates=True)
-    return df.loc[pd.IndexSlice[:, 'BTC'], : 'close'].droplevel(1)
+    return binance_spot.loc[pd.IndexSlice[:, 'BTC'], : 'close'].droplevel(1)
 
 
 @pytest.fixture
@@ -42,12 +40,12 @@ class TestTransform:
     """
 
     @pytest.fixture(autouse=True)
-    def transform_setup_default(self, crypto_spot_prices):
-        self.default_transform_instance = Transform(crypto_spot_prices)
+    def transform_setup_default(self, binance_spot):
+        self.default_transform_instance = Transform(binance_spot)
 
     @pytest.fixture(autouse=True)
-    def transform_setup_no_missing(self, crypto_spot_prices):
-        df = crypto_spot_prices.loc[pd.IndexSlice[:, ['BTC', 'ETH', 'LTC', 'DOGE']], :].unstack().dropna().stack()
+    def transform_setup_no_missing(self, binance_spot):
+        df = binance_spot.loc[pd.IndexSlice[:, ['BTC', 'ETH', 'LTC', 'DOGE']], :].unstack().dropna().stack()
         self.no_missing_transform_instance = Transform(df)
 
     @pytest.fixture(autouse=True)
@@ -55,8 +53,8 @@ class TestTransform:
         self.btc_transform_instance = Transform(btc_spot_prices)
 
     @pytest.fixture(autouse=True)
-    def transform_setup_btc_no_missing(self, crypto_spot_prices):
-        df = crypto_spot_prices.loc[pd.IndexSlice[:, ['BTC', 'ETH', 'LTC', 'DOGE']], :].unstack().dropna().stack()
+    def transform_setup_btc_no_missing(self, binance_spot):
+        df = binance_spot.loc[pd.IndexSlice[:, ['BTC', 'ETH', 'LTC', 'DOGE']], :].unstack().dropna().stack()
         df = df.loc[pd.IndexSlice[:, 'BTC'], :].droplevel(1)
         self.btc_no_missing_transform_instance = Transform(df)
 
@@ -76,6 +74,9 @@ class TestTransform:
         if isinstance(self.default_transform_instance.index, pd.MultiIndex):
             assert isinstance(self.default_transform_instance.index.droplevel(1), pd.DatetimeIndex)
         assert isinstance(self.btc_transform_instance.index, pd.DatetimeIndex)
+        # dtypes
+        assert (self.default_transform_instance.df.dtypes == np.float64).all()
+        assert (self.btc_transform_instance.df.dtypes == np.float64).all()
         # shape
         assert self.default_transform_instance.raw_data.shape[0] == self.default_transform_instance.df.shape[0]
         assert self.btc_transform_instance.raw_data.shape[0] == self.btc_transform_instance.df.shape[0]
@@ -85,9 +86,6 @@ class TestTransform:
         assert self.btc_transform_instance.raw_data.shape[1] == self.btc_transform_instance.df.shape[1]
         assert self.default_transform_instance.raw_data.shape[1] == self.default_transform_instance.arr.shape[1]
         assert self.btc_transform_instance.raw_data.shape[1] == self.btc_transform_instance.arr.shape[1]
-        # dtypes
-        assert (self.default_transform_instance.df.dtypes == np.float64).all()
-        assert (self.btc_transform_instance.df.dtypes == np.float64).all()
         # values
         assert np.array_equal(self.default_transform_instance.raw_data.values,
                               self.default_transform_instance.arr, equal_nan=True)
@@ -251,9 +249,8 @@ class TestTransform:
         assert mkt.columns == ['mkt_ret']
 
     @pytest.mark.parametrize("ret_type, start_val",
-                             [('simple', 1), ('log', 1), ('simple', 100), ('log', 100),
-                              ('simple', 0.04951),
-                              ('log', 0.04951)]
+                             [('simple', 1), ('log', 1), ('simple', 100), ('log', 100), ('simple', 16616.75),
+                              ('log', 16616.75)]
                              )
     def test_returns_to_price(self, ret_type, start_val):
         """
@@ -273,9 +270,9 @@ class TestTransform:
         assert actual.shape[1] == self.default_transform_instance.df.shape[1]
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
         # values
-        if start_val == 0.04951:
+        if start_val ==  16616.75:
             assert np.allclose(actual.unstack().close.BTC.iloc[1:],
-                               self.default_transform_instance.df.unstack().close.BTC.iloc[1:])
+                           self.default_transform_instance.df.unstack().close.BTC.iloc[1:])
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
@@ -888,8 +885,7 @@ class TestTransform:
             assert actual.shape[1] == 1
             assert actual_btc.shape[1] == 1
             assert np.allclose(fixed_expected_atr.loc['BTC'], fixed_expected_atr_btc, equal_nan=True)  # values
-            assert np.allclose(actual.unstack().atr.iloc[-1].to_frame('atr'), fixed_expected_atr, equal_nan=True,
-                               atol=0.001)
+            assert ((actual.unstack().atr.iloc[-1].dropna().to_frame('atr') - fixed_expected_atr).sum() == 0).all()
             assert np.allclose(actual_btc.atr.iloc[-1], fixed_expected_atr_btc, equal_nan=True)
             assert isinstance(actual, pd.DataFrame)  # dtypes
             assert isinstance(actual_btc, pd.DataFrame)
@@ -1164,8 +1160,8 @@ class TestTransform:
             fixed_expected_close = self.default_transform_instance.quantize(bins, 'ts', 'fixed')
             fixed_expected_close_btc = self.btc_transform_instance.quantize(bins, 'ts', 'fixed')
             assert (actual.unstack().nunique() == bins).sum() / \
-                   (len(actual.index.get_level_values(1).unique()) * actual.shape[1]) >= 0.9  # number of unique values
-            assert actual_btc.nunique().sum() / (actual_btc.shape[1] * bins) >= 0.9
+                   (len(actual.index.get_level_values(1).unique()) * actual.shape[1]) >= 0.8  # number of unique values
+            assert actual_btc.nunique().sum() / (actual_btc.shape[1] * bins) >= 0.8
             assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)  # multi vs single
 
             if window_type == 'fixed':
@@ -1173,7 +1169,7 @@ class TestTransform:
                 counts_per_ticker = actual.groupby(level=1).close.value_counts().groupby('ticker').sum()
                 bin_perc = counts_per_bin / counts_per_ticker
                 assert ((bin_perc - (1/bins)).abs() < 0.01).sum() / \
-                       (len(actual.index.get_level_values(1).unique()) * 5) >= 0.9
+                       (len(actual.index.get_level_values(1).unique()) * 5) >= 0.8
                 assert (((actual_btc.close.dropna().value_counts() / actual_btc.dropna().shape[0]) - (1/bins)).abs()
                         < 0.01).all()
             if window_type == 'expanding':

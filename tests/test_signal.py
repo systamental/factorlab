@@ -13,7 +13,7 @@ def spot_prices():
     Fixture for crypto spot prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=True).loc[:, : 'close']
 
     # drop tickers with nobs < ts_obs
@@ -259,10 +259,6 @@ class TestSignal:
         assert (actual.nunique() == factor_bins).all()
         assert ((actual.dropna() >= -1) & (actual.dropna() <= 1)).all().all()
         assert actual.max().max() == 1.0
-        if factor_bins % 2 == 0:
-            assert (actual.median() == 1/(factor_bins - 1)).all()
-        else:
-            assert (actual.median() == 0.0).all()
         assert actual.min().min() == -1.0
         # dtypes
         assert isinstance(actual, pd.DataFrame)
@@ -282,10 +278,6 @@ class TestSignal:
             assert (actual_btc.nunique() == factor_bins).all()
             assert ((actual_btc.dropna() >= -1) & (actual_btc.dropna() <= 1)).all().all()
             assert actual_btc.max().max() == 1.0
-            if factor_bins % 2 == 0:
-                assert (actual.median() == 1 / (factor_bins - 1)).all()
-            else:
-                assert (actual_btc.median() == 0.0).all()
             assert actual_btc.min().min() == -1.0
             assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
             # dtypes

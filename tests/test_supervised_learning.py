@@ -33,6 +33,7 @@ def asset_rets_yoy_z_monthly():
     asset_class_er_df = pd.read_csv('../src/factorlab/datasets/data/asset_excess_returns_monthly.csv',
                                     index_col=0,
                                     parse_dates=True)
+    asset_class_er_df = asset_class_er_df.resample('M').sum()
     asset_class_er_df.index.name = 'date'
     # remove short series
     asset_class_er_df = asset_class_er_df.drop(

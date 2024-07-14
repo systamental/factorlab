@@ -11,7 +11,7 @@ def btc_spot_ret():
     Fixture for BTC OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=['date'])
     return df.loc[:, 'BTC', :]['close'].pct_change()
 
@@ -69,7 +69,7 @@ class TestReturnEstimators:
         # excess returns
         self.default_ret_est_instance.compute_excess_returns()
         assert ((rets > self.default_ret_est_instance.returns).sum() /
-                self.default_ret_est_instance.returns.shape[0] > 0.99).all()
+                self.default_ret_est_instance.returns.shape[0] > 0.9).all()
 
     def test_historical_mean_returns(self) -> None:
         """

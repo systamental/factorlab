@@ -25,7 +25,7 @@ def spot_prices():
     Fixture for crypto spot prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=True).loc[:, : 'close']
 
     # drop tickers with nobs < ts_obs
@@ -225,6 +225,7 @@ def test_create_lags_param_errors(spot_ret, n_lags=0) -> None:
         add_lags(spot_ret.close, n_lags=n_lags)
 
 
+# noinspection PyUnresolvedReferences
 class TestTimeSeriesAnalysis:
     """
     Test class for time series analysis methods.

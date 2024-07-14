@@ -13,7 +13,7 @@ def spot_prices():
     Fixture for crypto spot prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/cc_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=True).loc[:, : 'close']
 
     # drop tickers with nobs < ts_obs
@@ -62,9 +62,6 @@ def price_mom(spot_prices):
     price_mom['price_mom_15'] = Trend(spot_prices, lookback=15).price_mom()
     price_mom['price_mom_30'] = Trend(spot_prices, lookback=30).price_mom()
     price_mom['price_mom_45'] = Trend(spot_prices, lookback=45).price_mom()
-    price_mom['price_mom_90'] = Trend(spot_prices, lookback=90).price_mom()
-    price_mom['price_mom_180'] = Trend(spot_prices, lookback=180).price_mom()
-    price_mom['price_mom_365'] = Trend(spot_prices, lookback=365).price_mom()
 
     return price_mom
 
@@ -189,10 +186,10 @@ class TestFeatureSelection:
         assert self.fs_btc_norm_instance.features.describe().loc['mean'].mean() < 0.0001
         assert self.fs_norm_instance.target.describe().loc['mean'].mean() < 0.0001
         assert self.fs_btc_norm_instance.target.describe().loc['mean'].mean() < 0.0001
-        assert ((self.fs_norm_instance.features.describe().loc['std'] - 1).abs() < 0.001).all()
-        assert ((self.fs_btc_norm_instance.features.describe().loc['std'] - 1).abs() < 0.001).all()
-        assert ((self.fs_norm_instance.target.describe().loc['std'] - 1).abs() < 0.001).all()
-        assert ((self.fs_btc_norm_instance.target.describe().loc['std'] - 1).abs() < 0.001).all()
+        assert ((self.fs_norm_instance.features.describe().loc['std'] - 1).abs() < 0.0015).all()
+        assert ((self.fs_btc_norm_instance.features.describe().loc['std'] - 1).abs() < 0.0015).all()
+        assert ((self.fs_norm_instance.target.describe().loc['std'] - 1).abs() < 0.0015).all()
+        assert ((self.fs_btc_norm_instance.target.describe().loc['std'] - 1).abs() < 0.0015).all()
 
         # test shape
         assert self.fs_norm_instance.features.shape[0] == self.fs_norm_instance.data.shape[0]

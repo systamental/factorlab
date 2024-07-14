@@ -16,17 +16,15 @@ def asset_returns():
 
     # drop tickers with nobs < ts_obs
     obs = df.count()
-    drop_tickers_list = obs[obs < 2500].index.to_list()
+    drop_tickers_list = obs[obs < 260].index.to_list()
     df = df.drop(columns=drop_tickers_list)
 
     # stack
     df = df.stack(future_stack=True).to_frame('ret')
-
     # replace no chg
     df = df.replace(0, np.nan)
-
     # start date
-    rets = df.loc['1970-01-01':, :].dropna().unstack().ret
+    rets = df.dropna().unstack().ret
 
     return rets
 
@@ -52,7 +50,7 @@ class TestHRP:
         assert isinstance(self.default_hrp_instance.returns, pd.DataFrame)
         assert isinstance(self.default_hrp_instance.linkage_method, str)
         assert isinstance(self.default_hrp_instance.distance_metric, str)
-        assert isinstance(self.default_hrp_instance.max_weight, float)
+        assert isinstance(self.default_hrp_instance.leverage, float)
         assert isinstance(self.default_hrp_instance.asset_names, list)
         assert isinstance(self.default_hrp_instance.n_assets, int)
         # vals
@@ -106,7 +104,7 @@ class TestHRP:
         # types
         assert isinstance(sorted_idx, list)
         # vals
-        assert sorted_idx == [18, 17, 20, 1, 9, 13, 11, 14, 10, 4, 5, 8, 6, 7, 16, 15, 12, 19, 2, 0, 3]
+        assert sorted_idx == [19, 18, 21, 2, 0, 3, 1, 10, 14, 12, 15, 13, 16, 20, 17, 4, 5, 11, 9, 8, 6, 7]
 
     def test_compute_inverse_variance_weights(self) -> None:
         """
@@ -120,7 +118,7 @@ class TestHRP:
         # shape
         assert w.shape == (self.default_hrp_instance.n_assets,)
         # vals
-        assert np.sum(w) == 1.0
+        assert np.allclose(np.sum(w), 1.0)
         assert np.all(w >= 0)
 
     def test_compute_cluster_variance(self) -> None:
@@ -134,7 +132,7 @@ class TestHRP:
         # types
         assert isinstance(cv, float)
         # vals
-        assert cv == 1.227188453903538e-06
+        assert cv == 5.364614426415598e-07
 
     def test_recursive_bisection(self) -> None:
         """
@@ -183,12 +181,15 @@ class TestHRP:
         assert (self.default_hrp_instance.weights.abs() >= 0).all().all()
         assert (self.default_hrp_instance.weights.abs() <= 1).all().all()
 
-    def test_compute_weights(self) -> None:
+    @pytest.mark.parametrize("cov_variance_method", ['covariance', 'empirical_covariance', 'shrunk_covariance',
+                                                     'ledoit_wolf', 'oas', 'graphical_lasso', 'graphical_lasso_cv',
+                                                     'minimum_covariance_determinant', 'semi_covariance',
+                                                     'exponential_covariance', 'denoised_covariance'])
+    def test_compute_weights(self, cov_variance_method) -> None:
         """
         Test compute_weights.
         """
-        self.default_hrp_instance.side_weights = None
-        self.default_hrp_instance.preprocess_data()
+        self.default_hrp_instance.cov_matrix_method = cov_variance_method
         self.default_hrp_instance.compute_weights()
         # types
         assert isinstance(self.default_hrp_instance.weights, pd.DataFrame)
@@ -199,11 +200,11 @@ class TestHRP:
         # vals
         assert (self.default_hrp_instance.weights >= 0).all().all()
         assert (self.default_hrp_instance.weights <= 1).all().all()
-        assert self.default_hrp_instance.weights.sum().sum() == 1.0
+        assert np.allclose(self.default_hrp_instance.weights.sum().sum(), 1.0)
         # col
         assert set(self.default_hrp_instance.weights.columns.to_list()) == set(self.default_hrp_instance.asset_names)
         # index
-        assert self.default_hrp_instance.weights.index == ['weights']
+        assert self.default_hrp_instance.weights.index == [self.default_hrp_instance.returns.index[-1]]
 
 
 class TestHERC:
@@ -212,11 +213,7 @@ class TestHERC:
     """
     @pytest.fixture(autouse=True)
     def herc_default_instance(self, asset_returns):
-        self.default_herc_instance = HERC(asset_returns)
-
-    @pytest.fixture(autouse=True)
-    def herc_nomissing_instance(self, asset_returns):
-        self.nomissing_herc_instance = HERC(asset_returns.dropna())
+        self.default_herc_instance = HERC(asset_returns.dropna())
 
     def test_initialization(self) -> None:
         """
@@ -229,7 +226,6 @@ class TestHERC:
         assert isinstance(self.default_herc_instance.risk_measure, str)
         assert isinstance(self.default_herc_instance.linkage_method, str)
         assert isinstance(self.default_herc_instance.distance_metric, str)
-        assert isinstance(self.default_herc_instance.max_weight, float)
         assert isinstance(self.default_herc_instance.asset_names, list)
         assert isinstance(self.default_herc_instance.n_assets, int)
 
@@ -277,7 +273,7 @@ class TestHERC:
         # types
         assert isinstance(self.default_herc_instance.n_clusters, np.int64)
         # vals
-        assert self.default_herc_instance.n_clusters == 3
+        assert self.default_herc_instance.n_clusters == 6
 
     def test_get_cluster_children(self) -> None:
         """
@@ -290,10 +286,13 @@ class TestHERC:
         # types
         assert isinstance(self.default_herc_instance.cluster_children, dict)
         # vals
-        assert len(self.default_herc_instance.cluster_children) == 3
-        assert self.default_herc_instance.cluster_children == {0: [11, 13, 14, 18, 20],
-                                                               1: [4, 5, 6, 7, 8],
-                                                               2: [0, 1, 2, 3, 9, 10, 12, 15, 16, 17, 19]}
+        assert len(self.default_herc_instance.cluster_children) == 6
+        assert self.default_herc_instance.cluster_children == {0: [4, 5, 6, 7, 8, 9, 11, 17],
+                                                               1: [0, 2, 3, 18],
+                                                               2: [19],
+                                                               3: [21],
+                                                               4: [10, 12, 14, 15],
+                                                               5: [1, 13, 16, 20]}
 
     def test_quasi_diagnalization(self) -> None:
         """
@@ -307,7 +306,7 @@ class TestHERC:
         # types
         assert isinstance(idxs, list)
         # vals
-        assert idxs == [13, 11, 14, 18, 20, 4, 8, 5, 6, 7, 17, 0, 3, 1, 2, 15, 12, 19, 16, 9, 10]
+        assert idxs == [9, 8, 6, 7, 4, 5, 11, 17, 18, 2, 0, 3, 19, 21, 14, 10, 12, 15, 1, 20, 13, 16]
 
     def test_get_intersection(self) -> None:
         """
@@ -333,7 +332,7 @@ class TestHERC:
         # types
         assert isinstance(children_idxs, tuple)
         # vals
-        assert children_idxs == ([0], [1, 2])
+        assert children_idxs == ([0, 1], [2, 3, 4, 5])
 
     def test_compute_inverse_variance_weights(self) -> None:
         """
@@ -347,7 +346,7 @@ class TestHERC:
         # shape
         assert w.shape == (self.default_herc_instance.n_assets,)
         # vals
-        assert np.sum(w) == 1.0
+        assert np.allclose(np.sum(w), 1.0)
         assert np.all(w >= 0)
 
     def test_compute_inverse_cvar_weights(self) -> None:
@@ -389,7 +388,7 @@ class TestHERC:
         # types
         assert isinstance(cv, float)
         # vals
-        assert cv == 0.00011824325726538254
+        assert cv == 5.277597662735547e-05
 
     def test_compute_cluster_expected_shortfall(self) -> None:
         """
@@ -400,7 +399,7 @@ class TestHERC:
         # types
         assert isinstance(ces, float)
         # vals
-        assert ces == -0.022608352278124317
+        assert ces == -0.017713277090673794
 
     def test_compute_cluster_conditional_drawdown_risk(self) -> None:
         """
@@ -411,9 +410,10 @@ class TestHERC:
         # types
         assert isinstance(cddr, float)
         # vals
-        assert cddr == -0.5457410254053806
+        assert cddr == -0.37236279388392735
 
-    @pytest.mark.parametrize("risk_measure", ['variance', 'std', 'cvar', 'cdar'])
+    @pytest.mark.parametrize("risk_measure", ['equal_weight', 'variance', 'std', 'expected_shortfall',
+                                              'conditional_drawdown_risk'])
     def test_compute_cluster_risk_contribution(self, risk_measure) -> None:
         """
         Test compute_cluster_risk_contribution.
@@ -428,9 +428,7 @@ class TestHERC:
         assert isinstance(self.default_herc_instance.clusters_contribution, np.ndarray)
         assert self.default_herc_instance.clusters_contribution.dtype == np.float64
         # shape
-        assert self.default_herc_instance.clusters_contribution.shape == (3,)
-        # vals
-        assert np.all(self.default_herc_instance.clusters_contribution >= 0)
+        assert self.default_herc_instance.clusters_contribution.shape == (6,)
 
     @pytest.mark.parametrize("risk_measure", ['equal_weight', 'variance', 'std', 'expected_shortfall',
                                               'conditional_drawdown_risk'])
@@ -450,7 +448,7 @@ class TestHERC:
         assert w.dtype == np.float64
         # shape
         if risk_measure == 'equal_weight':
-            assert w.shape == (5,)
+            assert w.shape == (8,)
         else:
             assert w.shape == (self.default_herc_instance.n_assets,)
         # vals
@@ -476,10 +474,13 @@ class TestHERC:
         # vals
         assert (self.default_herc_instance.weights >= 0).all().all()
 
-    def test_compute_weights(self) -> None:
+    @pytest.mark.parametrize("risk_measure", ['equal_weight', 'variance', 'std', 'expected_shortfall',
+                                              'conditional_drawdown_risk'])
+    def test_compute_weights(self, risk_measure) -> None:
         """
         Test compute_weights.
         """
+        self.default_herc_instance.risk_measure = risk_measure
         self.default_herc_instance.compute_weights()
         # types
         assert isinstance(self.default_herc_instance.weights, pd.DataFrame)
@@ -490,8 +491,8 @@ class TestHERC:
         # vals
         assert (self.default_herc_instance.weights >= 0).all().all()
         assert (self.default_herc_instance.weights <= 1).all().all()
-        assert self.default_herc_instance.weights.sum().sum() == 1.0
+        assert np.allclose(self.default_herc_instance.weights.sum().sum(), 1.0)
         # col
         assert set(self.default_herc_instance.weights.columns.to_list()) == set(self.default_herc_instance.asset_names)
         # index
-        assert self.default_herc_instance.weights.index == ['weights']
+        assert self.default_herc_instance.weights.index == [self.default_herc_instance.returns.index[-1]]

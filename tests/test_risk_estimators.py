@@ -16,17 +16,15 @@ def asset_returns():
 
     # drop tickers with nobs < ts_obs
     obs = df.count()
-    drop_tickers_list = obs[obs < 2500].index.to_list()
+    drop_tickers_list = obs[obs < 260].index.to_list()
     df = df.drop(columns=drop_tickers_list)
 
     # stack
     df = df.stack(future_stack=True).to_frame('ret')
-
     # replace no chg
     df = df.replace(0, np.nan)
-
     # start date
-    rets = df.loc['1970-01-01':, :].dropna().unstack().ret
+    rets = df.dropna().unstack().ret
 
     return rets
 
