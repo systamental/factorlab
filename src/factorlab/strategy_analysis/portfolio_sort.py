@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Optional, Union, Tuple, Dict
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.strategy_backtesting.performance import Performance
+from factorlab.strategy_backtesting.metrics import Metrics
 
 
 class PortfolioSort:
@@ -349,7 +349,7 @@ class PortfolioSort:
                     if self.fill_na:
                         quant_df.fillna(0, inplace=True)
                     # compute performance metric
-                    metric_df.loc[quantile, factor] = getattr(Performance(quant_df, ret_type='log', ann_factor=365),
+                    metric_df.loc[quantile, factor] = getattr(Metrics(quant_df, ret_type='log', ann_factor=365),
                                                              metric)().values.round(decimals=4)
 
         # double sort
@@ -370,7 +370,7 @@ class PortfolioSort:
                         quant_df.fillna(0, inplace=True)
                     # compute performance metric
                     metric_df.loc[(factor_1, quantile_1), (factor_2, quantile_2)] = \
-                        getattr(Performance(quant_df, ret_type='log', ann_factor=365), 'sharpe_ratio')().values.round(
+                        getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
                             decimals=4)
 
         # tripple sort
@@ -381,7 +381,7 @@ class PortfolioSort:
             for name in self.factor_names:
                 idx_list.append([f"{name}_{quant}" for quant in range(1, self.factor_bins[name][1] + 1)])
             idx = pd.MultiIndex.from_product(idx_list)
-            metric_df = pd.DataFrame(index=idx, columns=['sharpe_ratio'])
+            metric_df = pd.DataFrame(index=idx, columns=[metric])
 
             # loop through factors
             for row in metric_df.index:
@@ -393,7 +393,7 @@ class PortfolioSort:
                     quant_df.fillna(0, inplace=True)
                 # compute performance metric
                 metric_df.loc['_'.join(factor_1), '_'.join(factor_2), '_'.join(factor_3)] = \
-                    getattr(Performance(quant_df, ret_type='log', ann_factor=365), 'sharpe_ratio')().values.round(
+                    getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
                         decimals=4)
 
         else:
