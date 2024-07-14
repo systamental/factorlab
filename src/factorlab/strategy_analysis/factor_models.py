@@ -204,6 +204,7 @@ class FactorModel:
         Orthogonalize factors.
         """
         if self.orthogonalize:
+
             # rolling
             if self.window_type == 'rolling':
                 if isinstance(self.factors.index, pd.MultiIndex):
@@ -218,6 +219,7 @@ class FactorModel:
                     self.factors = factors_df
                 else:
                     self.factors = rolling_window(self.orthogonalize_data, self.factors, window_size=self.window_size)
+
             # expanding
             elif self.window_type == 'expanding':
                 if isinstance(self.factors.index, pd.MultiIndex):
@@ -232,6 +234,7 @@ class FactorModel:
                     self.factors = factors_df
                 else:
                     self.factors = expanding_window(self.orthogonalize_data, self.factors, min_obs=30)
+
             # fixed
             else:
                 if isinstance(self.factors.index, pd.MultiIndex):
