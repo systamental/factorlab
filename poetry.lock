@@ -204,7 +204,7 @@ python-versions = ">=3.7.0"
 
 [[package]]
 name = "clarabel"
-version = "0.7.1"
+version = "0.9.0"
 description = "Clarabel Conic Interior Point Solver for Rust / Python"
 category = "main"
 optional = false
@@ -2128,7 +2128,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-ena
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9"
-content-hash = "52f786cade1973558e8b328806141836e4e98e8742e45dac9480fd11cf254754"
+content-hash = "3bac6cc31fe8f0021eb2aa717ac1e5b679dc4b3bd23726e989a9b1217567877a"
 
 [metadata.files]
 annotated-types = []
