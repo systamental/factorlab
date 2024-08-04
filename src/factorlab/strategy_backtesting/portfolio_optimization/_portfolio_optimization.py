@@ -137,21 +137,13 @@ class PortfolioOptimization:
         self.optimizer = None
         self.weighted_signals = None
         self.t_costs = None
-        self.portfolio_ret = None
+        self.portfolio_ret = pd.DataFrame()
         self.preprocess_data()
 
     def preprocess_data(self) -> None:
         """
         Preprocesses data.
         """
-        # returns
-        if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):  # check data type
-            raise ValueError('returns must be a pd.DataFrame or pd.Series')
-        if isinstance(self.returns, pd.Series):  # convert to df
-            self.returns = self.returns.to_frame()
-        if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
-            self.returns = self.returns.unstack()
-
         # method
         if self.method not in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
                                'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
@@ -160,28 +152,6 @@ class PortfolioOptimization:
                              "'inverse_vol', 'target_vol', 'random', 'min_vol', 'max_return_min_vol', "
                              "'max_sharpe', 'max_diversification', 'efficient_return', 'efficient_risk', "
                              "'risk_parity', 'hrp', 'herc'")
-
-        # ann_factor
-        if self.ann_factor is None:
-            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
-
-        # freq
-        self.freq = pd.infer_freq(self.returns.index)
-        if self.freq is None:
-            if self.ann_factor == 1:
-                self.freq = 'Y'
-            elif self.ann_factor == 4:
-                self.freq = 'Q'
-            elif self.ann_factor == 12:
-                self.freq = 'M'
-            elif self.ann_factor == 52:
-                self.freq = 'W'
-            else:
-                self.freq = 'D'
-
-        # window_size
-        if self.window_size is None:
-            self.window_size = self.ann_factor
 
         # n jobs
         if self.parallelize and self.n_jobs is None:
@@ -363,23 +333,54 @@ class PortfolioOptimization:
         """
         Computes optimized portfolio returns.
         """
-        # get weights
-        self.get_weights()
+        rets = self.returns.copy()
 
-        # rebalance portfolio
-        self.rebalance_portfolio()
+        # multi-index
+        if isinstance(rets.index, pd.MultiIndex):
 
-        # t-costs
-        self.compute_tcosts()
+            # iterate over columns
+            for col in rets.columns:
 
-        # compute gross returns
-        self.portfolio_ret = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
+                # get unstacked returns for each column
+                self.returns = rets[col].unstack()
 
-        # compute net returns
-        self.portfolio_ret = self.portfolio_ret.subtract(self.t_costs, axis=0).dropna(how='all')
+                # get weights
+                self.get_weights()
 
-        # compute portfolio returns
-        self.portfolio_ret = self.portfolio_ret.sum(axis=1)
+                # rebalance portfolio
+                self.rebalance_portfolio()
+
+                # t-costs
+                self.compute_tcosts()
+
+                # compute gross returns
+                portfolio_ret = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
+
+                # compute net returns
+                portfolio_ret = portfolio_ret.subtract(self.t_costs, axis=0).dropna(how='all')
+
+                # compute portfolio returns
+                self.portfolio_ret = pd.concat([self.portfolio_ret, portfolio_ret.sum(axis=1).to_frame(col)], axis=1)
+
+        # single index
+        else:
+            # get weights
+            self.get_weights()
+
+            # rebalance portfolio
+            self.rebalance_portfolio()
+
+            # t-costs
+            self.compute_tcosts()
+
+            # compute gross returns
+            portfolio_ret = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
+
+            # compute net returns
+            portfolio_ret = portfolio_ret.subtract(self.t_costs, axis=0).dropna(how='all')
+
+            # compute portfolio returns
+            self.portfolio_ret = portfolio_ret.sum(axis=1).to_frame('portfolio')
 
         return self.portfolio_ret
 
