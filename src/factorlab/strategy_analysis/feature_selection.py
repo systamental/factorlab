@@ -453,6 +453,7 @@ class FeatureSelection:
 
         return self.feature_importance
 
+    # TODO: add threshold parameter to ic method
     def ic(self, feature: str,) -> pd.DataFrame:
         """
         Computes the Information Coefficient (IC) for factor and forward returns over a moving window.
@@ -470,6 +471,7 @@ class FeatureSelection:
         # create df
         df = pd.concat([self.features[feature], self.target], join='inner', axis=1)
         if isinstance(df.index, pd.MultiIndex):
+            # TODO: add threshold parameter
             df = df.unstack().dropna(thresh=10).stack(future_stack=True)  # set time series min nobs thresh
         else:
             if self.strategy == 'cs':
