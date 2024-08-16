@@ -185,7 +185,8 @@ class Signal:
 
         Returns
         -------
-
+        signals: pd.Series or pd.DataFrame - Single or MultiIndex
+            Continuous signals with DatetimeIndex (level 0), tickers (level 1) and signal values (cols).
         """
         # normal distribution
         if pdf == 'norm':
