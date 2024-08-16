@@ -69,7 +69,7 @@ class NaiveOptimization:
             self.returns = self.returns.unstack()
         if not isinstance(self.returns.index, pd.DatetimeIndex):  # convert to single index
             self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna()  # drop missing rows
+        self.returns = self.returns.dropna(how='all')  # drop missing rows
 
         # method
         if self.method not in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
@@ -128,7 +128,8 @@ class NaiveOptimization:
         self.compute_estimators()
 
         # weights
-        self.weights = np.ones(self.n_assets) * 1 / self.n_assets
+        self.weights = ((np.sign(self.returns.abs()).iloc[-1]) /
+                        (np.sign(self.returns.abs().iloc[-1].dropna()).sum())).values
         self.weights = self.weights * self.leverage
 
         # portfolio risk and return
@@ -151,7 +152,7 @@ class NaiveOptimization:
 
         # weights
         ivp = 1. / np.diag(self.cov_matrix)
-        ivp /= ivp.sum()
+        ivp /= np.nansum(ivp)
         self.weights = ivp
         self.weights = self.weights * self.leverage
 
@@ -175,7 +176,7 @@ class NaiveOptimization:
 
         # weights
         ivp = 1. / np.sqrt(np.diag(self.cov_matrix))
-        ivp /= ivp.sum()
+        ivp /= np.nansum(ivp)
         self.weights = ivp
         self.weights = self.weights * self.leverage
 
