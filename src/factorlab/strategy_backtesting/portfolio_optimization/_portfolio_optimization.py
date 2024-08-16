@@ -5,7 +5,7 @@ import os
 from factorlab.strategy_backtesting.portfolio_optimization.naive import NaiveOptimization
 from factorlab.strategy_backtesting.portfolio_optimization.mvo import MVO
 from factorlab.strategy_backtesting.portfolio_optimization.clustering import HRP, HERC
-from factorlab.data_viz.plot import plot_bar
+from factorlab.data_viz.plot import plot_bar, plot_series
 
 from joblib import Parallel, delayed
 
@@ -16,7 +16,6 @@ class PortfolioOptimization:
 
     This class computes the optimized portfolio weights or returns based on the signals of the assets or strategies.
     """
-
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
                  method: str = 'equal_weight',
@@ -36,8 +35,8 @@ class PortfolioOptimization:
                  t_cost: Optional[float] = None,
                  rebal_freq: Optional[Union[str, int]] = None,
                  window_type: str = 'rolling',
-                 window_size: Optional[int] = None,
-                 parallelize: bool = False,
+                 window_size: Optional[int] = 180,
+                 parallelize: bool = True,
                  n_jobs: Optional[int] = None,
                  asset_names: Optional[List[str]] = None,
                  ann_factor: Optional[int] = None,
@@ -86,12 +85,12 @@ class PortfolioOptimization:
             Transaction costs.
         rebal_freq: str, int, default None
             Rebalancing frequency.
-        window_type: str, default 'rolling'
+        window_type: str, {'expanding', 'rolling'}, default 'rolling'
             Window type for the optimization.
         window_size: int, default None
             Window size for the optimization.
         parallelize: bool, default False
-            Whether to parallelize the computation.
+            Whether to parallelize the optimization.
         n_jobs: int, default None
             Number of jobs to run in parallel.
         asset_names: list, default None
@@ -137,6 +136,7 @@ class PortfolioOptimization:
         self.optimizer = None
         self.weighted_signals = None
         self.t_costs = None
+        self.gross_returns = None
         self.portfolio_ret = pd.DataFrame()
         self.preprocess_data()
 
@@ -216,16 +216,22 @@ class PortfolioOptimization:
             Expanding weights.
         """
         # dates
-        dates = self.returns.dropna().index[self.window_size - 1:]
+        dates = self.get_optimizer(self.returns).returns.index[self.window_size - 1:]
 
+        # function to compute weights for each date
         def compute_weights_for_date(end_date):
             data_window = self.returns.loc[:end_date]
             self.get_optimizer(data_window)
             w = self.optimizer.compute_weights()
             return end_date, w.values.flatten()
 
-        results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
+        # parallelize optimization
+        if self.parallelize:
+            results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
+        else:
+            results = [compute_weights_for_date(date) for date in dates]
 
+        # weights
         self.weights = pd.DataFrame(index=dates, columns=self.returns.columns)
         for date, weights in results:
             self.weights.loc[date] = weights
@@ -242,17 +248,23 @@ class PortfolioOptimization:
             Rolling weights.
         """
         # dates
-        dates = self.returns.dropna().index[self.window_size - 1:]
+        dates = self.get_optimizer(self.returns).returns.index[self.window_size - 1:]
 
+        # function to compute weights for each date
         def compute_weights_for_date(end_date):
-            start_date = end_date - pd.DateOffset(days=self.window_size - 1)
-            data_window = self.returns.loc[start_date:end_date]
+            loc_end = self.returns.index.get_loc(end_date)
+            data_window = self.returns.iloc[loc_end + 1 - self.window_size: loc_end + 1]
             self.get_optimizer(data_window)
             w = self.optimizer.compute_weights()
             return end_date, w.values.flatten()
 
-        results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
+        # parallelize optimization
+        if self.parallelize:
+            results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
+        else:
+            results = [compute_weights_for_date(date) for date in dates]
 
+        # weights
         self.weights = pd.DataFrame(index=dates, columns=self.returns.columns)
         for date, weights in results:
             self.weights.loc[date] = weights
@@ -271,7 +283,7 @@ class PortfolioOptimization:
             self.compute_fixed_weights()
 
         # lag weights
-        self.weights = self.weights.shift(self.lags)
+        self.weights = self.weights.shift(self.lags).dropna(how='all')
 
         return self.weights
 
@@ -322,7 +334,7 @@ class PortfolioOptimization:
         """
         # no t-costs
         if self.t_cost is None:
-            self.t_costs = pd.DataFrame(data=0, index=self.weights.index, columns=self.weights.columns)
+            self.t_costs = pd.DataFrame(data=0.0, index=self.weights.index, columns=self.weights.columns)
         # t-costs
         else:
             self.t_costs = self.weights.diff().abs() * self.t_cost
@@ -331,9 +343,17 @@ class PortfolioOptimization:
 
     def compute_portfolio_returns(self) -> pd.DataFrame:
         """
-        Computes optimized portfolio returns.
+        Computes portfolio returns from the asset/strategy returns and weights.
+
+        Returns
+        -------
+        portfolio_ret: pd.DataFrame
+            Portfolio returns.
         """
+        # copy returns
         rets = self.returns.copy()
+        # df for weights reset
+        w = pd.DataFrame()
 
         # multi-index
         if isinstance(rets.index, pd.MultiIndex):
@@ -354,13 +374,20 @@ class PortfolioOptimization:
                 self.compute_tcosts()
 
                 # compute gross returns
-                portfolio_ret = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
+                self.gross_returns = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
 
                 # compute net returns
-                portfolio_ret = portfolio_ret.subtract(self.t_costs, axis=0).dropna(how='all')
+                portfolio_ret = self.gross_returns.subtract(self.t_costs, axis=0).dropna(how='all')
 
                 # compute portfolio returns
-                self.portfolio_ret = pd.concat([self.portfolio_ret, portfolio_ret.sum(axis=1).to_frame(col)], axis=1)
+                self.portfolio_ret = pd.concat([self.portfolio_ret,
+                                                portfolio_ret.sum(axis=1).to_frame(col)], axis=1)
+
+                # weights
+                w = pd.concat([w, self.weights.stack(future_stack=True).to_frame(col)], axis=1)
+
+            # reset weights
+            self.weights = w
 
         # single index
         else:
@@ -374,19 +401,28 @@ class PortfolioOptimization:
             self.compute_tcosts()
 
             # compute gross returns
-            portfolio_ret = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
+            self.gross_returns = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
 
             # compute net returns
-            portfolio_ret = portfolio_ret.subtract(self.t_costs, axis=0).dropna(how='all')
+            self.portfolio_ret = self.gross_returns.subtract(self.t_costs, axis=0).dropna(how='all')
 
             # compute portfolio returns
-            self.portfolio_ret = portfolio_ret.sum(axis=1).to_frame('portfolio')
+            self.portfolio_ret = self.portfolio_ret.sum(axis=1).to_frame('portfolio')
 
         return self.portfolio_ret
 
-    def plot_weights(self):
+    def plot_weights(self, plot_type: str = 'bar'):
         """
         Plot the optimized portfolio weights.
+
+        Parameters
+        ----------
+        plot_type: str, {'series', 'bar'}, default 'bar'
+            Type of plot.
         """
         # plot h bar
-        plot_bar(self.weights.T.sort_values(by=[self.returns.index[-1]]), axis='horizontal', x_label='weights')
+        if plot_type == 'bar':
+            plot_bar(self.weights.T.sort_values(by=[self.weights.index[-1]]), axis='horizontal', x_label='weights')
+        # plot series
+        else:
+            plot_series(self.weights, title='Portfolio Weights', y_label='weights')
