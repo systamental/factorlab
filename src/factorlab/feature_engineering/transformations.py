@@ -845,10 +845,8 @@ class Transform:
             # multiindex
             if isinstance(self.df.index, pd.MultiIndex):
                 tr = pd.concat([tr1.stack(), tr2.stack(), tr3.stack()], axis=1).max(axis=1)
-                # self.trans_df = tr.groupby(level=1).mean().to_frame('atr')
             else:
                 tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-                # self.trans_df = tr.mean()
 
             # rolling window
             if window_type == 'rolling':
