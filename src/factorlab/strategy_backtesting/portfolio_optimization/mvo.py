@@ -50,8 +50,8 @@ class MVO:
         ----------
         returns: pd.DataFrame
             The returns of the assets or strategies. If not provided, the returns are computed from the prices.
-        method: str, {'max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification', 'efficient_return',
-        'efficient_risk', 'risk_parity'}, default 'max_return_min_vol'
+        method: str, {'max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
+        'efficient_return', 'efficient_risk', 'risk_parity'}, default 'max_return_min_vol'
             Optimization method to compute weights.
         max_weight: float, default 1
             Maximum weight of the asset.
