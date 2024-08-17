@@ -11,10 +11,10 @@ class Signal:
     Signal construction class.
     """
     def __init__(self,
-                 ret: pd.Series,
+                 returns: pd.Series,
                  factors: pd.DataFrame,
                  strategy: str = 'ts_ls',
-                 ret_bins: int = 3,
+                 return_bins: int = 3,
                  factor_bins: int = 5,
                  n_factors: int = 10,
                  disc_thresh: float = 0,
@@ -26,7 +26,7 @@ class Signal:
 
         Parameters
         ----------
-        ret: pd.Series or pd.DataFrame - Single or MultiIndex
+        returns: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
         factors: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
@@ -34,7 +34,7 @@ class Signal:
             Time series, cross-sectional or dual strategy, long/short, long-only or short-only.
         factor_bins: int, default 5
             Number of bins to create for factors.
-        ret_bins: int, default 3
+        return_bins: int, default 3
             Number of bins to create for returns.
         n_factors: int, default 10
             Number of factors to use for cross-sectional strategies.
@@ -45,11 +45,11 @@ class Signal:
         window_size: int, default 90
             Minimal number of observations to include in moving window (rolling or expanding).
         """
-        self.ret = ret.astype(float).to_frame() if isinstance(ret, pd.Series) else ret
+        self.returns = returns.astype(float).to_frame() if isinstance(returns, pd.Series) else returns
         self.factors = factors.to_frame() if isinstance(factors, pd.Series) else factors
         self.strategy = strategy
         self.factor_bins = factor_bins if factor_bins > 1 else self._raise_value_error()
-        self.ret_bins = ret_bins if ret_bins > 1 else self._raise_value_error()
+        self.return_bins = return_bins if return_bins > 1 else self._raise_value_error()
         self.n_factors = n_factors
         self.disc_thresh = disc_thresh
         self.window_type = window_type
@@ -101,7 +101,7 @@ class Signal:
             self.norm_factors = Transform(self.factors).normalize(method=method, axis='ts', centering=centering,
                                                                   window_type=self.window_type,
                                                                   window_size=self.window_size, winsorize=winsorize)
-            self.norm_ret = Transform(self.ret).normalize(method=method, axis='ts', centering=centering,
+            self.norm_ret = Transform(self.returns).normalize(method=method, axis='ts', centering=centering,
                                                           window_type=self.window_type, window_size=self.window_size,
                                                           winsorize=winsorize)
 
@@ -111,7 +111,7 @@ class Signal:
                 factor_norm_ts = Transform(self.factors).normalize(method=method, axis='ts', centering=centering,
                                                                    window_type=self.window_type,
                                                                    window_size=self.window_size, winsorize=winsorize)
-                ret_norm_ts = Transform(self.ret).normalize(method=method, axis='ts', centering=centering,
+                ret_norm_ts = Transform(self.returns).normalize(method=method, axis='ts', centering=centering,
                                                             window_type=self.window_type,
                                                             window_size=self.window_size, winsorize=winsorize)
                 self.norm_factors = Transform(factor_norm_ts).normalize(method=method, axis='cs', centering=centering,
@@ -121,7 +121,7 @@ class Signal:
             else:
                 self.norm_factors = Transform(self.factors).normalize(method=method, axis='cs', centering=centering,
                                                                       winsorize=winsorize)
-                self.norm_ret = Transform(self.ret).normalize(method=method, axis='cs', centering=centering,
+                self.norm_ret = Transform(self.returns).normalize(method=method, axis='cs', centering=centering,
                                                               winsorize=winsorize)
 
         return self.norm_factors
@@ -145,7 +145,7 @@ class Signal:
             self.factor_quantiles = Transform(self.factors).quantize(bins=self.factor_bins, axis='ts',
                                                                      window_type=self.window_type,
                                                                      window_size=self.window_size)
-            self.ret_quantiles = Transform(self.ret).quantize(bins=self.ret_bins, axis='ts',
+            self.ret_quantiles = Transform(self.returns).quantize(bins=self.return_bins, axis='ts',
                                                               window_type=self.window_type,
                                                               window_size=self.window_size)
         # cross-sectional
@@ -153,14 +153,14 @@ class Signal:
             if ts_norm:
                 norm_factors_ts = Transform(self.factors).normalize(window_type=self.window_type, axis='ts',
                                                                     window_size=self.window_size)
-                norm_ret_ts = Transform(self.ret).normalize(window_type=self.window_type, axis='ts',
+                norm_ret_ts = Transform(self.returns).normalize(window_type=self.window_type, axis='ts',
                                                             window_size=self.window_size)
                 self.factor_quantiles = Transform(norm_factors_ts).quantize(bins=self.factor_bins, axis='cs')
-                self.ret_quantiles = Transform(norm_ret_ts).quantize(bins=self.ret_bins, axis='cs')
+                self.ret_quantiles = Transform(norm_ret_ts).quantize(bins=self.return_bins, axis='cs')
 
             else:
                 self.factor_quantiles = Transform(self.factors).quantize(bins=self.factor_bins, axis='cs')
-                self.ret_quantiles = Transform(self.ret).quantize(bins=self.ret_bins, axis='cs')
+                self.ret_quantiles = Transform(self.returns).quantize(bins=self.return_bins, axis='cs')
 
         return self.factor_quantiles
 
@@ -536,7 +536,7 @@ class Signal:
                              leverage=leverage, lags=lags)
 
         # concat signals and returns
-        df = pd.concat([self.signals, self.ret], axis=1, join='inner')
+        df = pd.concat([self.signals, self.returns], axis=1, join='inner')
         # multiply signals by returns
         self.signal_rets = df.iloc[:, :-1].mul(df.iloc[:, -1].values, axis=0).dropna(how='all')
 
