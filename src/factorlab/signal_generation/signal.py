@@ -191,6 +191,7 @@ class Signal:
         # normal distribution
         if pdf == 'norm':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
+            # cdf of normal distribution
             self.signals = pd.DataFrame(norm.cdf(self.norm_factors), index=self.norm_factors.index,
                                         columns=self.norm_factors.columns)
             self.signals = (self.signals * 2) - 1
@@ -208,6 +209,7 @@ class Signal:
         # logistic
         elif pdf == 'logistic':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
+            # cdf of logistic distribution
             self.signals = pd.DataFrame(logistic.cdf(self.norm_factors), index=self.norm_factors.index,
                                         columns=self.norm_factors.columns)
             self.signals = (self.signals * 2) - 1
@@ -310,31 +312,41 @@ class Signal:
         """
         # time series
         if self.strategy.split('_')[0] == 'ts':
-            raise ValueError("Number of assets is only available for cross-sectional strategies.")
+            raise ValueError("Signal rank is only available for cross-sectional strategies.")
         else:
             # signals
             self.convert_to_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
 
-            # min n cross-section cutoff
-            self.signals = self.signals.loc[
-                                (self.signals.groupby(level=0).count() >= self.n_factors * 2).idxmax()
-                                [self.signals.columns[0]]:]
+            # # min n cross-section cutoff
+            # self.signals = self.signals.loc[
+            #                     (self.signals.groupby(level=0).count() >= self.n_factors * 2).idxmax()
+            #                     [self.signals.columns[0]]:]
 
-            # sort signals by level 0 index (date)
-            signals_sorted = self.signals.sort_index(level=0)
+            # min n cross-section cutoff
+            self.signals = self.signals[(self.signals.groupby(level=0).count() >= self.n_factors * 2)].dropna()
+
+            # # sort signals by level 0 index (date)
+            # signals_sorted = self.signals.sort_index(level=0)
 
             # group by level 0 index (date) and rank values
-            ranks = signals_sorted.groupby(level=0).rank()
+            ranks = self.signals.groupby(level=0).rank(method='first')
 
-            # Find the highest n and lowest n values
-            thresh = ranks.groupby(level=0).max() - self.n_factors + 1
-            lowest_n = ranks[ranks <= self.n_factors].notna()
-            highest_n = ranks.ge(thresh)
+            # upper/lower threshold values
+            upper_thresh = ranks.groupby(level=0).max() - self.n_factors
+            lower_thresh = ranks.groupby(level=0).min() + self.n_factors
+            # sort top/bottom n
+            bottom_n = ranks.lt(lower_thresh)
+            top_n = ranks.gt(upper_thresh)
+
+            # # Find the highest n and lowest n values
+            # thresh = ranks.groupby(level=0).max() - self.n_factors + 1
+            # lowest_n = ranks[ranks <= self.n_factors].notna()
+            # highest_n = ranks.ge(thresh)
 
             # assign 1 to highest n values, -1 to lowest n values, and 0 to the rest
             self.signals = pd.DataFrame(data=0, index=self.signals.index, columns=self.signals.columns)
-            self.signals[highest_n] = 1
-            self.signals[lowest_n] = -1
+            self.signals[top_n] = 1
+            self.signals[bottom_n] = -1
 
         return self.signals
 
@@ -461,7 +473,7 @@ class Signal:
             raise ValueError("Dual strategy must be selected to compute dual signals.")
 
         # strategy placeholder
-        strat = self.strategy
+        strategy = self.strategy
 
         # compute signals
         # ts
@@ -474,7 +486,7 @@ class Signal:
                                 leverage=leverage, lags=lags)
 
         # dual
-        self.strategy = strat
+        self.strategy = strategy
         self.signals = None
         signals = pd.concat([signals_ts, signals_cs], axis=1, join='inner')
         for factor in signals_ts.columns:
@@ -495,7 +507,8 @@ class Signal:
                                ts_norm: bool = False,
                                winsorize: int = 3,
                                leverage: Optional[int] = None,
-                               lags: int = 1
+                               lags: int = 1,
+                               dual_summary_stat: str = 'mean',
                                ):
         """
         Compute the signal returns.
@@ -521,6 +534,8 @@ class Signal:
             Multiplies factors by integer to increase leverage.
         lags: int, default 1
             Number of periods to lag signals/forward returns.
+        dual_summary_stat: str, {'mean', 'median', 'min', 'max', 'sum', 'prod'}, default 'mean'
+            Summary statistic to compute dual signals.
 
         Returns
         -------
@@ -530,7 +545,7 @@ class Signal:
         # compute signals
         if self.strategy.split('_')[0] == 'dual':
             self.compute_dual_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-                                      leverage=leverage, lags=lags)
+                                      leverage=leverage, lags=lags, summary_stat=dual_summary_stat)
         else:
             self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
                              leverage=leverage, lags=lags)
