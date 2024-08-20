@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import inspect
 from typing import Union, Optional
+from scipy.stats import norm, logistic
 
 from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
 from factorlab.feature_engineering.transformations import Transform
@@ -89,7 +90,7 @@ class Trend:
 
         Parameters
         ----------
-        method: str, {'min-max', 'percentile'}, default 'min-max'
+        method: str, {'min-max', 'percentile', 'norm'}, default 'min-max'
             Method to use to normalize price series between 0 and 1.
 
          Returns
@@ -98,15 +99,43 @@ class Trend:
             DataFrame with DatetimeIndex and breakout signal values (cols).
          """
         # check method
-        if method not in ['min-max', 'percentile', 'cdf']:
-            raise ValueError('Invalid method. Method must be: min-max, percentile, cdf.')
+        if method not in ['min-max', 'percentile', 'norm', 'logistic', 'adj_norm']:
+            raise ValueError('Invalid method. Method must be: min-max, percentile, norm, logistic or adj_norm.')
 
-        # normalize
-        self.trend = Transform(self.price).normalize(method=method, axis='ts', window_type='rolling',
+        # uniform distribution
+        if method == 'min-max':
+            self.trend = Transform(self.price).normalize(method='min-max', axis='ts', window_type='rolling',
                                                      window_size=self.lookback)
 
-        # convert to breakout signal
-        self.trend = (self.trend * 2) - 1
+        # percentile rank
+        elif method == 'percentile':
+            self.trend = Transform(self.price).normalize(method='percentile', axis='ts', window_type='rolling',
+                                                     window_size=self.lookback)
+
+        # normal distribution
+        elif method == 'norm':
+            self.trend = Transform(self.price).normalize(method='z-score', axis='ts', window_type='rolling',
+                                                         window_size=self.lookback)
+            # convert to cdf
+            self.trend = pd.DataFrame(norm.cdf(self.trend), index=self.trend.index, columns=self.trend.columns)
+
+        # logistic
+        elif method == 'logistic':
+            self.trend = Transform(self.price).normalize(method='z-score', axis='ts', window_type='rolling',
+                                                         window_size=self.lookback)
+            # convert to cdf
+            self.trend = pd.DataFrame(logistic.cdf(self.trend), index=self.trend.index, columns=self.trend.columns)
+
+        # adjusted normal distribution
+        else:
+            self.trend = Transform(self.price).normalize(method='adj_norm', axis='ts', window_type='rolling',
+                                                         window_size=self.lookback)
+
+        # convert to signal
+        if method == 'adj_norm':
+            self.trend = self.trend * np.exp((-1 * self.trend ** 2) / 4) / 0.89
+        else:
+            self.trend = (self.trend * 2) - 1
 
         # name
         if self.trend.shape[1] == 1:
