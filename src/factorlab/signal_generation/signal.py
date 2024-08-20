@@ -317,16 +317,8 @@ class Signal:
             # signals
             self.convert_to_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
 
-            # # min n cross-section cutoff
-            # self.signals = self.signals.loc[
-            #                     (self.signals.groupby(level=0).count() >= self.n_factors * 2).idxmax()
-            #                     [self.signals.columns[0]]:]
-
             # min n cross-section cutoff
             self.signals = self.signals[(self.signals.groupby(level=0).count() >= self.n_factors * 2)].dropna()
-
-            # # sort signals by level 0 index (date)
-            # signals_sorted = self.signals.sort_index(level=0)
 
             # group by level 0 index (date) and rank values
             ranks = self.signals.groupby(level=0).rank(method='first')
@@ -337,11 +329,6 @@ class Signal:
             # sort top/bottom n
             bottom_n = ranks.lt(lower_thresh)
             top_n = ranks.gt(upper_thresh)
-
-            # # Find the highest n and lowest n values
-            # thresh = ranks.groupby(level=0).max() - self.n_factors + 1
-            # lowest_n = ranks[ranks <= self.n_factors].notna()
-            # highest_n = ranks.ge(thresh)
 
             # assign 1 to highest n values, -1 to lowest n values, and 0 to the rest
             self.signals = pd.DataFrame(data=0, index=self.signals.index, columns=self.signals.columns)
