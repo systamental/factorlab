@@ -3,6 +3,7 @@ from typing import Optional, Union, Tuple, Dict
 
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.strategy_backtesting.metrics import Metrics
+from factorlab.data_viz.plot import plot_heatmap
 
 
 class PortfolioSort:
@@ -10,11 +11,11 @@ class PortfolioSort:
     Portfolio sort class.
     """
     def __init__(self,
-                 ret: Union[pd.Series, pd.DataFrame],
+                 returns: Union[pd.Series, pd.DataFrame],
                  factors: Union[pd.Series, pd.DataFrame],
                  factor_bins: Dict[str, Tuple[str, int]],
                  lags: int = 1,
-                 conditional: bool = False,
+                 as_conditional: bool = False,
                  central_tendency: str = 'mean',
                  perc: float = 0.5,
                  ls_portfolio: bool = False,
@@ -28,7 +29,7 @@ class PortfolioSort:
 
         Parameters
         ----------
-        ret: pd.Series or pd.DataFrame - Single or MultiIndex
+        returns: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
         factors: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
@@ -38,7 +39,7 @@ class PortfolioSort:
             as a key-values pairs, e.g. {'factor1': ('cs', 5), 'factor2': ('ts', 10)}.
         lags: int, default 1
             Number of lags to apply to the factors.
-        conditional: bool, default False
+        as_conditional: bool, default False
             Whether to compute conditional quantiles. If True, the factors are quantized in order to compute
             conditional quantiles. If False, the factors are quantized simultaneously to get unconditional quantiles.
         central_tendency: str, {'mean', 'median', 'quantile', 'min', 'max', etc.}, default 'mean'
@@ -50,18 +51,18 @@ class PortfolioSort:
             Whether to compute the long-short portfolio.
         fill_na: bool, default False
             Whether to fill missing values with 0.
-        window_type: str, default 'expanding'
+        window_type: str, {'expanding', 'rolling'}, default 'expanding'
             The type of the window. It can be 'expanding' or 'rolling'.
         window_size: int, default 365
             The size of the window.
         ann_factor: int, default None
             Annualization factor, e.g. 365 or 252 for daily, 52 for weekly, 12 for monthly, etc.
         """
+        self.returns = returns
         self.factors = factors
-        self.ret = ret
         self.factor_bins = factor_bins
         self.lags = lags
-        self.conditional = conditional
+        self.as_conditional = as_conditional
         self.central_tendency = central_tendency
         self.perc = perc
         self.ls_portfolio = ls_portfolio
@@ -69,12 +70,13 @@ class PortfolioSort:
         self.window_type = window_type
         self.window_size = window_size
         self.ann_factor = ann_factor
-        self.factor_names = self.factors.columns
+        self.factor_names = None
         self.factor_quantiles = pd.DataFrame()
         self.quantile_rets = pd.DataFrame()
         self.portfolio_rets = None
         self.freq = None
         self.index = None
+        self.metric_df = None
         self.preprocess_data()
         self.check_factor_bins()
 
@@ -105,13 +107,13 @@ class PortfolioSort:
             self.factors = self.factors.to_frame()
 
         # rets
-        if isinstance(self.ret, pd.Series):
-            self.ret = self.ret.to_frame()
+        if isinstance(self.returns, pd.Series):
+            self.returns = self.returns.to_frame()
 
         # concat factors and returns
-        data = pd.concat([self.factors, self.ret], axis=1, join='inner').dropna()
+        data = pd.concat([self.factors, self.returns], axis=1, join='inner').dropna()
         self.factors = data.iloc[:, :-1]
-        self.ret = data.iloc[:, -1].to_frame()
+        self.returns = data.iloc[:, -1].to_frame()
 
         # index
         self.index = data.index
@@ -137,6 +139,9 @@ class PortfolioSort:
                 self.ann_factor = 12
             else:
                 self.ann_factor = 252
+
+        # factor names
+        self.factor_names = self.factors.columns
 
     def quantize_factor(self, factor: Union[pd.Series, pd.DataFrame], strategy: str, n_bins: int) -> pd.DataFrame:
         """
@@ -241,7 +246,7 @@ class PortfolioSort:
             Dataframe with quantized factors.
         """
         # conditional
-        if self.conditional:
+        if self.as_conditional:
             self.conditional_quantization()
         else:
             self.unconditional_quantization()
@@ -262,10 +267,10 @@ class PortfolioSort:
 
         # quantiles and returns
         if isinstance(self.factor_quantiles, pd.MultiIndex):
-            quant_df = pd.concat([self.factor_quantiles.groupby('ticker').shift(self.lags), self.ret], axis=1,
+            quant_df = pd.concat([self.factor_quantiles.groupby('ticker').shift(self.lags), self.returns], axis=1,
                                  join='inner')
         else:
-            quant_df = pd.concat([self.factor_quantiles.shift(self.lags), self.ret], axis=1, join='inner')
+            quant_df = pd.concat([self.factor_quantiles.shift(self.lags), self.returns], axis=1, join='inner')
 
         return quant_df
 
@@ -340,16 +345,20 @@ class PortfolioSort:
 
         # single sort
         if self.factors.shape[1] == 1:
+
             # store perf metric in df
-            metric_df = pd.DataFrame(index=[str(i) for i in range(1, self.factor_bins[self.factor_names[0]][1] + 1)],
-                                    columns=[self.factor_names[0]])
-            for factor in metric_df.columns:
-                for quantile in metric_df.index:
+            self.metric_df = pd.DataFrame(
+                index=[str(i) for i in range(1, self.factor_bins[self.factor_names[0]][1] + 1)],
+                columns=[self.factor_names[0]]
+            )
+
+            # compute performance metric for each factor quantile
+            for factor in self.metric_df.columns:
+                for quantile in self.metric_df.index:
                     quant_df = df[(factor, quantile)]
                     if self.fill_na:
                         quant_df.fillna(0, inplace=True)
-                    # compute performance metric
-                    metric_df.loc[quantile, factor] = getattr(Metrics(quant_df, ret_type='log', ann_factor=365),
+                    self.metric_df.loc[quantile, factor] = getattr(Metrics(quant_df, ret_type='log', ann_factor=365),
                                                              metric)().values.round(decimals=4)
 
         # double sort
@@ -360,16 +369,15 @@ class PortfolioSort:
                                              [str(i) for i in range(1, self.factor_bins[self.factor_names[0]][1] + 1)]])
             cols = pd.MultiIndex.from_product([[self.factor_names[1]],
                                              [str(i) for i in range(1, self.factor_bins[self.factor_names[1]][1] + 1)]])
-            metric_df = pd.DataFrame(index=idx, columns=cols)
+            self.metric_df = pd.DataFrame(index=idx, columns=cols)
 
-            # loop through factors
-            for factor_1, quantile_1 in metric_df.index:
-                for factor_2, quantile_2 in metric_df.columns:
+            # compute performance metric for each factor quantile
+            for factor_1, quantile_1 in self.metric_df.index:
+                for factor_2, quantile_2 in self.metric_df.columns:
                     quant_df = pd.concat([df[(factor_1, quantile_1)], df[(factor_2, quantile_2)]], axis=1).mean(axis=1)
                     if self.fill_na:
                         quant_df.fillna(0, inplace=True)
-                    # compute performance metric
-                    metric_df.loc[(factor_1, quantile_1), (factor_2, quantile_2)] = \
+                    self.metric_df.loc[(factor_1, quantile_1), (factor_2, quantile_2)] = \
                         getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
                             decimals=4)
 
@@ -381,22 +389,36 @@ class PortfolioSort:
             for name in self.factor_names:
                 idx_list.append([f"{name}_{quant}" for quant in range(1, self.factor_bins[name][1] + 1)])
             idx = pd.MultiIndex.from_product(idx_list)
-            metric_df = pd.DataFrame(index=idx, columns=[metric])
+            self.metric_df = pd.DataFrame(index=idx, columns=[metric])
 
-            # loop through factors
-            for row in metric_df.index:
+            # compute performance metric for each factor quantile
+            for row in self.metric_df.index:
                 factor_1 = ('_'.join(row[0].split('_')[:-1]), row[0].split('_')[-1])
                 factor_2 = ('_'.join(row[1].split('_')[:-1]), row[1].split('_')[-1])
                 factor_3 = ('_'.join(row[2].split('_')[:-1]), row[2].split('_')[-1])
                 quant_df = pd.concat([df[factor_1], df[factor_2], df[factor_3]], axis=1).mean(axis=1)
                 if self.fill_na:
                     quant_df.fillna(0, inplace=True)
-                # compute performance metric
-                metric_df.loc['_'.join(factor_1), '_'.join(factor_2), '_'.join(factor_3)] = \
+                self.metric_df.loc['_'.join(factor_1), '_'.join(factor_2), '_'.join(factor_3)] = \
                     getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
                         decimals=4)
 
         else:
             raise ValueError("Only single, double and tripple sorts are supported.")
 
-        return metric_df.astype(float)
+        return self.metric_df.astype(float)
+
+    def plot_heatmap(self):
+        """
+        Plots heatmap for performance metric.
+        """
+        # check shape
+        if self.metric_df.shape[0] <= 1 and self.metric_df.shape[1] <= 1:
+            raise ValueError("Heatmap requires at least 2 factors to compare.")
+
+        else:
+            x_label = 'breakout_30 - Time Series Quantiles'
+            y_label = 'breakout_5 - Cross Sectional Quantiles'
+
+            plot_heatmap(self.metric_df, fig_size='auto', font='Lato', title='Portfolio Sorts Heatmap',
+                         subtitle=f"Sharpe ratio", title_font=None, x_label=x_label, y_label=y_label)
