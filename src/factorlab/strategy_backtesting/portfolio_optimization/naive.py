@@ -69,7 +69,10 @@ class NaiveOptimization:
             self.returns = self.returns.unstack()
         if not isinstance(self.returns.index, pd.DatetimeIndex):  # convert to single index
             self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna(how='all')  # drop missing rows
+        # remove missing vals
+        last_row = self.returns.iloc[-1]  # select the last row
+        columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
+        self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
 
         # method
         if self.method not in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
@@ -151,7 +154,9 @@ class NaiveOptimization:
         self.compute_estimators()
 
         # weights
-        ivp = 1. / np.diag(self.cov_matrix)
+        diag = np.diag(self.cov_matrix)
+        diag = np.where(diag == 0, np.nan, diag)  # avoid division by zero
+        ivp = 1. / diag
         ivp /= np.nansum(ivp)
         self.weights = ivp
         self.weights = self.weights * self.leverage
@@ -175,7 +180,9 @@ class NaiveOptimization:
         self.compute_estimators()
 
         # weights
-        ivp = 1. / np.sqrt(np.diag(self.cov_matrix))
+        sqrt_diag = np.sqrt(np.diag(self.cov_matrix))
+        sqrt_diag = np.where(sqrt_diag == 0, np.nan, sqrt_diag)  # avoid division by zero
+        ivp = 1. / sqrt_diag
         ivp /= np.nansum(ivp)
         self.weights = ivp
         self.weights = self.weights * self.leverage

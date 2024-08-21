@@ -89,7 +89,10 @@ class HRP:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna()  # drop missing rows
+        # remove missing vals
+        last_row = self.returns.iloc[-1]  # select the last row
+        columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
+        self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
 
         # method
         if self.linkage_method not in ['single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']:
@@ -384,7 +387,10 @@ class HERC:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna()  # drop missing rows
+        # remove missing vals
+        recent_rows = self.returns.tail(1)
+        columns_to_drop = recent_rows.columns[(recent_rows.isna() | (recent_rows == 0)).all()]
+        self.returns = self.returns.drop(columns=columns_to_drop).dropna()  # drop missing cols and emtpy rows
 
         # risk measure
         if self.risk_measure not in ['equal_weight', 'variance', 'std', 'expected_shortfall',

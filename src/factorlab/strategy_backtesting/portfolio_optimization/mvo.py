@@ -128,7 +128,10 @@ class MVO:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna()  # drop missing rows
+        # remove missing vals
+        last_row = self.returns.iloc[-1]  # select the last row
+        columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
+        self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
 
         # method
         if self.method not in ['max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',

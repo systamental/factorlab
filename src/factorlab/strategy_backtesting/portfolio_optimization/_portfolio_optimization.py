@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Optional, Union, Any, List
-import os
 
 from factorlab.strategy_backtesting.portfolio_optimization.naive import NaiveOptimization
 from factorlab.strategy_backtesting.portfolio_optimization.mvo import MVO
@@ -16,6 +15,11 @@ class PortfolioOptimization:
 
     This class computes the optimized portfolio weights or returns based on the signals of the assets or strategies.
     """
+    # List of available optimizer names
+    available_optimizers = ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
+                            'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
+                            'efficient_return', 'efficient_risk', 'risk_parity', 'hrp', 'herc']
+
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
                  method: str = 'equal_weight',
@@ -37,7 +41,7 @@ class PortfolioOptimization:
                  window_type: str = 'rolling',
                  window_size: Optional[int] = 180,
                  parallelize: bool = True,
-                 n_jobs: Optional[int] = None,
+                 n_jobs: Optional[int] = -1,
                  asset_names: Optional[List[str]] = None,
                  ann_factor: Optional[int] = None,
                  side_weights: Optional[pd.Series] = None,
@@ -138,24 +142,23 @@ class PortfolioOptimization:
         self.t_costs = None
         self.gross_returns = None
         self.portfolio_ret = pd.DataFrame()
-        self.preprocess_data()
+        self.check_method()
 
-    def preprocess_data(self) -> None:
+    def check_method(self) -> None:
         """
-        Preprocesses data.
+        Check if the method is valid.
         """
         # method
-        if self.method not in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
-                               'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                               'efficient_return', 'efficient_risk', 'risk_parity', 'hrp', 'herc']:
+        if self.method not in self.available_optimizers:
             raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance',"
                              "'inverse_vol', 'target_vol', 'random', 'min_vol', 'max_return_min_vol', "
                              "'max_sharpe', 'max_diversification', 'efficient_return', 'efficient_risk', "
                              "'risk_parity', 'hrp', 'herc'")
 
-        # n jobs
-        if self.parallelize and self.n_jobs is None:
-            self.n_jobs = os.cpu_count()
+    @classmethod
+    def get_available_optimizers(cls):
+        """Returns a list of available optimizer names."""
+        return cls.available_optimizers
 
     def get_optimizer(self, returns: pd.DataFrame) -> Any:
         """
@@ -204,7 +207,7 @@ class PortfolioOptimization:
         # compute weights
         self.weights = self.optimizer.compute_weights()
 
-        return self.weights.astype(float)
+        return self.weights.astype(float).fillna(0)
 
     def compute_expanding_window_weights(self) -> pd.DataFrame:
         """
@@ -218,25 +221,22 @@ class PortfolioOptimization:
         # dates
         dates = self.get_optimizer(self.returns).returns.index[self.window_size - 1:]
 
-        # function to compute weights for each date
         def compute_weights_for_date(end_date):
             data_window = self.returns.loc[:end_date]
             self.get_optimizer(data_window)
             w = self.optimizer.compute_weights()
-            return end_date, w.values.flatten()
+            return w
 
         # parallelize optimization
         if self.parallelize:
             results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
         else:
-            results = [compute_weights_for_date(date) for date in dates]
+            results = (compute_weights_for_date(date) for date in dates)
 
         # weights
-        self.weights = pd.DataFrame(index=dates, columns=self.returns.columns)
-        for date, weights in results:
-            self.weights.loc[date] = weights
+        self.weights = pd.concat(results).astype(float).fillna(0)
 
-        return self.weights.astype(float)
+        return self.weights
 
     def compute_rolling_window_weights(self) -> pd.DataFrame:
         """
@@ -250,26 +250,23 @@ class PortfolioOptimization:
         # dates
         dates = self.get_optimizer(self.returns).returns.index[self.window_size - 1:]
 
-        # function to compute weights for each date
         def compute_weights_for_date(end_date):
             loc_end = self.returns.index.get_loc(end_date)
             data_window = self.returns.iloc[loc_end + 1 - self.window_size: loc_end + 1]
             self.get_optimizer(data_window)
             w = self.optimizer.compute_weights()
-            return end_date, w.values.flatten()
+            return w
 
         # parallelize optimization
         if self.parallelize:
             results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
         else:
-            results = [compute_weights_for_date(date) for date in dates]
+            results = (compute_weights_for_date(date) for date in dates)
 
         # weights
-        self.weights = pd.DataFrame(index=dates, columns=self.returns.columns)
-        for date, weights in results:
-            self.weights.loc[date] = weights
+        self.weights = pd.concat(results).astype(float).fillna(0)
 
-        return self.weights.astype(float)
+        return self.weights
 
     def get_weights(self) -> pd.DataFrame:
         """
@@ -350,6 +347,8 @@ class PortfolioOptimization:
         portfolio_ret: pd.DataFrame
             Portfolio returns.
         """
+        # TODO: add progress bar
+
         # copy returns
         rets = self.returns.copy()
         # df for weights reset
@@ -360,7 +359,6 @@ class PortfolioOptimization:
 
             # iterate over columns
             for col in rets.columns:
-
                 # get unstacked returns for each column
                 self.returns = rets[col].unstack()
 
