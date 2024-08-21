@@ -1,11 +1,9 @@
 import pandas as pd
 import numpy as np
-from math import ceil
 from typing import Optional, Union
 from importlib import resources
 from pathlib import Path
 from PIL import Image
-from matplotlib.offsetbox import OffsetImage, AnchoredOffsetbox
 import matplotlib.pyplot as plt
 from matplotlib import font_manager as fm
 import seaborn as sns
@@ -104,20 +102,30 @@ def plot_series(data: Union[pd.Series, pd.DataFrame],
     ax.ticklabel_format(style='plain', axis='y')
 
     # legend
-    if isinstance(data, pd.Series) or data.shape[1] == 1:
-        ncols = 1
-        height = 0.93
+    if isinstance(data, pd.Series) or data.shape[1] <= 15:
+
+        # cols and location
+        ncols = 5
+        location = "upper right"
+
+        if isinstance(data, pd.Series) or data.shape[1] <= 5:
+            height = 0.93
+        elif data.shape[1] <= 10:
+            height = 0.96
+        else:
+            height = 0.98
+
+        ax.legend(
+            loc=location,
+            ncol=ncols,
+            bbox_to_anchor=(0.9, height),
+            bbox_transform=fig.transFigure,
+            facecolor='white',
+            edgecolor='white'
+        )
+
     else:
-        ncols = ceil(data.shape[1] / 2)
-        height = 0.96
-    ax.legend(
-        loc="upper right",
-        ncol=ncols,
-        bbox_to_anchor=(0.9, height),
-        bbox_transform=fig.transFigure,
-        facecolor='white',
-        edgecolor='white'
-    )
+        ax.get_legend().set_visible(False)
 
     # add in title and subtitle
     if subtitle is None:
@@ -563,9 +571,79 @@ def plot_scatter(data: pd.DataFrame,
                 alpha=.8, fontdict=source_font)
 
 
-def plot_heatmap():
+def plot_heatmap(data: pd.DataFrame,
+                 fig_size: Union[str, tuple] = 'auto',
+                 font: str = 'Lato',
+                 title: Optional[str] = None,
+                 subtitle: Optional[str] = None,
+                 title_font: Optional[str] = None,
+                 x_label: Optional[str] = None,
+                 y_label: Optional[str] = None,
+                 add_logo: bool = False,
+                 source: Optional[str] = None,
+                 source_font: Optional[str] = None
+                 ):
+        """
+        Creates a heatmap from a data object (dataframe or series).
 
-    pass
+        Parameters
+        ----------
+        data: pd.DataFrame
+            Data object from which to create heatmap.
+        fig_size: tuple or str, default 'auto'
+            Tuple (width, height) of figure object, defaults to 'auto'
+        font: str, default 'Lato'
+            Font used for all text in the plot.
+        title: str, default None
+            Title to use for the plot.
+        subtitle: str, default None
+            Subtitle to use for the plot.
+        title_font: str, default None
+            Font used for the text in the title and subtitle.
+        x_label: str, default None
+            Text describing the units of measurement for the x-axis.
+        y_label: str, default None
+            Text describing the units of measurement for the y-axis.
+        add_logo: bool, default False
+            Adds the Systamental logo to the bottom left corner of the plot.
+        source: str, default None
+            Adds text for the source of the data in the plot.
+        source_font: str, default None
+            Font used for the source text.
+        """
+        # font
+        add_fonts()
+        plt.rcParams['font.sans-serif'] = font
+
+        # plot size
+        if fig_size == 'auto':
+            fig_size = (data.shape[0] * 2, data.shape[1] * 2)
+        fig, ax = plt.subplots(figsize=fig_size)
+
+        # plot heatmap
+        sns.heatmap(data.round(2), cmap="vlag_r", center=0, cbar=False, annot=True, annot_kws={"fontsize": 12},
+                    square=True)
+        sns.set(font_scale=1)
+
+        # add title
+        ax.set_title(title, loc='left', weight='bold', pad=20, fontsize=18, family=title_font)
+        ax.text(x=0, y=-0.02, s=subtitle, ha='left', fontsize=15, alpha=.8, fontdict=title_font)
+
+        # add x & y labels
+        ax.set_xlabel(x_label, weight='bold')
+        ax.set_ylabel(y_label, weight='bold')
+
+        # add systamental logo
+        if add_logo:
+            with resources.path("factorlab", "systamental_logo.png") as f:
+                img_path = f
+            logo = Image.open(img_path)
+            fig.figimage(logo, 0, -1, origin='upper')
+
+        # set source text
+        if source is not None:
+            ax.text(x=0.135, y=0.05, s=f"""Source: {source}""", transform=fig.transFigure, ha='left', fontsize=10,
+                    alpha=.8, fontdict=source_font)
 
 
 def monthly_returns_heatmap(
@@ -620,7 +698,7 @@ def monthly_returns_heatmap(
 
     # plot heatmap
     sns.heatmap(table, annot=True, cmap='RdYlGn', center=0, square=True, cbar=False, fmt='g')
-    plt.yticks(rotation=0) # rotate y-ticks
+    plt.yticks(rotation=0)  # rotate y-ticks
 
     # add systamental logo
     if logo:
@@ -632,4 +710,3 @@ def monthly_returns_heatmap(
     # Adding title
     ax.set_title('Monthly Returns (%)', loc='left', weight='bold', pad=20, fontsize=14, family='georgia')
     ax.text(x=0, y=-0.05, s=f"{series.title()}", ha='left', fontsize=12, alpha=.8, fontdict=None, family='georgia')
-
