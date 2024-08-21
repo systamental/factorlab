@@ -462,31 +462,52 @@ class Signal:
         # strategy placeholder
         strategy = self.strategy
 
-        # compute signals
-        # ts
-        self.strategy = 'ts_ls'
-        signals_ts = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-                                leverage=leverage, lags=lags)
-        # cs
-        self.strategy = 'cs_ls'
-        signals_cs = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-                                leverage=leverage, lags=lags)
+        # normalize factors
+        self.strategy = 'ts' + '_' + strategy.split('_')[1]
+        norm_factors_ts = self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
+        self.strategy = 'cs' + '_' + strategy.split('_')[1]
+        norm_factors_cs = self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
 
-        # dual
-        self.strategy = strategy
-        self.signals = None
-        signals = pd.concat([signals_ts, signals_cs], axis=1, join='inner')
-        for factor in signals_ts.columns:
-            self.signals = pd.concat([self.signals, getattr(signals[factor], summary_stat)(axis=1).to_frame(factor)],
-                                     axis=1)
+        # compute dual factors
+        self.norm_factors = None
+        factors = pd.concat([norm_factors_ts, norm_factors_cs], axis=1, join='inner')
+        for factor in norm_factors_ts.columns:
+            self.norm_factors = pd.concat([self.norm_factors,
+                                           getattr(factors[factor], summary_stat)(axis=1).to_frame(factor)],
+                                          axis=1)
 
-        # long or short only
-        if self.strategy.split('_')[1] == 'l':
-            self.signals = self.signals.clip(lower=0)
-        elif self.strategy.split('_')[1] == 's':
-            self.signals = self.signals.clip(upper=0)
+        # compute dual signals
+        self.strategy = 'dual' + '_' + strategy.split('_')[1]
+        self.signals = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+                                            leverage=leverage, lags=lags)
 
         return self.signals
+
+        # # compute signals
+        # # ts
+        # self.strategy = 'ts_ls'
+        # signals_ts = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+        #                         leverage=leverage, lags=lags)
+        # # cs
+        # self.strategy = 'cs_ls'
+        # signals_cs = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
+        #                         leverage=leverage, lags=lags)
+        #
+        # # dual
+        # self.strategy = strategy
+        # self.signals = None
+        # signals = pd.concat([signals_ts, signals_cs], axis=1, join='inner')
+        # for factor in signals_ts.columns:
+        #     self.signals = pd.concat([self.signals, getattr(signals[factor], summary_stat)(axis=1).to_frame(factor)],
+        #                              axis=1)
+        #
+        # # long or short only
+        # if self.strategy.split('_')[1] == 'l':
+        #     self.signals = self.signals.clip(lower=0)
+        # elif self.strategy.split('_')[1] == 's':
+        #     self.signals = self.signals.clip(upper=0)
+        #
+        # return self.signals
 
     def compute_signal_returns(self,
                                signal_type: str = 'signal',
