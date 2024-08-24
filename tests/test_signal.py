@@ -241,15 +241,15 @@ class TestSignal:
         # cols
         assert (actual_btc.columns == signal_btc.factors.columns).all()
 
-    @pytest.mark.parametrize("pdf", ['norm', 'percentile', 'min-max', 'logistic', 'adj_norm'])
-    def test_convert_to_signals(self, pdf):
+    @pytest.mark.parametrize("transformation", ['norm', 'percentile', 'min-max', 'logistic', 'adj_norm'])
+    def test_convert_to_signals(self, transformation):
         """
         Test convert_to_signals method.
         """
         # get actual
-        actual_ts = self.ts_signal.convert_to_signals(pdf=pdf)
-        actual_cs = self.cs_signal.convert_to_signals(pdf=pdf)
-        actual_btc = self.btc_signal.convert_to_signals(pdf=pdf)
+        actual_ts = self.ts_signal.convert_to_signals(transformation=transformation)
+        actual_cs = self.cs_signal.convert_to_signals(transformation=transformation)
+        actual_btc = self.btc_signal.convert_to_signals(transformation=transformation)
 
         # shape
         assert self.ts_signal.factors.shape == actual_ts.shape
@@ -427,7 +427,7 @@ class TestSignal:
         # get actual
         if signal_type != 'signal_rank':
             actual_ts = self.ts_signal.compute_signals(signal_type=signal_type, lags=lags)
-            actual_cs = self.cs_signal.compute_signals(signal_type=signal_type, pdf='min-max', lags=lags)
+            actual_cs = self.cs_signal.compute_signals(signal_type=signal_type, transformation='min-max', lags=lags)
             actual_btc = self.btc_signal.compute_signals(signal_type=signal_type, lags=lags)
 
             # shape
@@ -442,6 +442,7 @@ class TestSignal:
             assert np.allclose(actual_ts.loc[pd.IndexSlice[:, 'BTC'], :].dropna(), actual_btc.dropna())
 
             # check factors vs. signals correlation
+            trend_factor_mean, signal_mean, trend_tickers_rank, cs_tickers_rank = None, None, None, None
             if signal_type == 'signal':
                 if lags is None or lags == 0:
                     trend_factor_mean = price_mom.price_mom_20.unstack().mean(axis=1)

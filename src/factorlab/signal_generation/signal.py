@@ -38,7 +38,7 @@ class Signal:
             Number of bins to create for returns.
         n_factors: int, default 10
             Number of factors to use for cross-sectional strategies.
-        disc_thresh: float, default 0.95
+        disc_thresh: float, default 0
             Threshold cutoff for converting continuous signal values to discrete signals.
         window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Window type for normalization.
@@ -165,7 +165,7 @@ class Signal:
         return self.factor_quantiles
 
     def convert_to_signals(self,
-                           pdf: str = 'norm',
+                           transformation: Optional[str] = 'norm',
                            ts_norm: bool = False,
                            winsorize: Optional[int] = None
                            ) -> pd.DataFrame:
@@ -176,8 +176,8 @@ class Signal:
 
         Parameters
         ----------
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
-            Probability density function to convert raw factor values to signals between 1 and -1.
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
+            Transformation to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before normalizing over the cross-section.
         winsorize: int, optional, default None
@@ -188,41 +188,51 @@ class Signal:
         signals: pd.Series or pd.DataFrame - Single or MultiIndex
             Continuous signals with DatetimeIndex (level 0), tickers (level 1) and signal values (cols).
         """
+        # transformation
         # normal distribution
-        if pdf == 'norm':
+        if transformation == 'norm':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
-            # cdf of normal distribution
+            # cumulative distribution function of normal distribution
             self.signals = pd.DataFrame(norm.cdf(self.norm_factors), index=self.norm_factors.index,
                                         columns=self.norm_factors.columns)
-            self.signals = (self.signals * 2) - 1
 
         # uniform distribution
-        elif pdf == 'min-max':
-            self.normalize(method='min-max', centering=True, ts_norm=ts_norm, winsorize=winsorize)
-            self.signals = (self.norm_factors * 2) - 1
-
-        # percentile rank
-        elif pdf == 'percentile':
+        elif transformation == 'percentile':
             self.normalize(method='percentile', centering=True, ts_norm=ts_norm, winsorize=winsorize)
-            self.signals = (self.norm_factors * 2) - 1
+            self.signals = self.norm_factors
+
+        # min-max
+        elif transformation == 'min-max':
+            self.normalize(method='min-max', centering=True, ts_norm=ts_norm, winsorize=winsorize)
+            self.signals = self.norm_factors
 
         # logistic
-        elif pdf == 'logistic':
+        elif transformation == 'logistic':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             # cdf of logistic distribution
             self.signals = pd.DataFrame(logistic.cdf(self.norm_factors), index=self.norm_factors.index,
                                         columns=self.norm_factors.columns)
-            self.signals = (self.signals * 2) - 1
 
         # adjusted normal distribution
-        else:
+        elif transformation == 'adj_norm':
             self.normalize(method='adj_norm', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             self.signals = self.norm_factors * np.exp((-1 * self.norm_factors ** 2) / 4) / 0.89
+
+        # sign
+        elif transformation == 'sign':
+            self.signals = np.sign(self.factors)
+
+        else:
+            self.signals = self.factors
+
+        # convert to signals
+        if transformation not in ['adj_norm', 'sign']:
+            self.signals = (self.signals * 2) - 1
 
         return self.signals
 
     def discretize_signals(self,
-                           pdf: str = 'norm',
+                           transformation: str = 'norm',
                            ts_norm: bool = False,
                            winsorize: Optional[int] = None
                            ) -> pd.DataFrame:
@@ -231,8 +241,8 @@ class Signal:
 
         Parameters
         ----------
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
-            Probability density function to convert raw factor values to signals between 1 and -1.
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
+            Transformation to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before normalizing over the cross-section.
         winsorize: int, default 3
@@ -244,7 +254,7 @@ class Signal:
             Discrete signals (-1, 0, 1) with DatetimeIndex (level 0), tickers (level 1) and signal values (cols).
         """
         # signals
-        self.convert_to_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
+        self.convert_to_signals(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
 
         # discretize
         self.signals = self.signals.apply(lambda x: np.where(np.abs(x) >= self.disc_thresh, np.sign(x), 0))
@@ -252,7 +262,7 @@ class Signal:
         return self.signals
 
     def signals_to_quantiles(self,
-                             pdf: str = 'norm',
+                             transformation: str = 'norm',
                              ts_norm: bool = False,
                              winsorize: Optional[int] = None
                              ) -> pd.DataFrame:
@@ -261,8 +271,8 @@ class Signal:
 
         Parameters
         ----------
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
-            Probability density function to convert raw factor values to signals between 1 and -1.
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
+            Transformation to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross-section.
         winsorize: int, optional, default None
@@ -274,7 +284,7 @@ class Signal:
             Signal quantiles with DatetimeIndex (level 0), tickers (level 1) and signal quantile values (cols).
         """
         # signals
-        self.convert_to_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
+        self.convert_to_signals(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
 
         # quantiles
         self.factor_quantiles = Transform(self.signals).quantize(bins=self.factor_bins,
@@ -289,7 +299,7 @@ class Signal:
         return self.signals
 
     def signals_to_rank(self,
-                        pdf: str = 'norm',
+                        transformation: Optional[str] = None,
                         ts_norm: bool = False,
                         winsorize: Optional[int] = None
                         ) -> pd.DataFrame:
@@ -298,8 +308,8 @@ class Signal:
 
         Parameters
         ----------
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
-            Probability density function to convert raw factor values to signals between 1 and -1.
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
+            Transformation to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross-section.
         winsorize: int, optional, default None
@@ -315,7 +325,7 @@ class Signal:
             raise ValueError("Signal rank is only available for cross-sectional strategies.")
         else:
             # signals
-            self.convert_to_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
+            self.convert_to_signals(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
 
             # min n cross-section cutoff
             self.signals = self.signals[(self.signals.groupby(level=0).count() >= self.n_factors * 2)].dropna()
@@ -339,7 +349,7 @@ class Signal:
 
     def compute_signals(self,
                         signal_type: str = 'signal',
-                        pdf: str = 'norm',
+                        transformation: str = 'norm',
                         ts_norm: bool = False,
                         winsorize: int = 3,
                         leverage: Optional[int] = None,
@@ -350,7 +360,7 @@ class Signal:
 
         Parameters
         ----------
-        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'signal_rank'}, optional, default 'signal'
+        signal_type: str, {'signal', 'signal_quantiles', 'disc_signal', 'sign', 'signal_rank'}, default 'signal'
             signal: factor inputs are converted to signals between -1 and 1 for l/s strategies, between 0 and 1 for long
             only strategies, and between -1 and 0 for short only strategies.
             disc_signal: factor inputs are converted to discrete signals -1, 0 and 1 for l/s strategies,
@@ -359,8 +369,8 @@ class Signal:
              between 0 and 1 for long-only strategies, and between -1 and 0 for short only strategies, with n bins.
             signal_rank: factor inputs are converted to signal ranks between -1 and 1, 0 or 1 for long only
             strategies, and -1 or 0 for short only strategies, with n factors.
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
-            Probability density function to convert raw factor values to signals between 1 and -1.
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
+            Transformation to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross-section.
         winsorize: int, default 3
@@ -381,19 +391,23 @@ class Signal:
 
         # signals, signal_type 'signal'
         if signal_type == 'signal':
-            self.convert_to_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
-
-        # discrete signals, signal_type 'disc_signal'
-        if signal_type == 'disc_signal':
-            self.discretize_signals(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
+            self.convert_to_signals(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
 
         # quantized signals, signal_type 'signal_quantiles'
         if signal_type == 'signal_quantiles':
-            self.signals_to_quantiles(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
+            self.signals_to_quantiles(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
+
+        # discrete signals, signal_type 'disc_signal'
+        if signal_type == 'disc_signal':
+            self.discretize_signals(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
+
+        # sign, signal_type 'sign'
+        if signal_type == 'sign':
+            self.convert_to_signals(transformation='sign', ts_norm=ts_norm, winsorize=winsorize)
 
         # signal rank, signal_type 'signal_rank'
         if signal_type == 'signal_rank':
-            self.signals_to_rank(pdf=pdf, ts_norm=ts_norm, winsorize=winsorize)
+            self.signals_to_rank(transformation=None, ts_norm=ts_norm, winsorize=winsorize)
 
         # long or short only
         if self.strategy.split('_')[1] == 'l':
@@ -417,7 +431,7 @@ class Signal:
     def compute_dual_signals(self,
                              summary_stat: str = 'mean',
                              signal_type: str = 'signal',
-                             pdf: str = 'norm',
+                             transformation: Optional[str] = 'norm',
                              ts_norm: bool = False,
                              winsorize: int = 3,
                              leverage: Optional[int] = None,
@@ -430,7 +444,7 @@ class Signal:
         ----------
         summary_stat: str, {'mean', 'median', 'min', 'max', 'sum', 'prod'}
             Summary statistic to compute dual signals.
-        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'signal_rank'}, optional, default 'signal'
+        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'sign', 'signal_rank'}, default 'signal'
             signal: factor inputs are converted to signals between -1 and 1 for l/s strategies, between 0 and 1 for long
             only strategies, and between -1 and 0 for short only strategies.
             disc_signal: factor inputs are converted to discrete signals -1, 0 and 1 for l/s strategies,
@@ -439,7 +453,7 @@ class Signal:
             between 0 and 1 for long-only strategies, and between -1 and 0 for short only strategies, with n bins.
             signal_rank: factor inputs are converted to signal ranks between -1 and 1, 0 or 1 for long only
             strategies, and -1 or 0 for short only strategies, with n factors.
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
             Probability density function to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross-section.
@@ -478,40 +492,14 @@ class Signal:
 
         # compute dual signals
         self.strategy = 'dual' + '_' + strategy.split('_')[1]
-        self.signals = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-                                            leverage=leverage, lags=lags)
+        self.signals = self.compute_signals(signal_type=signal_type, transformation=transformation, ts_norm=ts_norm,
+                                            winsorize=winsorize, leverage=leverage, lags=lags)
 
         return self.signals
 
-        # # compute signals
-        # # ts
-        # self.strategy = 'ts_ls'
-        # signals_ts = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-        #                         leverage=leverage, lags=lags)
-        # # cs
-        # self.strategy = 'cs_ls'
-        # signals_cs = self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-        #                         leverage=leverage, lags=lags)
-        #
-        # # dual
-        # self.strategy = strategy
-        # self.signals = None
-        # signals = pd.concat([signals_ts, signals_cs], axis=1, join='inner')
-        # for factor in signals_ts.columns:
-        #     self.signals = pd.concat([self.signals, getattr(signals[factor], summary_stat)(axis=1).to_frame(factor)],
-        #                              axis=1)
-        #
-        # # long or short only
-        # if self.strategy.split('_')[1] == 'l':
-        #     self.signals = self.signals.clip(lower=0)
-        # elif self.strategy.split('_')[1] == 's':
-        #     self.signals = self.signals.clip(upper=0)
-        #
-        # return self.signals
-
     def compute_signal_returns(self,
                                signal_type: str = 'signal',
-                               pdf: str = 'norm',
+                               transformation: str = 'norm',
                                ts_norm: bool = False,
                                winsorize: int = 3,
                                leverage: Optional[int] = None,
@@ -523,7 +511,7 @@ class Signal:
 
         Parameters
         ----------
-        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'signal_rank'}, optional, default 'signal'
+        signal_type: str, {'signal', 'disc_signal', 'signal_quantiles', 'sign', 'signal_rank'}, default 'signal'
             signal: factor inputs are converted to signals between -1 and 1 for l/s strategies, between 0 and 1 for long
             only strategies, and between -1 and 0 for short only strategies.
             disc_signal: factor inputs are converted to discrete signals -1, 0 and 1 for l/s strategies,
@@ -532,7 +520,7 @@ class Signal:
              between 0 and 1 for long-only strategies, and between -1 and 0 for short only strategies, with n bins.
             signal_rank: factor inputs are converted to signal ranks between -1 and 1, 0 or 1 for long only
             strategies, and -1 or 0 for short only strategies, with n factors.
-        pdf: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm'}, default 'norm'
+        transformation: str, {'norm', 'percentile', 'min-max', 'logistic', 'adj_norm', 'sign'}, default 'norm'
             Probability density function to convert raw factor values to signals between 1 and -1.
         ts_norm: bool, default False
             Normalizes factors over the time series before quantization over the cross-section.
@@ -552,11 +540,12 @@ class Signal:
         """
         # compute signals
         if self.strategy.split('_')[0] == 'dual':
-            self.compute_dual_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-                                      leverage=leverage, lags=lags, summary_stat=dual_summary_stat)
+            self.compute_dual_signals(signal_type=signal_type, transformation=transformation, ts_norm=ts_norm,
+                                      winsorize=winsorize, leverage=leverage, lags=lags,
+                                      summary_stat=dual_summary_stat)
         else:
-            self.compute_signals(signal_type=signal_type, pdf=pdf, ts_norm=ts_norm, winsorize=winsorize,
-                             leverage=leverage, lags=lags)
+            self.compute_signals(signal_type=signal_type, transformation=transformation, ts_norm=ts_norm,
+                                 winsorize=winsorize, leverage=leverage, lags=lags)
 
         # concat signals and returns
         df = pd.concat([self.signals, self.returns], axis=1, join='inner')
