@@ -70,7 +70,7 @@ class Carry:
             self.carry = self.carry * -1
 
         # drop NaNs
-        self.carry = self.carry.unstack().dropna(how='all').stack().to_frame('carry').sort_index()
+        self.carry = self.carry.unstack().dropna(how='all').stack(future_stack=True).to_frame('carry').sort_index()
 
         return self.carry
 
