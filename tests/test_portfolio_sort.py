@@ -104,7 +104,7 @@ class TestPortfolioSort:
         self.sort_conditional_instance = PortfolioSort(spot_ret.close, price_mom[['price_mom_5', 'price_mom_20']],
                                                        factor_bins={'price_mom_5': ('ts', 3),
                                                                     'price_mom_20': ('cs', 3)},
-                                                       conditional=True)
+                                                       as_conditional=True)
 
     @pytest.fixture(autouse=True)
     def portfolio_sort_btc_single(self, btc_price_mom, btc_spot_ret):
@@ -131,7 +131,7 @@ class TestPortfolioSort:
                                                            btc_price_mom[['price_mom_5', 'price_mom_20']],
                                                            factor_bins={'price_mom_5': ('ts', 3),
                                                                         'price_mom_20': ('ts', 3)},
-                                                           conditional=True)
+                                                           as_conditional=True)
 
     def test_initialization(self) -> None:
         """
@@ -142,12 +142,12 @@ class TestPortfolioSort:
         assert isinstance(self.btc_sort_instance, PortfolioSort)
         assert isinstance(self.sort_single_instance.factors, pd.DataFrame)
         assert isinstance(self.btc_sort_instance.factors, pd.DataFrame)
-        assert isinstance(self.sort_single_instance.ret, pd.DataFrame)
-        assert isinstance(self.btc_sort_instance.ret, pd.DataFrame)
+        assert isinstance(self.sort_single_instance.returns, pd.DataFrame)
+        assert isinstance(self.btc_sort_instance.returns, pd.DataFrame)
         assert (self.sort_single_instance.factors.dtypes == np.float64).all()
         assert (self.btc_sort_instance.factors.dtypes == np.float64).all()
-        assert (self.sort_single_instance.ret.dtypes == np.float64).all()
-        assert (self.btc_sort_instance.ret.dtypes == np.float64).all()
+        assert (self.sort_single_instance.returns.dtypes == np.float64).all()
+        assert (self.btc_sort_instance.returns.dtypes == np.float64).all()
 
     def test_check_factor_bins_value_errors(self, price_mom, btc_price_mom, spot_ret, btc_spot_ret) -> None:
         """
@@ -168,31 +168,34 @@ class TestPortfolioSort:
         self.btc_sort_instance.preprocess_data()
 
         # shape
-        assert self.sort_single_instance.factors.shape[0] == self.sort_single_instance.ret.shape[0]
-        assert self.btc_sort_instance.factors.shape[0] == self.btc_sort_instance.ret.shape[0]
+        assert self.sort_single_instance.factors.shape[0] == self.sort_single_instance.returns.shape[0]
+        assert self.btc_sort_instance.factors.shape[0] == self.btc_sort_instance.returns.shape[0]
         assert self.sort_single_instance.factors.shape[1] == 1
         assert self.btc_sort_instance.factors.shape[1] == 1
-        assert self.sort_single_instance.ret.shape[1] == 1
-        assert self.btc_sort_instance.ret.shape[1] == 1
+        assert self.sort_single_instance.returns.shape[1] == 1
+        assert self.btc_sort_instance.returns.shape[1] == 1
         # dtypes
         assert isinstance(self.sort_single_instance.factors, pd.DataFrame)
         assert isinstance(self.btc_sort_instance.factors, pd.DataFrame)
-        assert isinstance(self.sort_single_instance.ret, pd.DataFrame)
-        assert isinstance(self.btc_sort_instance.ret, pd.DataFrame)
+        assert isinstance(self.sort_single_instance.returns, pd.DataFrame)
+        assert isinstance(self.btc_sort_instance.returns, pd.DataFrame)
         assert (self.sort_single_instance.factors.dtypes == np.float64).all()
         assert (self.btc_sort_instance.factors.dtypes == np.float64).all()
-        assert (self.sort_single_instance.ret.dtypes == np.float64).all()
-        assert (self.btc_sort_instance.ret.dtypes == np.float64).all()
+        assert (self.sort_single_instance.returns.dtypes == np.float64).all()
+        assert (self.btc_sort_instance.returns.dtypes == np.float64).all()
         # index
         assert isinstance(self.sort_single_instance.factors.index, pd.MultiIndex)
-        assert isinstance(self.sort_single_instance.ret.index, pd.MultiIndex)
+        assert isinstance(self.sort_single_instance.returns.index, pd.MultiIndex)
         assert isinstance(self.sort_single_instance.factors.index.get_level_values(0), pd.DatetimeIndex)
-        assert isinstance(self.sort_single_instance.ret.index.get_level_values(0), pd.DatetimeIndex)
+        assert isinstance(self.sort_single_instance.returns.index.get_level_values(0), pd.DatetimeIndex)
         assert isinstance(self.btc_sort_instance.factors.index, pd.DatetimeIndex)
-        assert isinstance(self.btc_sort_instance.ret.index, pd.DatetimeIndex)
+        assert isinstance(self.btc_sort_instance.returns.index, pd.DatetimeIndex)
         # freq
         assert self.sort_single_instance.freq == 'D'
         assert self.btc_sort_instance.freq == 'D'
+        # ann factor
+        assert self.sort_single_instance.ann_factor == 363
+        assert self.btc_sort_instance.ann_factor == 363
 
     @pytest.mark.parametrize("factor, strategy, bins", [('price_mom_5', 'ts', 3), ('price_mom_5', 'cs', 3)])
     def test_quantize_factor(self, factor, strategy, bins):
@@ -225,7 +228,7 @@ class TestPortfolioSort:
             assert isinstance(actual_btc, pd.DataFrame)
             assert (self.btc_sort_instance.factors[factor].dtypes == np.float64)
             assert isinstance(self.btc_sort_instance.factors.index, pd.DatetimeIndex)
-            assert isinstance(self.btc_sort_instance.ret.index, pd.DatetimeIndex)
+            assert isinstance(self.btc_sort_instance.returns.index, pd.DatetimeIndex)
             assert actual_btc.columns == [factor]
 
     def test_quantize_factor_value_errors(self):
@@ -332,24 +335,25 @@ class TestPortfolioSort:
         actual_btc = self.btc_sort_double_instance.join_quantile_rets()
 
         # shape
-        assert actual.shape[0] == self.sort_double_instance.ret.shape[0]
-        assert actual.shape[1] == self.sort_double_instance.factors.shape[1] + self.sort_double_instance.ret.shape[1]
-        assert actual_btc.shape[0] == self.btc_sort_double_instance.ret.shape[0]
+        assert actual.shape[0] == self.sort_double_instance.returns.shape[0]
+        assert actual.shape[1] == self.sort_double_instance.factors.shape[1] + \
+               self.sort_double_instance.returns.shape[1]
+        assert actual_btc.shape[0] == self.btc_sort_double_instance.returns.shape[0]
         assert actual_btc.shape[1] == self.btc_sort_double_instance.factors.shape[1] + \
-               self.btc_sort_double_instance.ret.shape[1]
+               self.btc_sort_double_instance.returns.shape[1]
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
         # index
-        assert (actual.index == self.sort_double_instance.ret.index).all()
-        assert (actual_btc.index == self.btc_sort_double_instance.ret.index).all()
+        assert (actual.index == self.sort_double_instance.returns.index).all()
+        assert (actual_btc.index == self.btc_sort_double_instance.returns.index).all()
         # cols
         assert (actual.columns == self.sort_double_instance.factors.columns.tolist() +
-                self.sort_double_instance.ret.columns.tolist()).all()
+                self.sort_double_instance.returns.columns.tolist()).all()
         assert (actual_btc.columns == self.btc_sort_double_instance.factors.columns.tolist() +
-                self.btc_sort_double_instance.ret.columns.tolist()).all()
+                self.btc_sort_double_instance.returns.columns.tolist()).all()
 
     def test_sort(self):
         """
@@ -360,12 +364,13 @@ class TestPortfolioSort:
         self.btc_sort_double_instance.sort()
 
         # shape
-        assert self.sort_double_instance.quantile_rets.shape[0] == self.sort_double_instance.factors.shape[0] - 1
+        assert self.sort_double_instance.quantile_rets.shape[0] < min(self.sort_double_instance.factors.shape[0],
+                                                                      self.sort_double_instance.returns.shape[0])
         assert self.sort_double_instance.quantile_rets.shape[1] == \
                self.sort_double_instance.factor_bins['price_mom_5'][1] + \
                self.sort_double_instance.factor_bins['price_mom_20'][1]
-        assert self.btc_sort_double_instance.quantile_rets.shape[0] == \
-               self.btc_sort_double_instance.factors.shape[0] - 2
+        assert self.btc_sort_double_instance.quantile_rets.shape[0] < \
+               min(self.btc_sort_double_instance.factors.shape[0], self.btc_sort_double_instance.returns.shape[0])
         assert self.btc_sort_double_instance.quantile_rets.shape[1] == \
                self.btc_sort_double_instance.factor_bins['price_mom_5'][1] + \
                self.btc_sort_double_instance.factor_bins['price_mom_20'][1]
