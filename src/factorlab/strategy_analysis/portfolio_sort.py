@@ -110,35 +110,43 @@ class PortfolioSort:
         if isinstance(self.returns, pd.Series):
             self.returns = self.returns.to_frame()
 
-        # concat factors and returns
-        data = pd.concat([self.factors, self.returns], axis=1, join='inner').dropna()
-        self.factors = data.iloc[:, :-1]
-        self.returns = data.iloc[:, -1].to_frame()
+        # # concat factors and returns
+        # data = pd.concat([self.factors, self.returns], axis=1, join='inner').dropna()
+        # self.factors = data.iloc[:, :-1]
+        # self.returns = data.iloc[:, -1].to_frame()
 
         # index
-        self.index = data.index
+        self.index = self.returns.index
         if isinstance(self.index, pd.MultiIndex):
             if not isinstance(self.index.levels[0], pd.DatetimeIndex):
                 self.index = self.index.set_levels(pd.to_datetime(self.index.levels[0]), level=0)
         else:
             self.index = pd.to_datetime(self.index)
 
+        # ann_factor
+        if self.ann_factor is None:
+            if isinstance(self.index, pd.MultiIndex):
+                self.ann_factor = self.returns.unstack().groupby(
+                    self.returns.unstack().index.get_level_values(0).year).count().max().mode()[0]
+            else:
+                self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
+
         # freq
         if isinstance(self.index, pd.MultiIndex):
             self.freq = pd.infer_freq(self.index.get_level_values(0).unique())
         else:
             self.freq = pd.infer_freq(self.index)
-
-        # ann_factor
-        if self.ann_factor is None:
-            if self.freq == 'D':
-                self.ann_factor = 365
-            elif self.freq == 'W':
-                self.ann_factor = 52
-            elif self.freq == 'M':
-                self.ann_factor = 12
+        if self.freq is None:
+            if self.ann_factor == 1:
+                self.freq = 'Y'
+            elif self.ann_factor == 4:
+                self.freq = 'Q'
+            elif self.ann_factor == 12:
+                self.freq = 'M'
+            elif self.ann_factor == 52:
+                self.freq = 'W'
             else:
-                self.ann_factor = 252
+                self.freq = 'D'
 
         # factor names
         self.factor_names = self.factors.columns
@@ -266,7 +274,7 @@ class PortfolioSort:
         self.quantize_factors()
 
         # quantiles and returns
-        if isinstance(self.factor_quantiles, pd.MultiIndex):
+        if isinstance(self.factor_quantiles.index, pd.MultiIndex):
             quant_df = pd.concat([self.factor_quantiles.groupby('ticker').shift(self.lags), self.returns], axis=1,
                                  join='inner')
         else:
@@ -320,6 +328,10 @@ class PortfolioSort:
         self.portfolio_rets = self.portfolio_rets.stack(future_stack=True)
         self.portfolio_rets.index.names = ['date', 'quantile']
 
+        # fill na
+        if self.fill_na:
+            self.portfolio_rets.fillna(0, inplace=True)
+
         return self.portfolio_rets
 
     def performance(self, metric: str = 'sharpe_ratio') -> pd.DataFrame:
@@ -356,8 +368,6 @@ class PortfolioSort:
             for factor in self.metric_df.columns:
                 for quantile in self.metric_df.index:
                     quant_df = df[(factor, quantile)]
-                    if self.fill_na:
-                        quant_df.fillna(0, inplace=True)
                     self.metric_df.loc[quantile, factor] = getattr(Metrics(quant_df, ret_type='log', ann_factor=365),
                                                              metric)().values.round(decimals=4)
 
@@ -375,8 +385,6 @@ class PortfolioSort:
             for factor_1, quantile_1 in self.metric_df.index:
                 for factor_2, quantile_2 in self.metric_df.columns:
                     quant_df = pd.concat([df[(factor_1, quantile_1)], df[(factor_2, quantile_2)]], axis=1).mean(axis=1)
-                    if self.fill_na:
-                        quant_df.fillna(0, inplace=True)
                     self.metric_df.loc[(factor_1, quantile_1), (factor_2, quantile_2)] = \
                         getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
                             decimals=4)
@@ -397,8 +405,6 @@ class PortfolioSort:
                 factor_2 = ('_'.join(row[1].split('_')[:-1]), row[1].split('_')[-1])
                 factor_3 = ('_'.join(row[2].split('_')[:-1]), row[2].split('_')[-1])
                 quant_df = pd.concat([df[factor_1], df[factor_2], df[factor_3]], axis=1).mean(axis=1)
-                if self.fill_na:
-                    quant_df.fillna(0, inplace=True)
                 self.metric_df.loc['_'.join(factor_1), '_'.join(factor_2), '_'.join(factor_3)] = \
                     getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
                         decimals=4)
