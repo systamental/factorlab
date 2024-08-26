@@ -3,7 +3,6 @@ from typing import Optional, Union, Tuple, Dict
 
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.strategy_backtesting.metrics import Metrics
-from factorlab.data_viz.plot import plot_heatmap
 
 
 class PortfolioSort:
@@ -109,11 +108,6 @@ class PortfolioSort:
         # rets
         if isinstance(self.returns, pd.Series):
             self.returns = self.returns.to_frame()
-
-        # # concat factors and returns
-        # data = pd.concat([self.factors, self.returns], axis=1, join='inner').dropna()
-        # self.factors = data.iloc[:, :-1]
-        # self.returns = data.iloc[:, -1].to_frame()
 
         # index
         self.index = self.returns.index
@@ -340,7 +334,8 @@ class PortfolioSort:
 
         Parameters
         ----------
-        metric: str, {'sharpe_ratio', 'sortino_ratio', 'calmar_ratio', 'max_dd', 'ann_ret', 'ann_vol', 'cum_ret'},
+        metric: str, {'sharpe_ratio', 'sortino_ratio', 'calmar_ratio', 'max_drawdown', 'annualized_return',
+        'annualized_vol', 'cumulative_returns'},
          default 'sharpe_ratio'
             Performance metric to compute.
 
@@ -414,17 +409,3 @@ class PortfolioSort:
 
         return self.metric_df.astype(float)
 
-    def plot_heatmap(self):
-        """
-        Plots heatmap for performance metric.
-        """
-        # check shape
-        if self.metric_df.shape[0] <= 1 and self.metric_df.shape[1] <= 1:
-            raise ValueError("Heatmap requires at least 2 factors to compare.")
-
-        else:
-            x_label = 'breakout_30 - Time Series Quantiles'
-            y_label = 'breakout_5 - Cross Sectional Quantiles'
-
-            plot_heatmap(self.metric_df, fig_size='auto', font='Lato', title='Portfolio Sorts Heatmap',
-                         subtitle=f"Sharpe ratio", title_font=None, x_label=x_label, y_label=y_label)
