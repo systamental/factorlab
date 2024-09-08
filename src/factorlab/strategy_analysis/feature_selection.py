@@ -454,7 +454,7 @@ class FeatureSelection:
         return self.feature_importance
 
     # TODO: add threshold parameter to ic method
-    def ic(self, feature: str,) -> pd.DataFrame:
+    def ic(self, feature: str, thresh: int = 10) -> pd.DataFrame:
         """
         Computes the Information Coefficient (IC) for factor and forward returns over a moving window.
 
@@ -462,6 +462,8 @@ class FeatureSelection:
         ----------
         feature: str
             Name of feature (column) for which compute IC.
+        thresh: int, default 10
+            Minimum number of observations to include in moving window.
 
         Returns
         -------
@@ -469,13 +471,13 @@ class FeatureSelection:
             Information coefficient between factor and forward returns over time.
         """
         # create df
-        df = pd.concat([self.features[feature], self.target], join='inner', axis=1)
-        if isinstance(df.index, pd.MultiIndex):
-            # TODO: add threshold parameter
-            df = df.unstack().dropna(thresh=10).stack(future_stack=True)  # set time series min nobs thresh
-        else:
-            if self.strategy == 'cs':
-                raise ValueError("Cross-sectional strategy requires MultiIndex dataframe.")
+        df = pd.concat([self.features[feature], self.target], join='inner', axis=1).dropna()
+
+        # check if df is empty
+        if df.empty:
+            raise ValueError("Dataframe is empty. Check if feature and target are aligned.")
+        if self.strategy == 'cs' and not isinstance(df.index, pd.MultiIndex):
+            raise ValueError("Cross-sectional strategy requires MultiIndex dataframe.")
 
         # compute spearman rank corr
         def spearman_r(data):
