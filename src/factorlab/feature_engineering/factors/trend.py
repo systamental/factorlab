@@ -51,8 +51,7 @@ class Trend:
         lags: int, default 0
             Number of periods to lag values by.
         """
-        self.df = df.to_frame() if isinstance(df, pd.Series) else df
-        self.df = df.copy()
+        self.df = df.to_frame().copy() if isinstance(df, pd.Series) else df.copy()
         self.vwap = vwap
         self.log = log
         self.price = self.compute_price()
@@ -86,7 +85,7 @@ class Trend:
 
     def breakout(self, method: str = 'min-max') -> pd.DataFrame:
         """
-         Compute breakout signal.
+         Computes the breakout trend factor.
 
         Parameters
         ----------
@@ -158,8 +157,9 @@ class Trend:
         if self.log:
             self.price = np.exp(self.price)
 
-        # price mom
-        self.trend = Transform(self.price).returns(method='simple', lags=self.lookback)
+        # compute price momentum
+        self.trend = Transform(self.price).returns(method='log', lags=self.lookback)
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
@@ -170,7 +170,7 @@ class Trend:
 
     def divergence(self) -> pd.DataFrame:
         """
-        Compute divergence measure.
+        Computes the divergence trend factor.
 
         Returns
         -------
@@ -219,7 +219,7 @@ class Trend:
 
     def price_acc(self) -> pd.DataFrame:
         """
-        Compute the price acceleration factor by regressing price on a constant, time trend
+        Computes the price acceleration factor by regressing price on a constant, time trend
         and time trend squared to estimate coefficients.
 
         Returns
@@ -243,8 +243,8 @@ class Trend:
 
     def alpha_mom(self) -> pd.DataFrame:
         """
-        Constant term (alpha) from fitting an OLS linear regression of price on the market beta,
-        i.e. cross-sectional average).
+        Constant term/coefficient (alpho) from fitting an OLS linear regression of price on the market portfolio (beta,
+        i.e. cross-sectional average of returns).
 
         Returns
         -------
@@ -469,7 +469,7 @@ class Trend:
                     signal: bool = False
                     ) -> pd.DataFrame:
         """
-        Computes the exponentially weighted moving average (EWMA) weighted crossover trend factor.
+        Computes the exponentially weighted moving average (EWMA) crossover trend factor.
 
         A CTA-momentum signal, based on the cross-over of multiple exponentially weighted moving averages (EWMA) with
         different half-lives.
@@ -492,8 +492,12 @@ class Trend:
             Series or DataFrame with DatetimeIndex (level 0), tickers (level 1) and
             ewma crossover trend factor values (cols).
         """
-        if self.price.shape[1] > 1:
+        # check df index
+        if isinstance(self.price.index, pd.MultiIndex) and self.price.shape[1] > 1:
             raise ValueError("Select a price series/col.")
+        else:
+            self.price = self.price.stack().to_frame()
+            self.price.index.names = ['date', 'ticker']
 
         # half-life lists for short and long windows
         hl_s = [np.log(0.5) / np.log(1 - 1 / i) for i in s_k]
@@ -548,6 +552,10 @@ class Trend:
         # sort index
         self.trend = self.trend.sort_index()
 
+        # single index
+        if isinstance(self.df.index, pd.MultiIndex) is False:
+            self.trend = self.trend.ewma_wxover.unstack()
+
         return self.trend
 
     def energy(self, mass_method='vol', perc: Optional[float] = 0.05) -> pd.DataFrame:
@@ -598,8 +606,80 @@ class Trend:
 
         return self.trend
 
+    def snr(self) -> pd.DataFrame:
+        """
+        Computes the signal-to-noise ratio.
 
-# TODO: add hurst exponent, fractal dimension, detrended fluctuation analysis, wavelet transform, etc.
+        Returns
+        -------
+        snr: pd.DataFrame
+            DataFrame with DatetimeIndex and signal-to-noise ratio values (cols).
+        """
+        # compute snr
+        if isinstance(self.price.index, pd.MultiIndex):
+            chg_sign = np.sign(self.price.groupby(level=1).diff(self.lookback)).sort_index()
+            chg = self.price.groupby(level=1).diff(self.lookback).abs().sort_index()
+            roll_chg = self.price.groupby(level=1).diff().abs().\
+                groupby(level=1).rolling(self.lookback).sum().droplevel(0).sort_index()
+        else:
+            chg_sign = np.sign(self.price.diff(self.lookback))
+            chg = self.price.diff(self.lookback).abs()
+            roll_chg = np.abs(self.price.diff()).rolling(self.lookback).sum()
+
+        # compute snr
+        self.trend = chg / roll_chg * chg_sign
+
+        # name
+        if self.trend.shape[1] == 1:
+            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+        # sort index
+        self.trend = self.trend.sort_index()
+
+        return self.trend
+
+
+# TODO: add adx, hurst exponent, fractal dimension, detrended fluctuation analysis, wavelet transform, etc.
+# # ADX
+# def adx(df, lookback=14):
+#     """
+#     Computes the average directional index (ADX) of a price series.
+#
+#     Parameters
+#     ----------
+#     df: DataFrame
+#         DataFrame with DatetimeIndex and price series.
+#     lookback: int
+#         Number of observations to include in the window for ADX.
+#
+#     Returns
+#     -------
+#     adx: series
+#         average directional index of price series over n-day lookback window.
+#     """
+#     # compute true range
+#     tr = pd.concat([df.high - df.low,
+#     abs(df.high - df.close.shift(1)), abs(df.low - df.close.shift(1))], axis=1).max(axis=1)
+#
+#     # compute directional movement
+#     dm_pos = np.where(df.high.diff() > df.low.diff(), df.high.diff(), 0)
+#     dm_neg = np.where(df.low.diff() > df.high.diff(), df.low.diff(), 0)
+#
+#     # compute directional movement index
+#     dm_pos = dm_pos.rolling(lookback).mean()
+#     dm_neg = dm_neg.rolling(lookback).mean()
+#
+#     # compute directional index
+#     di_pos = 100 * (dm_pos / tr).rolling(lookback).mean()
+#     di_neg = 100 * (dm_neg / tr).rolling(lookback).mean()
+#
+#     # compute directional index difference
+#     di_diff = abs(di_pos - di_neg) / (di_pos + di_neg)
+#
+#     # compute ADX
+#     adx = 100 * di_diff.rolling(lookback).mean()
+#
+#     return adx
+#
 
 # def he(series: pd.Series, window_size: int):
 #     """
@@ -637,8 +717,7 @@ class Trend:
 #     df: pd.DataFrame
 #         DataFrame with time series.
 #     window_size: int
-#         Lookback window for hurst exponent calculation.
-#
+#         Lookback window for hurst exponent calculation.#
 #     Returns
 #     -------
 #     hurst: pd.DataFrame
@@ -660,5 +739,4 @@ class Trend:
 #     res_df.index = [df.columns]
 #
 #     return res_df.sort_values(by='hurst')
-#
-#
+
