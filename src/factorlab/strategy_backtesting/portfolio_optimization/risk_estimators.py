@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
+from typing import Union, Optional, List
+from scipy.optimize import minimize
+from sklearn.neighbors import KernelDensity
 from sklearn.covariance import MinCovDet, EmpiricalCovariance, ShrunkCovariance, LedoitWolf, OAS, \
     GraphicalLasso, GraphicalLassoCV
-from sklearn.neighbors import KernelDensity
-from scipy.optimize import minimize
 
-from typing import Union, Optional, List
+from factorlab.signal_generation.time_series_analysis import rolling_window, expanding_window
 
 
 class RiskEstimators:
@@ -19,7 +20,8 @@ class RiskEstimators:
                  returns: pd.DataFrame,
                  asset_names: Optional[List[str]] = None,
                  window_type: str = 'fixed',
-                 window_size: Optional[int] = None
+                 window_size: Optional[int] = None,
+                 min_obs: Optional[int] = 30
                  ):
         """
         Constructor
@@ -39,8 +41,10 @@ class RiskEstimators:
         self.asset_names = asset_names
         self.window_type = window_type
         self.window_size = window_size
+        self.min_obs = min_obs
         self.ann_factor = None
         self.cov_matrix = None
+        self.portfolio_risk = None
         self.preprocess_data()
 
     def preprocess_data(self):
@@ -738,8 +742,8 @@ class RiskEstimators:
 
         Returns
         -------
-        pd.Series
-            Portfolio variance.
+        np.ndarray
+            Covariance matrix.
         """
         # compute covariance matrix
         if method in ['covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
@@ -755,7 +759,9 @@ class RiskEstimators:
 
         return self.cov_matrix
 
-    def compute_turbulence_index(self) -> pd.Series:
+    # TODO add KKT index computation:
+    # https://globalmarkets.statestreet.com/research/service/public/v1/article/insights/pdf/v2/5b4b47fa-8256-4e4a-8991-afe13469268b/joim_a_new_index_of_the_business_cycle.pdf
+    def turbulence_index(self) -> pd.Series:
         """
         Compute the turbulence index.
 
@@ -772,3 +778,40 @@ class RiskEstimators:
         turb = np.diagonal(ret_demeaned @ inv_cov_matrix @ ret_demeaned.T)
 
         return pd.DataFrame(turb, index=self.returns.index, columns=['turbulence_index'])
+
+    def compute_portfolio_risk(self, method: str = 'turbulence_index', **kwargs) -> Union[pd.DataFrame, np.ndarray]:
+        """
+        Compute the portfolio risk.
+
+        Parameters
+        ----------
+        method: str, {'turbulence_index'}, default 'turbulence_index'
+            Method to compute the portfolio risk.
+
+        Returns
+        -------
+        np.ndarray or pd.DataFrame
+            Portfolio risk.
+        """
+        # compute portfolio risk
+        if method in ['turbulence_index']:
+
+            if self.window_type == 'rolling':
+                self.portfolio_risk = rolling_window(RiskEstimators,
+                                                     self.returns,
+                                                     window_size=self.window_size,
+                                                     method=method,
+                                                     **kwargs)
+            elif self.window_type == 'expanding':
+                self.portfolio_risk = expanding_window(RiskEstimators,
+                                                       self.returns,
+                                                       min_obs=self.min_obs,
+                                                       method=method,
+                                                       **kwargs)
+            else:
+                self.portfolio_risk = getattr(self, method)(**kwargs)
+
+        else:
+            raise ValueError("Method is not supported. Valid methods are: 'turbulence_index'")
+
+        return self.portfolio_risk
