@@ -128,7 +128,7 @@ class FeatureSelection:
             self.target.columns = [f"{self.target.columns[0]}_F{self.n_lookahead}"]
 
         # concat features, lags and target
-        self.data = pd.concat([self.features, self.lagged_target, self.target], axis=1).dropna()
+        self.data = pd.concat([self.features, self.lagged_target, self.target], join='inner', axis=1).dropna()
         self.target = self.data.iloc[:, -1].to_frame()
         self.features = self.data.iloc[:, :-1]
 
@@ -454,7 +454,7 @@ class FeatureSelection:
         return self.feature_importance
 
     # TODO: add threshold parameter to ic method
-    def ic(self, feature: str, thresh: int = 10) -> pd.DataFrame:
+    def ic(self, feature: str) -> pd.DataFrame:
         """
         Computes the Information Coefficient (IC) for factor and forward returns over a moving window.
 
@@ -462,8 +462,6 @@ class FeatureSelection:
         ----------
         feature: str
             Name of feature (column) for which compute IC.
-        thresh: int, default 10
-            Minimum number of observations to include in moving window.
 
         Returns
         -------
