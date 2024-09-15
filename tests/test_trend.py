@@ -144,9 +144,9 @@ class TestTrend:
         # cols
         if vwap:
             assert actual.columns[0].split('_')[0] == 'breakout'
-            assert actual.columns[0].split('_')[1] == str(self.trend_instance.lookback)
+            assert actual.columns[0].split('_')[1] == str(self.trend_instance.window_size)
             assert actual_btc.columns[0].split('_')[0] == 'breakout'
-            assert actual_btc.columns[0].split('_')[1] == str(self.trend_instance.lookback)
+            assert actual_btc.columns[0].split('_')[1] == str(self.trend_instance.window_size)
         else:
             assert (actual.columns == ohlcv.columns).all()
             assert (actual_btc.columns == btc_ohlcv.columns).all()
@@ -190,7 +190,40 @@ class TestTrend:
         # cols
         assert actual.columns[0].split('_')[0] == 'price'
         assert actual.columns[0].split('_')[1] == 'mom'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
+
+    def test_ewma(self) -> None:
+        """
+        Test ewma method.
+        """
+        # get actual
+        actual = self.trend_instance.ewma()
+        actual_btc = self.btc_trend_instance.ewma()
+
+        # values
+        assert not actual.isin([np.inf, -np.inf]).any().any()  # inf
+        assert not actual_btc.isin([np.inf, -np.inf]).any().any()
+        assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
+
+        # shape
+        assert actual.shape[1] == 1
+        assert actual_btc.shape[1] == 1
+        assert actual.shape[0] == self.trend_instance.df.shape[0]
+        assert actual_btc.shape[0] == self.btc_trend_instance.df.shape[0]
+
+        # dtypes
+        assert isinstance(actual, pd.DataFrame)
+        assert isinstance(actual_btc, pd.DataFrame)
+        assert all(actual.dtypes == np.float64)
+        assert all(actual_btc.dtypes == np.float64)
+
+        # index
+        assert (actual.index == self.trend_instance.df.index).all()
+        assert (actual_btc.index == self.btc_trend_instance.df.index).all()
+
+        # cols
+        assert actual.columns[0].split('_')[0] == 'ewma'
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_divergence(self) -> None:
         """
@@ -225,7 +258,7 @@ class TestTrend:
 
         # cols
         assert actual.columns[0].split('_')[0] == 'divergence'
-        assert actual.columns[0].split('_')[1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[1] == str(self.trend_instance.window_size)
 
     def test_time_trend(self) -> None:
         """
@@ -263,7 +296,7 @@ class TestTrend:
         # cols
         assert actual.columns[0].split('_')[0] == 'time'
         assert actual.columns[0].split('_')[1] == 'trend'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_price_acc(self) -> None:
         """
@@ -301,7 +334,7 @@ class TestTrend:
         # cols
         assert actual.columns[0].split('_')[0] == 'price'
         assert actual.columns[0].split('_')[1] == 'acc'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_alpha_mom(self) -> None:
         """
@@ -325,7 +358,7 @@ class TestTrend:
         # cols
         assert actual.columns[0].split('_')[0] == 'alpha'
         assert actual.columns[0].split('_')[1] == 'mom'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_rsi(self) -> None:
         """
@@ -360,7 +393,7 @@ class TestTrend:
 
         # cols
         assert actual.columns[0].split('_')[0] == 'rsi'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_stochastic(self) -> None:
         """
@@ -395,7 +428,7 @@ class TestTrend:
 
         # cols
         assert actual.columns[0].split('_')[0] == 'stochastic'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_stochastic_param_errors(self, ohlcv) -> None:
         """
@@ -438,7 +471,7 @@ class TestTrend:
 
         # cols
         assert actual.columns[0].split('_')[0] == 'intensity'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_intensity_param_errors(self, ohlcv) -> None:
         """
@@ -480,15 +513,15 @@ class TestTrend:
         # cols
         assert actual.columns[0].split('_')[0] == 'mw'
         assert actual.columns[0].split('_')[1] == 'diff'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
-    def test_ewma_wxover(self) -> None:
+    def test_ewma_diff(self) -> None:
         """
         Test intensity method.
         """
         # get actual
-        actual = self.trend_instance.ewma_wxover(signal=True)
-        actual_btc = self.btc_trend_instance.ewma_wxover(signal=True)
+        actual = self.trend_instance.ewma_diff(signal=True)
+        actual_btc = self.btc_trend_instance.ewma_diff(signal=True)
 
         # values
         assert not actual.isin([np.inf, -np.inf]).any().any()
@@ -509,7 +542,7 @@ class TestTrend:
 
         # cols
         assert actual.columns[0].split('_')[0] == 'ewma'
-        assert actual.columns[0].split('_')[1] == 'wxover'
+        assert actual.columns[0].split('_')[1] == 'diff'
 
     def test_energy(self) -> None:
         """
@@ -542,4 +575,74 @@ class TestTrend:
 
         # cols
         assert actual.columns[0].split('_')[0] == 'energy'
-        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
+
+    def test_snr(self) -> None:
+        """
+        Test intensity method.
+        """
+        # get actual
+        actual = self.trend_instance.snr()
+        actual_btc = self.btc_trend_instance.snr()
+
+        # values
+        assert not actual.isin([np.inf, -np.inf]).any().any()
+        assert not actual_btc.isin([np.inf, -np.inf]).any().any()
+        assert (actual.dropna().abs() <= 1).all().all()
+        assert (actual_btc.dropna().abs() <= 1).all().all()
+        assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
+
+        # shape
+        assert actual.shape[1] == 1
+        assert actual_btc.shape[1] == 1
+        assert actual.shape[0] == self.trend_instance.df.shape[0]
+        assert actual_btc.shape[0] == self.btc_trend_instance.df.shape[0]
+
+        # dtypes
+        assert isinstance(actual, pd.DataFrame)
+        assert isinstance(actual_btc, pd.DataFrame)
+        assert all(actual.dtypes == np.float64)
+        assert all(actual_btc.dtypes == np.float64)
+
+        # index
+        assert (actual.index == self.trend_instance.df.index).all()
+        assert (actual_btc.index == self.btc_trend_instance.df.index).all()
+
+        # cols
+        assert actual.columns[0].split('_')[0] == 'snr'
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
+
+    def test_adx(self) -> None:
+        """
+        Test adx method.
+        """
+        # get actual
+        actual = self.trend_instance.adx()
+        actual_btc = self.btc_trend_instance.adx()
+
+        # values
+        assert not actual.isin([np.inf, -np.inf]).any().any()
+        assert not actual_btc.isin([np.inf, -np.inf]).any().any()
+        assert (actual.dropna().abs() <= 1).all().all()
+        assert (actual_btc.dropna().abs() <= 1).all().all()
+        assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
+
+        # shape
+        assert actual.shape[1] == 1
+        assert actual_btc.shape[1] == 1
+        assert actual.shape[0] == self.trend_instance.df.shape[0]
+        assert actual_btc.shape[0] == self.btc_trend_instance.df.shape[0]
+
+        # dtypes
+        assert isinstance(actual, pd.DataFrame)
+        assert isinstance(actual_btc, pd.DataFrame)
+        assert all(actual.dtypes == np.float64)
+        assert all(actual_btc.dtypes == np.float64)
+
+        # index
+        assert (actual.index == self.trend_instance.df.index).all()
+        assert (actual_btc.index == self.btc_trend_instance.df.index).all()
+
+        # cols
+        assert actual.columns[0].split('_')[0] == 'adx'
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
