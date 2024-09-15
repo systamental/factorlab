@@ -65,8 +65,7 @@ class Transform:
             raise ValueError("Dataframe must have open, high, low and close fields to compute vwap.")
 
         # compute vwap
-        self.trans_df['vwap'] = (self.df.close +
-                                 (self.df.open + self.df.high + self.df.low) / 3) / 2
+        self.trans_df['vwap'] = (self.df.close + (self.df.open + self.df.high + self.df.low) / 3) / 2
 
         return self.trans_df
 
@@ -277,30 +276,31 @@ class Transform:
         df: pd.Series or pd.DataFrame
             Series or DataFrame with smoothed values.
         """
-        # TODO: refactor to allow for more window functions in rolling
-        # smoothing
+        # ewm
         if window_type == 'ewm':
             if central_tendency == 'median':
                 raise ValueError("Median is not supported for ewm smoothing.")
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(span=window_size, **kwargs),
+                    self.trans_df = getattr(getattr(self.df.groupby(level=1),
+                                                    window_type)(span=window_size, **kwargs),
                                             central_tendency)().droplevel(0).groupby(level=1).shift(lags).sort_index()
                 else:
-                    self.trans_df = getattr(getattr(self.df, window_type)(span=window_size, **kwargs),
+                    self.trans_df = getattr(getattr(self.df,
+                                                    window_type)(span=window_size, **kwargs),
                                             central_tendency)().shift(lags)
 
+        # rolling window
         elif window_type == 'rolling':
             if isinstance(self.df.index, pd.MultiIndex):
-
-                self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(window=window_size,
-                                                                                       win_type=window_fcn),
-                                        central_tendency)(**kwargs).droplevel(0).groupby(level=1).shift(lags).\
-                    sort_index()
+                self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)
+                                        (window=window_size, win_type=window_fcn), central_tendency)(**kwargs)\
+                    .droplevel(0).groupby(level=1).shift(lags).sort_index()
             else:
                 self.trans_df = getattr(getattr(self.df, window_type)(window=window_size, win_type=window_fcn),
                                         central_tendency)(**kwargs).shift(lags)
 
+        # expanding window
         elif window_type == 'expanding':
             if isinstance(self.df.index, pd.MultiIndex):
                 self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(), central_tendency)() \
@@ -313,7 +313,7 @@ class Transform:
     def center(self,
                axis: str = 'ts',
                central_tendency: str = 'mean',
-               window_type: str = 'fixed',
+               window_type: str = 'expanding',
                window_size: int = 30,
                min_periods: int = 2
                ) -> Union[pd.Series, pd.DataFrame]:
@@ -324,9 +324,9 @@ class Transform:
         ----------
         axis: int, {0, 1}, default 0
             Axis along which to compute standard deviation, time series or cross-section.
-        central_tendency: str, {'mean', 'median', 'min'}, default 'mean'
+        central_tendency: str, {'mean', 'median'}, default 'mean'
             Measure of central tendency used for the rolling window.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling', 'ewm'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -342,8 +342,18 @@ class Transform:
         # axis time series
         if axis == 'ts':
 
+            # ewm
+            if window_type == 'ewm':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df - \
+                                    self.df.groupby(level=1).ewm(span=window_size,
+                                                                 min_periods=min_periods
+                                                                 ).mean().droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df - self.df.ewm(span=window_size, min_periods=min_periods).mean()
+
             # rolling window
-            if window_type == 'rolling':
+            elif window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = self.df - \
                                     getattr(self.df.groupby(level=1).rolling(window=window_size,
@@ -381,7 +391,7 @@ class Transform:
 
     def compute_std(self,
                     axis: str = 'ts',
-                    window_type: str = 'fixed',
+                    window_type: str = 'expanding',
                     window_size: int = 30,
                     min_periods: int = 2,
                     window_fcn: str = None
@@ -393,7 +403,7 @@ class Transform:
         ----------
         axis: int, {0, 1}, default 0
             Axis along which to compute standard deviation, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling', 'ewm'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -410,15 +420,26 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
-            # rolling window
-            if window_type == 'rolling':
+
+            # ewm
+            if window_type == 'ewm':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                     win_type=window_fcn).std().droplevel(
-                        0).sort_index()
+                    self.trans_df = self.df.groupby(level=1).ewm(span=window_size, min_periods=min_periods).std(). \
+                        droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.ewm(span=window_size, min_periods=min_periods).std()
+
+            # rolling window
+            elif window_type == 'rolling':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size,
+                                                                     min_periods=min_periods,
+                                                                     win_type=window_fcn
+                                                                     ).std().droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).std()
+
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -426,6 +447,7 @@ class Transform:
                         droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).std()
+
             # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -450,7 +472,7 @@ class Transform:
     def compute_quantile(self,
                          q: float,
                          axis: str = 'ts',
-                         window_type: str = 'fixed',
+                         window_type: str = 'expanding',
                          window_size: int = 30,
                          min_periods: int = 2,
                          window_fcn: str = None
@@ -464,7 +486,7 @@ class Transform:
             Quantile to compute.
         axis : str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute quantile, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -480,15 +502,23 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
+
+            # ewm
+            if window_type == 'ewm':
+                raise ValueError("EWM not supported for quantile.")
+
             # rolling window
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                     win_type=window_fcn).quantile(q).droplevel(
-                        0).sort_index()
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size,
+                                                                     min_periods=min_periods,
+                                                                     win_type=window_fcn
+                                                                     ).quantile(q).droplevel(0).sort_index()
                 else:
-                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = self.df.rolling(window=window_size,
+                                                    min_periods=min_periods,
                                                     win_type=window_fcn).quantile(q)
+
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -497,6 +527,7 @@ class Transform:
 
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).quantile(q)
+
             # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -519,7 +550,7 @@ class Transform:
 
     def compute_iqr(self,
                     axis: str = 'ts',
-                    window_type: str = 'fixed',
+                    window_type: str = 'expanding',
                     window_size: int = 30,
                     min_periods: int = 2,
                     window_fcn: str = None
@@ -531,7 +562,7 @@ class Transform:
         ----------
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute interquartile range, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -548,29 +579,39 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
+
+            # ewm
+            if window_type == 'ewm':
+                raise ValueError("EWM not supported for iqr.")
+
             # rolling window
-            if window_type == 'rolling':
+            elif window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = (self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = (self.df.groupby(level=1).rolling(window=window_size,
+                                                                      min_periods=min_periods,
                                                                       win_type=window_fcn).quantile(0.75) -
-                                     self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                      win_type=window_fcn).quantile(0.25)).droplevel(
-                        0).sort_index()
+                                     self.df.groupby(level=1).rolling(window=window_size,
+                                                                      min_periods=min_periods,
+                                                                      win_type=window_fcn
+                                                                      ).quantile(0.25)).droplevel(0).sort_index()
                 else:
-                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = self.df.rolling(window=window_size,
+                                                    min_periods=min_periods,
                                                     win_type=window_fcn).quantile(0.75) - \
-                                    self.df.rolling(window=window_size, min_periods=min_periods,
+                                    self.df.rolling(window=window_size,
+                                                    min_periods=min_periods,
                                                     win_type=window_fcn).quantile(0.25)
+
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = (self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(0.75) -
-                                     self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(
-                                         0.25)).droplevel(0). \
-                        sort_index()
+                                     self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(0.25)).\
+                        droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).quantile(0.75) - \
                                     self.df.expanding(min_periods=min_periods).quantile(0.25)
+
             # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -593,7 +634,7 @@ class Transform:
 
     def compute_mad(self,
                     axis: str = 'ts',
-                    window_type: str = 'fixed',
+                    window_type: str = 'expanding',
                     window_size: int = 30,
                     min_periods: int = 2,
                     window_fcn: str = None
@@ -605,7 +646,7 @@ class Transform:
         ----------
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute median absolute deviation, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -622,20 +663,30 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
+
+            # ewm
+            if window_type == 'ewm':
+                raise ValueError("EWM not supported for mad.")
+
             # rolling window
-            if window_type == 'rolling':
+            elif window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    abs_dev = (self.df - self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                          win_type=window_fcn).median().droplevel(
-                        0)).abs()
-                    self.trans_df = abs_dev.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                     win_type=window_fcn).median().droplevel(
-                        0).sort_index()
+                    abs_dev = (self.df - self.df.groupby(level=1).rolling(window=window_size,
+                                                                          min_periods=min_periods,
+                                                                          win_type=window_fcn
+                                                                          ).median().droplevel(0)).abs()
+                    self.trans_df = abs_dev.groupby(level=1).rolling(window=window_size,
+                                                                     min_periods=min_periods,
+                                                                     win_type=window_fcn
+                                                                     ).median().droplevel(0).sort_index()
                 else:
-                    abs_dev = (self.df - self.df.rolling(window=window_size, min_periods=min_periods,
+                    abs_dev = (self.df - self.df.rolling(window=window_size,
+                                                         min_periods=min_periods,
                                                          win_type=window_fcn).median()).abs()
-                    self.trans_df = abs_dev.rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = abs_dev.rolling(window=window_size,
+                                                    min_periods=min_periods,
                                                     win_type=window_fcn).median()
+
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -646,6 +697,7 @@ class Transform:
                 else:
                     abs_dev = (self.df - self.df.expanding(min_periods=min_periods).median()).abs()
                     self.trans_df = abs_dev.expanding(min_periods=min_periods).median()
+
             # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -669,7 +721,7 @@ class Transform:
 
     def compute_range(self,
                       axis: str = 'ts',
-                      window_type: str = 'fixed',
+                      window_type: str = 'expanding',
                       window_size: int = 30,
                       min_periods: int = 2,
                       window_fcn: str = None
@@ -681,7 +733,7 @@ class Transform:
         ----------
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute range, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -698,19 +750,30 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
+
+            # ewm
+            if window_type == 'ewm':
+                raise ValueError("EWM not supported for range.")
+
             # rolling window
-            if window_type == 'rolling':
+            elif window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = (self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = (self.df.groupby(level=1).rolling(window=window_size,
+                                                                      min_periods=min_periods,
                                                                       win_type=window_fcn).max() -
-                                     self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                      win_type=window_fcn).min()).droplevel(
-                        0).sort_index()
+                                     self.df.groupby(level=1).rolling(window=window_size,
+                                                                      min_periods=min_periods,
+                                                                      win_type=window_fcn
+                                                                      ).min()).droplevel(0).sort_index()
                 else:
-                    self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = self.df.rolling(window=window_size,
+                                                    min_periods=min_periods,
                                                     win_type=window_fcn).max() - \
-                                    self.df.rolling(window=window_size, min_periods=min_periods,
+                                    self.df.rolling(window=window_size,
+                                                    min_periods=min_periods,
                                                     win_type=window_fcn).min()
+
+            # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = (self.df.groupby(level=1).expanding(min_periods=min_periods).max() -
@@ -719,6 +782,8 @@ class Transform:
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).max() - \
                                     self.df.expanding(min_periods=min_periods).min()
+
+            # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = self.df.groupby(level=1).max() - self.df.groupby(level=1).min()
@@ -740,7 +805,7 @@ class Transform:
 
     def compute_var(self,
                     axis: str = 'ts',
-                    window_type: str = 'fixed',
+                    window_type: str = 'expanding',
                     window_size: int = 30,
                     min_periods: int = 2,
                     window_fcn: str = None
@@ -752,7 +817,7 @@ class Transform:
         ----------
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute variance, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling', 'ewm'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -769,12 +834,23 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
+
+            # ewm
+            if window_type == 'ewm':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = self.df.groupby(level=1).ewm(span=window_size,
+                                                                 min_periods=min_periods).var(). \
+                        droplevel(0).sort_index()
+                else:
+                    self.trans_df = self.df.ewm(span=window_size, min_periods=min_periods).var()
+
             # rolling window
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                                     win_type=window_fcn).var().droplevel(
-                        0).sort_index()
+                    self.trans_df = self.df.groupby(level=1).rolling(window=window_size,
+                                                                     min_periods=min_periods,
+                                                                     win_type=window_fcn
+                                                                     ).var().droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).var()
@@ -808,7 +884,7 @@ class Transform:
 
     def compute_atr(self,
                     axis: str = 'ts',
-                    window_type: str = 'fixed',
+                    window_type: str = 'expanding',
                     window_size: int = 30,
                     min_periods: int = 2,
                     window_fcn: str = None
@@ -820,7 +896,7 @@ class Transform:
         ----------
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute average true range, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling', 'ewm'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -850,25 +926,34 @@ class Transform:
 
             # compute true range
             tr1 = df.high - df.low
-            tr2 = df.high - df.close.shift()
-            tr3 = df.low - df.close.shift()
-
-            # multiindex
+            tr2 = (df.high - df.close.shift()).abs()
+            tr3 = (df.low - df.close.shift()).abs()
             if isinstance(self.df.index, pd.MultiIndex):
                 tr = pd.concat([tr1.stack(), tr2.stack(), tr3.stack()], axis=1).max(axis=1)
             else:
                 tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
 
+            # ewm
+            if window_type == 'ewm':
+                if isinstance(self.df.index, pd.MultiIndex):
+                    self.trans_df = tr.groupby(level=1).ewm(span=window_size, min_periods=min_periods).mean(). \
+                        droplevel(0).sort_index().to_frame('atr')
+                else:
+                    self.trans_df = tr.ewm(span=window_size, min_periods=min_periods).mean().to_frame('atr')
+
             # rolling window
             if window_type == 'rolling':
                 # multiindex
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = tr.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = tr.groupby(level=1).rolling(window=window_size,
+                                                                min_periods=min_periods,
                                                                 win_type=window_fcn).mean().droplevel(
                         0).sort_index().to_frame('atr')
                 else:
-                    self.trans_df = tr.rolling(window=window_size, min_periods=min_periods,
+                    self.trans_df = tr.rolling(window=window_size,
+                                               min_periods=min_periods,
                                                win_type=window_fcn).mean().to_frame('atr')
+
             # expanding window
             elif window_type == 'expanding':
                 # multiindex
@@ -877,6 +962,7 @@ class Transform:
                         mean().droplevel(0).sort_index().to_frame('atr')
                 else:
                     self.trans_df = tr.expanding(min_periods=min_periods).mean().to_frame('atr')
+
             # fixed window
             else:
                 # multiindex
@@ -897,7 +983,7 @@ class Transform:
 
     def compute_percentile(self,
                            axis: str = 'ts',
-                           window_type: str = 'fixed',
+                           window_type: str = 'expanding',
                            window_size: int = 30,
                            min_periods: int = 2,
                            window_fcn: str = None
@@ -909,7 +995,7 @@ class Transform:
         ----------
         axis: int, {0, 1}, default 0
             Axis along which to compute standard deviation, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -926,6 +1012,11 @@ class Transform:
         """
         # axis time series
         if axis == 'ts':
+
+            # ewm
+            if window_type == 'ewm':
+                raise ValueError("EWM not supported for percentile.")
+
             # rolling window
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -935,6 +1026,7 @@ class Transform:
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).rank(pct=True)
+
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -942,6 +1034,7 @@ class Transform:
                         droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).rank(pct=True)
+
             # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -966,7 +1059,7 @@ class Transform:
     def dispersion(self,
                    method: str = 'std',
                    axis: str = 'ts',
-                   window_type: str = 'fixed',
+                   window_type: str = 'expanding',
                    window_size: int = 30,
                    min_periods: int = 1,
                    window_fcn: str = None,
@@ -980,7 +1073,7 @@ class Transform:
             Method for computing dispersion.
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute dispersion, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling', 'ewm'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -997,8 +1090,10 @@ class Transform:
             Series or DataFrame with dispersion of values.
         """
 
-        self.trans_df = getattr(self, f"compute_{method}")(axis=axis, window_type=window_type,
-                                                           window_size=window_size, min_periods=min_periods,
+        self.trans_df = getattr(self, f"compute_{method}")(axis=axis,
+                                                           window_type=window_type,
+                                                           window_size=window_size,
+                                                           min_periods=min_periods,
                                                            window_fcn=window_fcn)
 
         return self.trans_df
@@ -1007,7 +1102,7 @@ class Transform:
                   method: str = 'z-score',
                   axis: str = 'ts',
                   centering: bool = True,
-                  window_type: str = 'fixed',
+                  window_type: str = 'expanding',
                   window_size: int = 10,
                   min_periods: int = 2,
                   winsorize: Optional[int] = None
@@ -1029,7 +1124,7 @@ class Transform:
         centering: bool, default True
             Centers values using the appropriate measure of central tendency used for the selected method. Otherwise,
             0 is used.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling', 'ewm'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 10
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -1045,35 +1140,54 @@ class Transform:
             Series or DataFrame with dispersion of values.
         """
         if method == 'percentile':
-            self.trans_df = self.compute_percentile(axis=axis, window_type=window_type,
-                                                    window_size=window_size, min_periods=min_periods)
+            self.trans_df = self.compute_percentile(axis=axis,
+                                                    window_type=window_type,
+                                                    window_size=window_size,
+                                                    min_periods=min_periods)
         else:
             # centering
             if centering:
                 if method == 'iqr' or method == 'mod_z':
-                    center = self.center(axis=axis, central_tendency='median', window_type=window_type,
-                                         window_size=window_size, min_periods=min_periods)
+                    center = self.center(axis=axis,
+                                         central_tendency='median',
+                                         window_type=window_type,
+                                         window_size=window_size,
+                                         min_periods=min_periods)
                 elif method == 'min-max':
-                    center = self.center(axis=axis, central_tendency='min', window_type=window_type,
-                                         window_size=window_size, min_periods=min_periods)
+                    center = self.center(axis=axis,
+                                         central_tendency='min',
+                                         window_type=window_type,
+                                         window_size=window_size,
+                                         min_periods=min_periods)
                 else:
-                    center = self.center(axis=axis, central_tendency='mean', window_type=window_type,
-                                         window_size=window_size, min_periods=min_periods)
+                    center = self.center(axis=axis,
+                                         central_tendency='mean',
+                                         window_type=window_type,
+                                         window_size=window_size,
+                                         min_periods=min_periods)
             else:
                 center = self.df
 
-            # disp
+            # dispersion
             if method == 'iqr':
-                disp = self.compute_iqr(axis=axis, window_type=window_type, window_size=window_size,
+                disp = self.compute_iqr(axis=axis,
+                                        window_type=window_type,
+                                        window_size=window_size,
                                         min_periods=min_periods)
             elif method == 'mod_z':
-                disp = self.compute_mad(axis=axis, window_type=window_type, window_size=window_size,
+                disp = self.compute_mad(axis=axis,
+                                        window_type=window_type,
+                                        window_size=window_size,
                                         min_periods=min_periods)
             elif method == 'min-max':
-                disp = self.compute_range(axis=axis, window_type=window_type, window_size=window_size,
+                disp = self.compute_range(axis=axis,
+                                          window_type=window_type,
+                                          window_size=window_size,
                                           min_periods=min_periods)
             else:
-                disp = self.compute_std(axis=axis, window_type=window_type, window_size=window_size,
+                disp = self.compute_std(axis=axis,
+                                        window_type=window_type,
+                                        window_size=window_size,
                                         min_periods=min_periods)
 
             # normalize
@@ -1104,7 +1218,7 @@ class Transform:
     def quantize(self,
                  bins: int = 5,
                  axis: str = 'ts',
-                 window_type: str = 'fixed',
+                 window_type: str = 'expanding',
                  window_size: int = 30,
                  min_periods: int = 2
                  ) -> Union[pd.Series, pd.DataFrame]:
@@ -1117,7 +1231,7 @@ class Transform:
             Number of bins to use for quantization.
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute dispersion, time series or cross-section.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or expanding
@@ -1134,7 +1248,9 @@ class Transform:
             raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
 
         # compute percentile
-        perc = self.compute_percentile(axis=axis, window_type=window_type, window_size=window_size,
+        perc = self.compute_percentile(axis=axis,
+                                       window_type=window_type,
+                                       window_size=window_size,
                                        min_periods=min_periods)
 
         # quantize
@@ -1150,7 +1266,7 @@ class Transform:
                    bins: int = 5,
                    axis: str = 'ts',
                    method: str = 'quantile',
-                   window_type: str = 'fixed',
+                   window_type: str = 'expanding',
                    window_size: int = 30,
                    min_obs: int = 1
                    ) -> pd.DataFrame:
@@ -1169,7 +1285,7 @@ class Transform:
             quantile: all bins have the same number of values.
             uniform: all bins have identical widths.
             kmeans: values in each bin have the same nearest center of a 1D k-means cluster.
-        window_type: str, {'fixed', 'expanding', 'rolling}, default 'fixed'
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
             Size of the moving window. This is the minimum number of observations used for the rolling or
