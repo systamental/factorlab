@@ -8,6 +8,7 @@ class Transform:
     """
     Transformations on raw data, returns or features.
     """
+
     def __init__(self, data: Union[pd.Series, pd.DataFrame, np.array], **kwargs: dict):
         """
         Constructor
@@ -65,7 +66,7 @@ class Transform:
 
         # compute vwap
         self.trans_df['vwap'] = (self.df.close +
-                                (self.df.open + self.df.high + self.df.low)/3)/2
+                                 (self.df.open + self.df.high + self.df.low) / 3) / 2
 
         return self.trans_df
 
@@ -248,8 +249,8 @@ class Transform:
     def smooth(self,
                window_size: int,
                window_type: str = 'rolling',
-               window_fcn: str = None,
                central_tendency: str = 'mean',
+               window_fcn: str = None,
                lags: int = 0,
                **kwargs: dict
                ) -> Union[pd.Series, pd.DataFrame]:
@@ -262,11 +263,11 @@ class Transform:
             Number of observations in moving window.
         window_type: str, {'expanding', 'rolling', 'ewm'}, default 'rolling'
             Provide a window type. If None, all observations are used in the calculation.
+        central_tendency: str, {'mean', 'median'}, default 'mean'
+            Measure of central tendency used for the rolling window.
         window_fcn: str, default None
             Provide a rolling window function. If None, observations are equally-weighted in the rolling computation.
             See scipy.signal.windows for more information.
-        central_tendency: str, {'mean', 'median'}, default 'mean'
-            Measure of central tendency used for the rolling window.
         lags: int, default None
             Number of periods by which to lag values.
         kwargs: dict
@@ -284,23 +285,25 @@ class Transform:
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(span=window_size, **kwargs),
-                                        central_tendency)().droplevel(0).groupby(level=1).shift(lags).sort_index()
+                                            central_tendency)().droplevel(0).groupby(level=1).shift(lags).sort_index()
                 else:
                     self.trans_df = getattr(getattr(self.df, window_type)(span=window_size, **kwargs),
                                             central_tendency)().shift(lags)
 
         elif window_type == 'rolling':
             if isinstance(self.df.index, pd.MultiIndex):
+
                 self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(window=window_size,
-                                                                                   win_type=window_fcn, **kwargs),
-                                    central_tendency)().droplevel(0).groupby(level=1).shift(lags).sort_index()
+                                                                                       win_type=window_fcn),
+                                        central_tendency)(**kwargs).droplevel(0).groupby(level=1).shift(lags).\
+                    sort_index()
             else:
-                self.trans_df = getattr(getattr(self.df, window_type)(window=window_size, win_type=window_fcn,
-                                                                      **kwargs), central_tendency)().shift(lags)
+                self.trans_df = getattr(getattr(self.df, window_type)(window=window_size, win_type=window_fcn),
+                                        central_tendency)(**kwargs).shift(lags)
 
         elif window_type == 'expanding':
             if isinstance(self.df.index, pd.MultiIndex):
-                self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(), central_tendency)()\
+                self.trans_df = getattr(getattr(self.df.groupby(level=1), window_type)(), central_tendency)() \
                     .droplevel(0).groupby(level=1).shift(lags).sort_index()
             else:
                 self.trans_df = getattr(getattr(self.df, window_type)(), central_tendency)().shift(lags)
@@ -348,7 +351,7 @@ class Transform:
                                             central_tendency)().droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df - getattr(self.df.rolling(window=window_size, min_periods=min_periods),
-                                                     central_tendency)()
+                                                      central_tendency)()
 
             # expanding window
             elif window_type == 'expanding':
@@ -411,14 +414,15 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                        win_type=window_fcn).std().droplevel(0).sort_index()
+                                                                     win_type=window_fcn).std().droplevel(
+                        0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).std()
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).std().\
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).std(). \
                         droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).std()
@@ -480,14 +484,15 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                       win_type=window_fcn).quantile(q).droplevel(0).sort_index()
+                                                                     win_type=window_fcn).quantile(q).droplevel(
+                        0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).quantile(q)
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(q).\
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(q). \
                         droplevel(0).sort_index()
 
                 else:
@@ -547,23 +552,25 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = (self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                       win_type=window_fcn).quantile(0.75) -
-                        self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                    win_type=window_fcn).quantile(0.25)).droplevel(0).sort_index()
+                                                                      win_type=window_fcn).quantile(0.75) -
+                                     self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                                      win_type=window_fcn).quantile(0.25)).droplevel(
+                        0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).quantile(0.75) - \
-                            self.df.rolling(window=window_size, min_periods=min_periods,
-                                            win_type=window_fcn).quantile(0.25)
+                                    self.df.rolling(window=window_size, min_periods=min_periods,
+                                                    win_type=window_fcn).quantile(0.25)
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = (self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(0.75) -
-                        self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(0.25)).droplevel(0).\
+                                     self.df.groupby(level=1).expanding(min_periods=min_periods).quantile(
+                                         0.25)).droplevel(0). \
                         sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).quantile(0.75) - \
-                        self.df.expanding(min_periods=min_periods).quantile(0.25)
+                                    self.df.expanding(min_periods=min_periods).quantile(0.25)
             # fixed window
             else:
                 if isinstance(self.df.index, pd.MultiIndex):
@@ -619,12 +626,14 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     abs_dev = (self.df - self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                       win_type=window_fcn).median().droplevel(0)).abs()
+                                                                          win_type=window_fcn).median().droplevel(
+                        0)).abs()
                     self.trans_df = abs_dev.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                         win_type=window_fcn).median().droplevel(0).sort_index()
+                                                                     win_type=window_fcn).median().droplevel(
+                        0).sort_index()
                 else:
                     abs_dev = (self.df - self.df.rolling(window=window_size, min_periods=min_periods,
-                                               win_type=window_fcn).median()).abs()
+                                                         win_type=window_fcn).median()).abs()
                     self.trans_df = abs_dev.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).median()
             # expanding window
@@ -632,7 +641,7 @@ class Transform:
                 if isinstance(self.df.index, pd.MultiIndex):
                     abs_dev = (self.df - self.df.groupby(level=1).expanding(min_periods=min_periods).median().
                                droplevel(0)).abs()
-                    self.trans_df = abs_dev.groupby(level=1).expanding(min_periods=min_periods).median().droplevel(0).\
+                    self.trans_df = abs_dev.groupby(level=1).expanding(min_periods=min_periods).median().droplevel(0). \
                         sort_index()
                 else:
                     abs_dev = (self.df - self.df.expanding(min_periods=min_periods).median()).abs()
@@ -693,9 +702,10 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = (self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                       win_type=window_fcn).max() -
-                        self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                    win_type=window_fcn).min()).droplevel(0).sort_index()
+                                                                      win_type=window_fcn).max() -
+                                     self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
+                                                                      win_type=window_fcn).min()).droplevel(
+                        0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).max() - \
@@ -704,7 +714,7 @@ class Transform:
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = (self.df.groupby(level=1).expanding(min_periods=min_periods).max() -
-                                     self.df.groupby(level=1).expanding(min_periods=min_periods).min()).\
+                                     self.df.groupby(level=1).expanding(min_periods=min_periods).min()). \
                         droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).max() - \
@@ -763,14 +773,15 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                        win_type=window_fcn).var().droplevel(0).sort_index()
+                                                                     win_type=window_fcn).var().droplevel(
+                        0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).var()
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).var().\
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).var(). \
                         droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).var()
@@ -853,7 +864,8 @@ class Transform:
                 # multiindex
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = tr.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                               win_type=window_fcn).mean().droplevel(0).sort_index().to_frame('atr')
+                                                                win_type=window_fcn).mean().droplevel(
+                        0).sort_index().to_frame('atr')
                 else:
                     self.trans_df = tr.rolling(window=window_size, min_periods=min_periods,
                                                win_type=window_fcn).mean().to_frame('atr')
@@ -861,7 +873,7 @@ class Transform:
             elif window_type == 'expanding':
                 # multiindex
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = tr.groupby(level=1).expanding(min_periods=min_periods).\
+                    self.trans_df = tr.groupby(level=1).expanding(min_periods=min_periods). \
                         mean().droplevel(0).sort_index().to_frame('atr')
                 else:
                     self.trans_df = tr.expanding(min_periods=min_periods).mean().to_frame('atr')
@@ -918,14 +930,15 @@ class Transform:
             if window_type == 'rolling':
                 if isinstance(self.df.index, pd.MultiIndex):
                     self.trans_df = self.df.groupby(level=1).rolling(window=window_size, min_periods=min_periods,
-                                                        win_type=window_fcn).rank(pct=True).droplevel(0).sort_index()
+                                                                     win_type=window_fcn).rank(pct=True).droplevel(
+                        0).sort_index()
                 else:
                     self.trans_df = self.df.rolling(window=window_size, min_periods=min_periods,
                                                     win_type=window_fcn).rank(pct=True)
             # expanding window
             elif window_type == 'expanding':
                 if isinstance(self.df.index, pd.MultiIndex):
-                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).rank(pct=True).\
+                    self.trans_df = self.df.groupby(level=1).expanding(min_periods=min_periods).rank(pct=True). \
                         droplevel(0).sort_index()
                 else:
                     self.trans_df = self.df.expanding(min_periods=min_periods).rank(pct=True)
