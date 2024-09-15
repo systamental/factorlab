@@ -47,6 +47,7 @@ class TestTrend:
     def trend_setup_default(self, ohlcv):
         self.trend_instance = Trend(ohlcv)
 
+
     @pytest.fixture(autouse=True)
     def trend_setup_btc_default(self, btc_ohlcv):
         self.btc_trend_instance = Trend(btc_ohlcv)
