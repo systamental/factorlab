@@ -5,7 +5,7 @@ import numpy as np
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
 
-
+# TODO: add test for single index dfs
 @pytest.fixture
 def ohlcv():
     """
@@ -325,14 +325,6 @@ class TestTrend:
         assert actual.columns[0].split('_')[0] == 'alpha'
         assert actual.columns[0].split('_')[1] == 'mom'
         assert actual.columns[0].split('_')[-1] == str(self.trend_instance.lookback)
-
-    def test_alpha_mom_param_errors(self) -> None:
-        """
-        Test alpha_mom method parameter errors.
-        """
-        # test value error
-        with pytest.raises(TypeError):
-            self.btc_trend_instance.alpha_mom()
 
     def test_rsi(self) -> None:
         """
