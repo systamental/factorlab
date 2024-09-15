@@ -17,6 +17,8 @@ class Trend:
                  df: pd.DataFrame,
                  vwap: bool = True,
                  log: bool = True,
+                 normalize: bool = True,
+                 disp_method: str = 'std',
                  st_lookback: int = None,
                  lookback: int = 20,
                  lt_lookback: int = None,
@@ -24,6 +26,7 @@ class Trend:
                  sm_central_tendency: str = 'mean',
                  sm_window_fcn: Optional[str] = None,
                  lags: int = 0,
+                 **kwargs
                  ):
         """
         Constructor
@@ -36,6 +39,10 @@ class Trend:
             Compute signal on vwap price.
         log: bool, default False
             Converts to log price.
+        normalize: bool, default True
+            Normalize trend factor.
+        disp_method: str, {'std', 'iqr', 'mad', 'atr'}, default 'std'
+            Method for computing dispersion.
         st_lookback: int
             Number of observations in short-term moving window.
         lookback: int
@@ -54,6 +61,8 @@ class Trend:
         self.df = df.to_frame().copy() if isinstance(df, pd.Series) else df.copy()
         self.vwap = vwap
         self.log = log
+        self.normalize = normalize
+        self.disp_method = disp_method
         self.price = self.compute_price()
         self.st_lookback = st_lookback
         self.lookback = lookback
@@ -62,7 +71,9 @@ class Trend:
         self.sm_central_tendency = sm_central_tendency
         self.sm_window_fcn = sm_window_fcn
         self.lags = lags
+        self.kwargs = kwargs
         self.trend = None
+        self.disp = None
 
     def compute_price(self) -> pd.DataFrame:
         """
@@ -82,6 +93,35 @@ class Trend:
             self.price = Transform(self.price).log()
 
         return self.price
+
+    def compute_dispersion(self) -> pd.DataFrame:
+        """
+        Computes the dispersion of the price series.
+
+        Returns
+        -------
+        disp: pd.DataFrame
+            DataFrame with DatetimeIndex and dispersion values (cols).
+        """
+        # check method
+        if self.disp_method not in ['std', 'iqr', 'mad', 'atr']:
+            raise ValueError('Invalid dispersion method. Method must be: std, iqr, range, atr, mad.')
+
+        # compute dispersion
+        if self.disp_method == 'atr':
+            # compute atr
+            self.disp = Transform(self.df).dispersion(method=self.disp_method,
+                                                      window_type='rolling',
+                                                      window_size=self.lookback)
+        else:
+            # price chg
+            chg = Transform(self.price).diff()
+            # dispersion
+            self.disp = Transform(chg).dispersion(method=self.disp_method,
+                                                  window_type='rolling',
+                                                  window_size=self.lookback)
+
+        return self.disp
 
     def breakout(self, method: str = 'min-max') -> pd.DataFrame:
         """
@@ -103,31 +143,31 @@ class Trend:
 
         # uniform distribution
         if method == 'min-max':
-            self.trend = Transform(self.price).normalize(method='min-max', axis='ts', window_type='rolling',
-                                                     window_size=self.lookback)
+            self.trend = Transform(self.price).normalize(method='min-max', window_type='rolling',
+                                                         window_size=self.lookback)
 
         # percentile rank
         elif method == 'percentile':
-            self.trend = Transform(self.price).normalize(method='percentile', axis='ts', window_type='rolling',
-                                                     window_size=self.lookback)
+            self.trend = Transform(self.price).normalize(method='percentile', window_type='rolling',
+                                                         window_size=self.lookback)
 
         # normal distribution
         elif method == 'norm':
-            self.trend = Transform(self.price).normalize(method='z-score', axis='ts', window_type='rolling',
+            self.trend = Transform(self.price).normalize(method='z-score', window_type='rolling',
                                                          window_size=self.lookback)
             # convert to cdf
             self.trend = pd.DataFrame(norm.cdf(self.trend), index=self.trend.index, columns=self.trend.columns)
 
         # logistic
         elif method == 'logistic':
-            self.trend = Transform(self.price).normalize(method='z-score', axis='ts', window_type='rolling',
+            self.trend = Transform(self.price).normalize(method='z-score', window_type='rolling',
                                                          window_size=self.lookback)
             # convert to cdf
             self.trend = pd.DataFrame(logistic.cdf(self.trend), index=self.trend.index, columns=self.trend.columns)
 
         # adjusted normal distribution
         else:
-            self.trend = Transform(self.price).normalize(method='adj_norm', axis='ts', window_type='rolling',
+            self.trend = Transform(self.price).normalize(method='adj_norm', window_type='rolling',
                                                          window_size=self.lookback)
 
         # convert to signal
@@ -139,6 +179,7 @@ class Trend:
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -153,16 +194,49 @@ class Trend:
         mom: pd.DataFrame
             DataFrame with DatetimeIndex and price momentum values (cols).
         """
-        # log
-        if self.log:
-            self.price = np.exp(self.price)
+        # compute price returns
+        self.trend = Transform(self.price).diff(lags=self.lookback)
 
-        # compute price momentum
-        self.trend = Transform(self.price).returns(method='log', lags=self.lookback)
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            self.trend = self.trend.div(self.disp, axis=0)
 
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
+        # sort index
+        self.trend = self.trend.sort_index()
+
+        return self.trend
+
+    def ewma(self) -> pd.DataFrame:
+        """
+        Computes the exponentially weighted moving average (EWMA) trend factor.
+
+        Returns
+        -------
+        ewma: pd.DataFrame
+            DataFrame with DatetimeIndex and EWMA values (cols).
+        """
+        # chg
+        chg = Transform(self.price).diff()
+
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            chg = chg.div(self.disp, axis=0)
+
+        # smoothing
+        self.trend = Transform(chg).smooth(self.lookback,
+                                           window_type='ewm',
+                                           **self.kwargs)
+
+        # name
+        if self.trend.shape[1] == 1:
+            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -185,10 +259,12 @@ class Trend:
 
         # divergence
         self.trend = Transform(sign).smooth(self.lookback, window_type=self.sm_window_type,
-                     central_tendency=self.sm_central_tendency, window_fcn=self.sm_window_fcn)
+                                            central_tendency=self.sm_central_tendency, window_fcn=self.sm_window_fcn)
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -203,15 +279,33 @@ class Trend:
         trend: pd.DataFrame
             DataFrame with DatetimeIndex and time trend values (cols).
         """
+        # check df index
+        if isinstance(self.price.index, pd.MultiIndex) and self.price.shape[1] > 1:
+            raise ValueError("Select a price series/col.")
+        elif not isinstance(self.price.index, pd.MultiIndex):
+            self.price = self.price.stack().to_frame()
+            self.price.index.names = ['date', 'ticker']
+
         # fit linear regression
         coeff = TSA(self.price, trend='ct', window_type='rolling',
                     window_size=self.lookback).linear_regression(output='params')
 
         # time trend
         self.trend = coeff[['trend']]
+
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            self.trend = self.trend.div(self.disp.squeeze(), axis=0)
+
+        # single index
+        if isinstance(self.df.index, pd.MultiIndex) is False:
+            self.trend = self.trend['trend'].unstack()
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -227,15 +321,33 @@ class Trend:
         coeff: pd.DataFrame
             DataFrame with DatetimeIndex and price acceleration values (cols).
         """
+        # check df index
+        if isinstance(self.price.index, pd.MultiIndex) and self.price.shape[1] > 1:
+            raise ValueError("Select a price series/col.")
+        elif not isinstance(self.price.index, pd.MultiIndex):
+            self.price = self.price.stack().to_frame()
+            self.price.index.names = ['date', 'ticker']
+
         # fit linear regression
         coeff = TSA(self.price, trend='ctt', window_type='rolling',
                     window_size=self.lookback).linear_regression(output='params')
 
         # price acceleration
         self.trend = coeff[['trend_squared']]
+
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            self.trend = self.trend.div(self.disp.squeeze(), axis=0)
+
+        # single index
+        if isinstance(self.df.index, pd.MultiIndex) is False:
+            self.trend = self.trend['trend_squared'].unstack()
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -243,7 +355,7 @@ class Trend:
 
     def alpha_mom(self) -> pd.DataFrame:
         """
-        Constant term/coefficient (alpho) from fitting an OLS linear regression of price on the market portfolio (beta,
+        Constant term/coefficient (alpha) from fitting an OLS linear regression of price on the market portfolio (beta,
         i.e. cross-sectional average of returns).
 
         Returns
@@ -251,16 +363,15 @@ class Trend:
         alpha: pd.DataFrame
             DataFrame with DatetimeIndex and alpha values (cols).
        """
-        if not isinstance(self.price.index, pd.MultiIndex):
-            raise TypeError("Dataframe index must be a MultiIndex with DatetimeIndex and tickers.")
-        if self.price.shape[1] > 1:
+        # check df index
+        if isinstance(self.price.index, pd.MultiIndex) and self.price.shape[1] > 1:
             raise ValueError("Select a price series/col.")
+        elif not isinstance(self.price.index, pd.MultiIndex):
+            self.price = self.price.stack().to_frame()
+            self.price.index.names = ['date', 'ticker']
 
         # compute ret
-        if self.log:
-            ret = self.price.groupby(level=1, group_keys=False).diff()
-        else:
-            ret = Transform(self.price).returns()
+        ret = self.price.groupby(level=1, group_keys=False).diff()
 
         # compute mean ret for all assets
         mkt_ret = ret.groupby(level=0).mean().reindex(ret.index, level=0)
@@ -271,9 +382,20 @@ class Trend:
 
         # alpha
         self.trend = alpha[['const']]
+
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            self.trend = self.trend.div(self.disp.squeeze(), axis=0)
+
+        # single index
+        if isinstance(self.df.index, pd.MultiIndex) is False:
+            self.trend = self.trend['const'].unstack()
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -322,18 +444,17 @@ class Trend:
 
         # rsi
         self.trend = rs
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
         return self.trend
 
-    def stochastic(self,
-                   stochastic: str = 'd',
-                   signal: bool = True
-                   ) -> Union[pd.Series, pd.DataFrame]:
+    def stochastic(self, stochastic: str = 'd', signal: bool = True) -> Union[pd.Series, pd.DataFrame]:
         """
         Computes the stochastic indicator K and D.
 
@@ -384,9 +505,11 @@ class Trend:
 
         # stochastic
         self.trend = stoch_df[[stochastic]]
+
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -415,10 +538,10 @@ class Trend:
             hicl = abs(self.df.high - self.df.close.shift(1))
             locl = abs(self.df.low - self.df.close.shift(1))
 
-        # compute ATR, chg and intensity
-        tr = pd.concat([hilo, hicl, locl], axis=1).max(axis=1)  # compute ATR
-        today_chg = self.df.close - self.df.open  # compute today's change
-        intensity = today_chg / tr  # compute intensity
+        # compute atr, chg and intensity
+        tr = pd.concat([hilo, hicl, locl], axis=1).max(axis=1)  # compute atr
+        chg = self.df.close - self.df.open  # compute period's change
+        intensity = chg / tr  # compute intensity
 
         # intensity
         self.trend = Transform(intensity).smooth(self.lookback, window_type=self.sm_window_type,
@@ -426,6 +549,7 @@ class Trend:
 
         # name
         self.trend = self.trend.to_frame(f"{inspect.currentframe().f_code.co_name}_{self.lookback}")
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -443,21 +567,24 @@ class Trend:
         """
         # short rolling window param
         if self.st_lookback is None:
-            self.st_lookback = int(np.ceil(self.lookback / 3))
+            self.st_lookback = int(np.ceil(np.sqrt(self.lookback)))  # short-term lookback, sqrt of long-term lookback
 
         # smoothing
-        mw_diff = Transform(self.price).smooth(self.st_lookback, window_type=self.sm_window_type,
-                                  central_tendency=self.sm_central_tendency, window_fcn=self.sm_window_fcn,
-                                       lags=self.lags) - \
+        self.trend = Transform(self.price).smooth(self.st_lookback, window_type=self.sm_window_type,
+                                  central_tendency=self.sm_central_tendency, window_fcn=self.sm_window_fcn) - \
             Transform(self.price).smooth(self.lookback, window_type=self.sm_window_type,
                                  central_tendency=self.sm_central_tendency, window_fcn=self.sm_window_fcn,
-                                 lags=self.lags)
+                                 lags=self.st_lookback)
 
-        # mw_diff
-        self.trend = mw_diff
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            self.trend = self.trend.div(self.disp, axis=0)
+
         # name
         if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.st_lookback}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -495,7 +622,7 @@ class Trend:
         # check df index
         if isinstance(self.price.index, pd.MultiIndex) and self.price.shape[1] > 1:
             raise ValueError("Select a price series/col.")
-        else:
+        elif not isinstance(self.price.index, pd.MultiIndex):
             self.price = self.price.stack().to_frame()
             self.price.index.names = ['date', 'ticker']
 
@@ -508,29 +635,18 @@ class Trend:
 
         # compute ewma diff for short, medium and long windows
         for i in range(0, len(s_k)):
-            if isinstance(self.price.index, pd.MultiIndex):
-                factor_df[f"x_k{i}"] = (self.price.unstack().ewm(halflife=hl_s[i]).mean() -
-                                        self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack(future_stack=True)
-            else:
-                factor_df[f"x_k{i}"] = (self.price.ewm(halflife=hl_s[i]).mean() -
-                                        self.price.ewm(halflife=hl_l[i]).mean())
+            factor_df[f"x_k{i}"] = (self.price.unstack().ewm(halflife=hl_s[i]).mean() -
+                                    self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack(future_stack=True)
 
         # normalize by std of price
         for i in range(0, len(s_k)):
-            if isinstance(self.price.index, pd.MultiIndex):
-                factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
-                                        self.price.unstack().rolling(90).std()).stack(future_stack=True)
-            else:
-                factor_df[f"y_k{i}"] = factor_df[[f"x_k{i}"]].divide(self.price.rolling(90).std().values, axis=0)
+            factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
+                                    self.price.unstack().rolling(90).std()).stack(future_stack=True)
 
         # normalize by normalized y_k diff
         for i in range(0, len(s_k)):
-            if isinstance(self.price.index, pd.MultiIndex):
-                factor_df[f"z_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
-                                        factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack(future_stack=True)
-            else:
-                factor_df[f"z_k{i}"] = factor_df[[f"x_k{i}"]].divide(factor_df[[f"x_k{i}"]].rolling(365).std().values,
-                                                                     axis=0)
+            factor_df[f"z_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
+                                    factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack(future_stack=True)
 
         # convert to signal
         if signal:
@@ -547,8 +663,10 @@ class Trend:
             self.trend = ewma_xover.groupby(level=1).ffill()
         else:
             self.trend = ewma_xover.ffill()
+
         # name
         self.trend = ewma_xover.to_frame(f"{inspect.currentframe().f_code.co_name}")
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -576,17 +694,13 @@ class Trend:
             Series or dataframe with DatetimeIndex (level 0), tickers (level 1) and
             energy trend factor values (cols).
         """
-        # compute speed
-        speed = self.price_mom()
-
-        # compute ret
-        ret = Transform(self.price).returns()
+        # compute speed and returns
+        speed = Transform(self.price).diff(lags=self.lookback)
+        ret = Transform(self.price).diff()
 
         # mass
-        # volatility
-        if mass_method == 'vol':
+        if mass_method == 'vol':  # volatility
             mass = Transform(ret).compute_std(axis='ts', window_type='rolling', window_size=self.lookback)
-
         else:
             # VaR
             left_tail = Transform(ret).compute_quantile(perc, axis='ts', window_type='rolling',
@@ -601,6 +715,7 @@ class Trend:
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
@@ -615,27 +730,67 @@ class Trend:
         snr: pd.DataFrame
             DataFrame with DatetimeIndex and signal-to-noise ratio values (cols).
         """
-        # compute snr
+        # sign, chg and roll_chg
         if isinstance(self.price.index, pd.MultiIndex):
-            chg_sign = np.sign(self.price.groupby(level=1).diff(self.lookback)).sort_index()
-            chg = self.price.groupby(level=1).diff(self.lookback).abs().sort_index()
-            roll_chg = self.price.groupby(level=1).diff().abs().\
+            chg = self.price.groupby(level=1).diff(self.lookback).sort_index()
+            abs_roll_chg = self.price.groupby(level=1).diff().abs().\
                 groupby(level=1).rolling(self.lookback).sum().droplevel(0).sort_index()
         else:
-            chg_sign = np.sign(self.price.diff(self.lookback))
-            chg = self.price.diff(self.lookback).abs()
-            roll_chg = np.abs(self.price.diff()).rolling(self.lookback).sum()
+            chg = self.price.diff(self.lookback)
+            abs_roll_chg = np.abs(self.price.diff()).rolling(self.lookback).sum()
 
         # compute snr
-        self.trend = chg / roll_chg * chg_sign
+        self.trend = chg / abs_roll_chg
 
         # name
         if self.trend.shape[1] == 1:
             self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.lookback}"]
+
         # sort index
         self.trend = self.trend.sort_index()
 
         return self.trend
+
+    # def adx(self) -> pd.DataFrame:
+    #     """
+    #     Computes the average directional index (ADX) of a price series.
+    #
+    #     Returns
+    #     -------
+    #     adx: pd.DataFrame
+    #         DataFrame with DatetimeIndex and average directional index values (cols).
+    #     """
+    #     # compute true range
+    #     tr = pd.concat([self.df.high - self.df.low,
+    #                     abs(self.df.high - self.df.close.shift(1)),
+    #                     abs(self.df.low - self.df.close.shift(1))],
+    #                    axis=1).max(axis=1)
+    #
+    #     # compute directional movement
+    #     dm_pos = np.where(self.df.high.diff() > self.df.low.diff(), self.df.high.diff(), 0)
+    #     dm_neg = np.where(self.df.low.diff() > self.df.high.diff(), self.df.low.diff(), 0)
+    #
+    #     # compute directional movement index
+    #     dm_pos = dm_pos.rolling(self.lookback).mean()
+    #     dm_neg = dm_neg.rolling(self.lookback).mean()
+    #
+    #     # compute directional index
+    #     di_pos = 100 * (dm_pos / tr).rolling(self.lookback).mean()
+    #     di_neg = 100 * (dm_neg / tr).rolling(self.lookback).mean()
+    #
+    #     # compute directional index difference
+    #     di_diff = abs(di_pos - di_neg) / (di_pos + di_neg)
+    #
+    #     # compute ADX
+    #     self.trend = 100 * di_diff.rolling(self.lookback).mean()
+    #
+    #     # name
+    #     self.trend = self.trend.to_frame(f"{inspect.currentframe().f_code.co_name}_{self.lookback}")
+    #
+    #     # sort index
+    #     self.trend = self.trend.sort_index()
+    #
+    #     return self.trend
 
 
 # TODO: add adx, hurst exponent, fractal dimension, detrended fluctuation analysis, wavelet transform, etc.
@@ -739,4 +894,3 @@ class Trend:
 #     res_df.index = [df.columns]
 #
 #     return res_df.sort_values(by='hurst')
-
