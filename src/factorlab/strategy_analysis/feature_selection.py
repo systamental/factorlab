@@ -26,7 +26,7 @@ class FeatureSelection:
                  quantize: bool = False,
                  feature_bins: int = 5,
                  target_bins: int = 3,
-                 window_type: str = 'fixed',
+                 window_type: str = 'expanding',
                  window_size: int = 30,
                  ):
         """
@@ -43,13 +43,13 @@ class FeatureSelection:
         n_lookahead: int, default 1
             Number of periods to lookahead for the target variable.
         n_lags: int, default 4
-            Number of lags to add to the target variable and features.
+            Number of lags to add to the features and lagged target.
         strategy: str, {'ts', 'cs}, default 'ts'
             Time series or cross-sectional strategy.
         normalize: bool, default False
-            Normalize factors and returns.
+            Normalize features and target.
         quantize: bool, default False
-            Quantize factors and returns.
+            Quantize features and target.
         feature_bins: int, default 5
             Number of bins for feature quantiles.
         target_bins: int, default 3
