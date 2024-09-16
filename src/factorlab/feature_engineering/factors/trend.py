@@ -655,17 +655,17 @@ class Trend:
         # compute ewma diff for short, medium and long windows
         for i in range(0, len(s_k)):
             factor_df[f"x_k{i}"] = (self.price.unstack().ewm(halflife=hl_s[i]).mean() -
-                                    self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack()
+                                    self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack(future_stack=True)
 
         # normalize by std of price
         for i in range(0, len(s_k)):
             factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
-                                    self.price.unstack().rolling(90).std()).stack()
+                                    self.price.unstack().rolling(90).std()).stack(future_stack=True)
 
         # normalize by normalized y_k diff
         for i in range(0, len(s_k)):
             factor_df[f"z_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
-                                    factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack()
+                                    factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack(future_stack=True)
 
         # convert to signal
         if signal:
