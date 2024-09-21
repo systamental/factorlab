@@ -1448,14 +1448,6 @@ optional = false
 python-versions = ">=3.9"
 
 [[package]]
-name = "nvidia-nccl-cu12"
-version = "2.23.4"
-description = "NVIDIA Collective Communication Library (NCCL) Runtime"
-category = "main"
-optional = false
-python-versions = ">=3"
-
-[[package]]
 name = "openpyxl"
 version = "3.1.5"
 description = "A Python library to read/write Excel 2010 xlsx/xlsm files"
@@ -2530,27 +2522,6 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
-name = "xgboost"
-version = "2.1.1"
-description = "XGBoost Python Package"
-category = "main"
-optional = false
-python-versions = ">=3.8"
-
-[package.dependencies]
-numpy = "*"
-nvidia-nccl-cu12 = {version = "*", markers = "platform_system == \"Linux\" and platform_machine != \"aarch64\""}
-scipy = "*"
-
-[package.extras]
-dask = ["dask", "distributed", "pandas"]
-datatable = ["datatable"]
-pandas = ["pandas (>=1.2)"]
-plotting = ["graphviz", "matplotlib"]
-pyspark = ["cloudpickle", "pyspark", "scikit-learn"]
-scikit-learn = ["scikit-learn"]
-
-[[package]]
 name = "zipp"
 version = "3.20.2"
 description = "Backport of pathlib-compatible object wrapper for zip files"
@@ -2569,7 +2540,7 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9"
-content-hash = "9987991c9e3eb3900cdb58e2818e18ce89c9c6f02f995099377d13940807397f"
+content-hash = "61e1bf5a0cb72da2a664e1e5139e6dc9e9318621a2111b9acafd35244aa86731"
 
 [metadata.files]
 alabaster = []
@@ -2669,7 +2640,6 @@ nest-asyncio = []
 notebook = []
 notebook-shim = []
 numpy = []
-nvidia-nccl-cu12 = []
 openpyxl = []
 osqp = []
 overrides = []
@@ -2755,5 +2725,4 @@ webcolors = []
 webencodings = []
 websocket-client = []
 widgetsnbextension = []
-xgboost = []
 zipp = []
