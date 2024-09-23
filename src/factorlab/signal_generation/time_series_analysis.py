@@ -280,8 +280,6 @@ class TimeSeriesAnalysis:
         self.model = {}
         self.results = None
         self.preprocess_data()
-        self.create_lags()
-        self.add_trend()
 
     def preprocess_data(self) -> pd.DataFrame:
         """
@@ -304,15 +302,9 @@ class TimeSeriesAnalysis:
 
         # diff
         if self.diff:
-            if isinstance(self.target.index, pd.MultiIndex):
-                self.target = Transform(self.target).diff().dropna()
-            else:
-                self.target = Transform(self.target).diff().dropna()
+            self.target = Transform(self.target).diff().dropna()
             if self.features is not None:
-                if isinstance(self.features.index, pd.MultiIndex):
-                    self.features = Transform(self.features).diff().dropna()
-                else:
-                    self.features = Transform(self.features).diff().dropna()
+                self.features = Transform(self.features).diff().dropna()
 
         # concat features and target
         self.data = pd.concat([self.target, self.features], axis=1).dropna()
@@ -385,10 +377,10 @@ class TimeSeriesAnalysis:
 
             return self.data
 
-    def fit_ols(self,
-                cov_type: Optional[str] = 'nonrobust',
-                cov_kwds: Optional[dict] = None
-                ) -> Any:
+    def _fit_ols(self,
+                 cov_type: Optional[str] = 'nonrobust',
+                 cov_kwds: Optional[dict] = None
+                 ) -> Any:
         """
         Fit ordinary least squares regression model using Statsmodels.
 
@@ -416,7 +408,7 @@ class TimeSeriesAnalysis:
 
         return self.model
 
-    def fit_recursive_ols(self) -> Any:
+    def _fit_recursive_ols(self) -> Any:
         """
         Fit recursive least squares regression model using Statsmodels.
 
@@ -434,7 +426,7 @@ class TimeSeriesAnalysis:
 
         return self.model
 
-    def fit_rolling_ols(self, cov_type: Optional[str] = 'nonrobust', cov_kwds: Optional[dict] = None) -> Any:
+    def _fit_rolling_ols(self, cov_type: Optional[str] = 'nonrobust', cov_kwds: Optional[dict] = None) -> Any:
         """
         Fit rolling ordinary least squares regression model using Statsmodels.
 
@@ -534,8 +526,14 @@ class TimeSeriesAnalysis:
         results: Any
             Output from linear regression estimation.
         """
+        # lags
+        self.create_lags()
+
+        # constant and trend
+        self.add_trend()
+
         # fit ols
-        self.fit_ols(cov_type=cov_type, cov_kwds=cov_kwds)
+        self._fit_ols(cov_type=cov_type, cov_kwds=cov_kwds)
 
         # get output
         if isinstance(self.target.index, pd.MultiIndex):
@@ -591,8 +589,14 @@ class TimeSeriesAnalysis:
         results: Any
             Output from linear regression estimation.
         """
+        # lags
+        self.create_lags()
+
+        # constant and trend
+        self.add_trend()
+
         # fit ols
-        self.fit_recursive_ols()
+        self._fit_recursive_ols()
 
         # get output
         if isinstance(self.target.index, pd.MultiIndex):
@@ -685,8 +689,14 @@ class TimeSeriesAnalysis:
             Output from linear regression estimation.
 
         """
+        # lags
+        self.create_lags()
+
+        # constant and trend
+        self.add_trend()
+
         # fit ols
-        self.fit_rolling_ols(cov_type=cov_type, cov_kwds=cov_kwds)
+        self._fit_rolling_ols(cov_type=cov_type, cov_kwds=cov_kwds)
 
         # get output
         if isinstance(self.target.index, pd.MultiIndex):
@@ -850,7 +860,11 @@ class TimeSeriesAnalysis:
 
         return self.results
 
-    def granger_causality(self, test: str = 'ssr_ftest', addconst: bool = True) -> pd.DataFrame:
+    def granger_causality(self,
+                          test: str = 'ssr_ftest',
+                          add_const: bool = True,
+                          alpha: float = 0.05
+                          ) -> pd.DataFrame:
         """
         Runs four tests for granger non causality of 2 time series (target, feature).
 
@@ -887,8 +901,10 @@ class TimeSeriesAnalysis:
             'ssr_chi2test': Chi-squared test for joint hypothesis that coefficients are zero.
             'lrtest': Likelihood ratio test.
             'params_ftest': F-test for joint hypothesis that coefficients are zero with restricted model.
-        addconst: bool, default True
+        add_const: bool, default True
             Flag indicating whether to add a constant to the model.
+        alpha: float, default 0.05
+            Level of confidence/significance.
 
         Returns
         -------
@@ -906,12 +922,16 @@ class TimeSeriesAnalysis:
         self.results = pd.DataFrame(columns=[test, 'p-val'])
 
         for feature in self.features.columns:  # loop through features
+            print(f"Running Granger causality test for feature {feature}.")
             # concat ret and feature
             data = pd.concat([self.target, self.features[feature]], axis=1)
             # granger causality
-            res = grangercausalitytests(data, maxlag=self.n_lags, addconst=addconst)
+            res = grangercausalitytests(data, maxlag=self.n_lags, addconst=add_const)
             # add to df
-            self.results.loc[feature, test] = res[self.n_lags][0][test][0]
-            self.results.loc[feature, 'p-val'] = res[self.n_lags][0][test][1]
+            for i in range(1, self.n_lags + 1):
+                if res[i][0][test][1] <= alpha:
+                    print(f"p-value {res[i][0][test][1]} for lag {i} is less than alpha {alpha}.")
+                    self.results.loc[f"{feature}_L{i}", test] = res[i][0][test][0]
+                    self.results.loc[f"{feature}_L{i}", 'p-val'] = res[i][0][test][1]
 
         return self.results.astype(float).round(decimals=4).sort_values(by=test, ascending=False)
