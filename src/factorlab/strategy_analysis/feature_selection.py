@@ -170,8 +170,8 @@ class FeatureSelection:
             # time series
             if self.strategy == 'ts':
                 self.features = Transform(self.features).quantize(bins=self.feature_bins, axis='ts',
-                                                                window_type=self.window_type,
-                                                                window_size=self.window_size)
+                                                                  window_type=self.window_type,
+                                                                  window_size=self.window_size)
                 self.target = Transform(self.target).quantize(bins=self.target_bins, axis='ts',
                                                               window_type=self.window_type,
                                                               window_size=self.window_size)
