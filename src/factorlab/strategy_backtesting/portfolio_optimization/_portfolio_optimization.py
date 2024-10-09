@@ -13,7 +13,7 @@ class PortfolioOptimization:
     """
     Portfolio optimization class.
 
-    This class computes the optimized portfolio weights or returns based on the signals of the assets or strategies.
+    This class computes the optimized portfolio weights or returns based on the signals returns of assets or strategies.
     """
     # List of available optimizer names
     available_optimizers = ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
