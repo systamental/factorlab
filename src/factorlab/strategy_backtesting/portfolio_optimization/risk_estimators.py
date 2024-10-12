@@ -761,23 +761,72 @@ class RiskEstimators:
 
     # TODO add KKT index computation:
     # https://globalmarkets.statestreet.com/research/service/public/v1/article/insights/pdf/v2/5b4b47fa-8256-4e4a-8991-afe13469268b/joim_a_new_index_of_the_business_cycle.pdf
-    def turbulence_index(self) -> pd.Series:
+    def turbulence_index(self, component: str = 'turbulence') -> pd.Series:
         """
         Compute the turbulence index.
 
+        The turbulence index is a measure of the risk of the assets or strategies. It is computed as the Mahalanobis
+        distance of the demeaned returns of the assets or strategies. The Mahalanobis distance is a measure of the
+        distance between a point and a distribution. It is used to compute the risk of the assets or strategies.
+
+        Turbulence can be further decomposed into the correlation surprise and the magnitude surprise. The correlation
+        surprise is the ratio of the turbulence to the magnitude surprise. The magnitude surprise is the Mahalanobis
+        distance of the demeaned returns of the assets or strategies divided by the number of assets or strategies,
+        where the covariance matrix is the correlation blind covariance matrix (magnitude).
+
+        For more details, see:
+
+        Kritzman, Mark and Li, Yuanzhen, Skulls, Financial Turbulence, and Risk Management (October 13, 2010).
+        Financial Analysts Journal, Vol. 66, No. 5, 2010, Available at SSRN: https://ssrn.com/abstract=1691756
+
+        Kinlaw, William B. and Turkington, David, Correlation Surprise (July 13, 2012).
+        Available at SSRN: https://ssrn.com/abstract=2133396 or http://dx.doi.org/10.2139/ssrn.2133396
+
+        Kinlaw, William B. and Kritzman, Mark and Turkington, David, A New Index of the Business Cycle
+        (January 15, 2020). MIT Sloan Research Paper No. 5908-20,
+        Available at SSRN: https://ssrn.com/abstract=3521300 or http://dx.doi.org/10.2139/ssrn.3521300
+
+        Parameters
+        ----------
+        component: str, {'turbulence', 'correlation_surprise', 'magnitude_surprise'}, default 'turbulence'
+            Component of the turbulence index.
+
         Returns
         -------
-        turb: pd.Series
-            Turbulence index.
+        pd.DataFrame
+            Turbulence index, correlation surprise, or magnitude surprise.
         """
+        turb, corr_surprise, magnitude_surprise = None, None, None
+
+        # check component
+        if component not in ['turbulence', 'correlation_surprise', 'magnitude_surprise']:
+            raise ValueError("Invalid component. Please choose from: 'turbulence', 'correlation_surprise', "
+                             "'magnitude_surprise'")
+
         # demean returns
         ret_demeaned = (self.returns - self.returns.mean()).values
+
         # inv cov matrix
         inv_cov_matrix = np.linalg.pinv(self.cov_matrix)
-        # mahalanobis distance
-        turb = np.diagonal(ret_demeaned @ inv_cov_matrix @ ret_demeaned.T)
 
-        return pd.DataFrame(turb, index=self.returns.index, columns=['turbulence_index'])
+        # mahalanobis distance
+        turb = np.diagonal(ret_demeaned @ inv_cov_matrix @ ret_demeaned.T) / self.returns.shape[1]
+
+        # compute correlation blind cov matrix (magnitude)
+        if component != 'turbulence':
+            cov_matrix_mag = np.diag(np.diag(self.cov_matrix))
+            inv_cov_matrix_mag = np.linalg.pinv(cov_matrix_mag)
+            magnitude_surprise = (np.diagonal(ret_demeaned @ inv_cov_matrix_mag @ ret_demeaned.T) /
+                                  self.returns.shape[1])
+            corr_surprise = turb / magnitude_surprise
+
+        # component
+        if component == 'correlation_surprise':
+            return pd.DataFrame(corr_surprise, index=self.returns.index, columns=[component])
+        elif component == 'magnitude_surprise':
+            return pd.DataFrame(magnitude_surprise, index=self.returns.index, columns=[component])
+        else:
+            return pd.DataFrame(turb, index=self.returns.index, columns=[component])
 
     def compute_portfolio_risk(self, method: str = 'turbulence_index', **kwargs) -> Union[pd.DataFrame, np.ndarray]:
         """
