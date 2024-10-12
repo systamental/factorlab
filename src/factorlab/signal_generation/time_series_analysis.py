@@ -54,7 +54,11 @@ def rolling_window(callable_obj: Callable,
         if inspect.isfunction(callable_obj):
             res = callable_obj(data[i:i + window_size], *args, **kwargs)
         elif inspect.isclass(callable_obj) and method is not None:
-            res = getattr(callable_obj(data[i:i + window_size], *args, **kwargs), method)()
+            # extract relevant kwargs for the class and method
+            class_kwargs = {k: v for k, v in kwargs.items() if hasattr(callable_obj, k)}
+            method_kwargs = {k: v for k, v in kwargs.items() if hasattr(callable_obj(data[i:i + window_size],
+                                                                                     **class_kwargs), method)}
+            res = getattr(callable_obj(data[i:i + window_size], **class_kwargs), method)(**method_kwargs)
         else:
             raise TypeError(f"Object {callable_obj} is not a function or class. If class, method must be specified.")
 
@@ -138,7 +142,11 @@ def expanding_window(callable_obj: Callable, data: Union[pd.DataFrame, np.ndarra
         if inspect.isfunction(callable_obj):
             res = callable_obj(data[:row], *args, **kwargs)
         elif inspect.isclass(callable_obj) and method is not None:
-            res = getattr(callable_obj(data[:row], *args, **kwargs), method)()
+            # extract relevant kwargs for the class and method
+            class_kwargs = {k: v for k, v in kwargs.items() if hasattr(callable_obj, k)}
+            method_kwargs = {k: v for k, v in kwargs.items() if hasattr(callable_obj(data[:row],
+                                                                                     **class_kwargs), method)}
+            res = getattr(callable_obj(data[:row], **class_kwargs), method)(**method_kwargs)
         else:
             raise TypeError(f"Object {callable_obj} is not a function or class. If class, method must be specified.")
 
