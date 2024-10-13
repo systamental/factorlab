@@ -5,8 +5,6 @@ import scipy
 from typing import Optional, Union, Any
 from sklearn.decomposition import PCA
 
-from factorlab.signal_generation.time_series_analysis import rolling_window, expanding_window
-
 
 class PCAWrapper:
     """
@@ -22,7 +20,7 @@ class PCAWrapper:
 
         Parameters
         ----------
-        data: np.array or pd.DataFrame
+        data: np.ndarray or pd.DataFrame
             Data matrix for principal component analysis
         n_components: int or float, default None
             Number of principal components, or percentage of variance explained.
@@ -46,7 +44,7 @@ class PCAWrapper:
 
         Returns
         -------
-        data: np.array
+        data: np.ndarray
             Data matrix with missing values removed.
         """
         if isinstance(self.raw_data, pd.DataFrame):
@@ -71,49 +69,50 @@ class PCAWrapper:
 
         return self.pca
 
-    def get_eigenvectors(self) -> np.array:
+    def get_eigenvectors(self) -> np.ndarray:
         """
         Get eigenvectors from SVD decomposition.
 
         Returns
         -------
-        eigenvecs: np.array
+        eigenvecs: np.ndarray
             Eigenvectors from SVD decomposition.
         """
         # pca
         self.pca.fit(self.data_window)
+
         # eigenvectors
         self.eigenvecs = self.pca.components_.T
 
         return self.eigenvecs
 
-    def correct_sign_pc1(self, pcs: np.array) -> np.array:
+    def correct_sign_pc1(self, pcs: np.ndarray) -> np.ndarray:
         """
         Constrain the sign of the first principal component to be consistent with the mean of the cross-section.
 
         Parameters
         ----------
-        pcs: np.array
+        pcs: np.ndarray
             Principal components.
 
         Returns
         -------
-        pcs: np.array
+        pcs: np.ndarray
             Principal components with first PC sign corrected.
         """
         # check sign of first PC
-        if np.dot(pcs[:, 0], np.mean(self.data, axis=1)) < 0:
+        if np.dot(pcs[:, 0], np.mean(self.data_window, axis=1)) < 0:
             pcs *= -1
 
         return pcs
 
-    def get_pcs(self) -> Union[np.array, pd.DataFrame]:
+    def get_pcs(self) -> Union[np.ndarray, pd.DataFrame]:
         """
         Get principal components.
 
         Returns
         -------
-        pcs: np.array or pd.DataFrame
+        pcs: np.ndarray or pd.DataFrame
             Principal components.
         """
         # pcs
@@ -128,13 +127,13 @@ class PCAWrapper:
 
         return self.pcs
 
-    def get_expl_var_ratio(self) -> np.array:
+    def get_expl_var_ratio(self) -> np.ndarray:
         """
         Get explained variance ratio from sklearn PCA implementation.
 
         Returns
         -------
-        explained_var_ratio: np.array
+        explained_var_ratio: np.ndarray
             Explained variance ratio.
         """
         # explained variance ratio
@@ -142,7 +141,7 @@ class PCAWrapper:
 
         return self.expl_var_ratio
 
-    def get_rolling_pcs(self, window_size: Optional[int] = None, **kwargs: Any) -> Union[np.array, pd.DataFrame]:
+    def get_rolling_pcs(self, window_size: Optional[int] = None) -> Union[np.ndarray, pd.DataFrame]:
         """
         Get rolling principal components.
 
@@ -150,11 +149,10 @@ class PCAWrapper:
         ----------
         window_size: int, default None
             Size of rolling window (number of observations).
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
 
         Returns
         -------
-        rolling_pcs: np.array or pd.DataFrame
+        rolling_pcs: np.ndarray or pd.DataFrame
             Rolling principal components.
         """
         # window size
@@ -164,16 +162,38 @@ class PCAWrapper:
             self.n_components = window_size
 
         # get rolling window pcs
-        self.pcs = rolling_window(PCAWrapper, self.data, window_size, n_components=self.n_components,
-                                  method='get_pcs', **kwargs)
+        out = None
+
+        # loop through rows of data
+        for row in range(self.data.shape[0] - window_size + 1):
+
+            # set rolling window
+            self.data_window = self.data[row: row + window_size, :]
+            # get pcs
+            self.get_pcs()
+
+            # add output to array
+            if row == 0:
+                if isinstance(self.pcs, pd.DataFrame):
+                    out = self.pcs.values[-1]
+                else:
+                    out = self.pcs[-1]
+            else:
+                # add output to array
+                if isinstance(self.pcs, pd.DataFrame):
+                    out = np.vstack([out, self.pcs.values[-1]])
+                else:
+                    out = np.vstack([out, self.pcs[-1]])
+
+        self.pcs = out
+
         # add index and cols if available
         if self.index is not None:
             self.pcs = pd.DataFrame(self.pcs, index=self.index[-self.pcs.shape[0]:])
 
         return self.pcs
 
-    def get_rolling_expl_var_ratio(self, window_size: Optional[int] = None, **kwargs: Any) \
-            -> Union[np.array, pd.DataFrame]:
+    def get_rolling_expl_var_ratio(self, window_size: Optional[int] = None) -> Union[np.ndarray, pd.DataFrame]:
         """
         Get rolling explained variance ratio.
 
@@ -181,11 +201,10 @@ class PCAWrapper:
         ----------
         window_size: int, default None
             Size of rolling window (number of observations).
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
 
         Returns
         -------
-        rolling_expl_var_ratio: np.array or pd.DataFrame
+        rolling_expl_var_ratio: np.ndarray or pd.DataFrame
             Rolling explained variance ratio.
         """
         # window size
@@ -195,15 +214,30 @@ class PCAWrapper:
             raise ValueError(f"Window size {window_size} is less than {self.n_components} n_components.")
 
         # get rolling window expl var
-        self.expl_var_ratio = rolling_window(PCAWrapper, self.data, window_size, n_components=self.n_components,
-                                        method='get_expl_var_ratio', **kwargs)
+        out = None
+
+        # loop through rows of data
+        for row in range(self.data.shape[0] - window_size + 1):
+
+            # set rolling window
+            self.data_window = self.data[row: row + window_size, :]
+            # get expl var ratio
+            self.get_expl_var_ratio()
+
+            if row == 0:
+                out = self.expl_var_ratio
+            else:
+                out = np.vstack([out, self.expl_var_ratio])
+
+        self.expl_var_ratio = out
+
         # add index and cols if available
         if self.expl_var_ratio is not None:
             self.expl_var_ratio = pd.DataFrame(self.expl_var_ratio, index=self.index[-self.expl_var_ratio.shape[0]:])
 
         return self.expl_var_ratio
 
-    def get_expanding_pcs(self, min_obs: Optional[int] = None, **kwargs: Any) -> Union[np.array, pd.DataFrame]:
+    def get_expanding_pcs(self, min_obs: Optional[int] = None) -> Union[np.ndarray, pd.DataFrame]:
         """
         Get rolling principal components.
 
@@ -211,12 +245,11 @@ class PCAWrapper:
         ----------
         min_obs: int, default 1
             Mininum number of observations for expanding window computation.
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
 
         Returns
         -------
-        exp_pcs: np.array or pd.DataFrame
-            Rolling principal components.
+        exp_pcs: np.ndarray or pd.DataFrame
+            Expanding principal components.
         """
         # min obs
         if min_obs is None:
@@ -225,17 +258,38 @@ class PCAWrapper:
             raise ValueError(f"Minimum observations {min_obs} is less than {self.n_components} n_components.")
 
         # get expanding window pcs
-        exp_pcs = expanding_window(PCAWrapper, self.data, min_obs, n_components=self.n_components, method='get_pcs',
-                                   **kwargs)
+        out = None
+
+        # loop through rows of data
+        for row in range(min_obs, self.data.shape[0] + 1):
+
+            # set expanding window
+            self.data_window = self.data[: row, :]
+
+            # get pcs
+            self.get_pcs()
+
+            if row == min_obs:
+                if isinstance(self.pcs, pd.DataFrame):
+                    out = self.pcs.values[-1]
+                else:
+                    out = self.pcs[-1]
+            else:
+                # add output to array
+                if isinstance(self.pcs, pd.DataFrame):
+                    out = np.vstack([out, self.pcs.values[-1]])
+                else:
+                    out = np.vstack([out, self.pcs[-1]])
+
+        self.pcs = out
 
         # add index and cols if available
         if self.index is not None:
-            exp_pcs = pd.DataFrame(exp_pcs, index=self.index[-exp_pcs.shape[0]:], columns=range(exp_pcs.shape[1]))
+            self.pcs = pd.DataFrame(self.pcs, index=self.index[-self.pcs.shape[0]:], columns=range(self.pcs.shape[1]))
 
-        return exp_pcs
+        return self.pcs
 
-    def get_expanding_expl_var_ratio(self, min_obs: Optional[int] = None, **kwargs: Any) \
-            -> Union[np.array, pd.DataFrame]:
+    def get_expanding_expl_var_ratio(self, min_obs: Optional[int] = None) -> Union[np.ndarray, pd.DataFrame]:
         """
         Get rolling explained variance ratio.
 
@@ -243,11 +297,10 @@ class PCAWrapper:
         ----------
         min_obs: int, default 1
             Mininum number of observations for expanding window computation.
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
 
         Returns
         -------
-        exp_expl_var_ratio: np.array or pd.DataFrame
+        exp_expl_var_ratio: np.ndarray or pd.DataFrame
             Expanding explained variance ratio.
         """
         # min obs
@@ -257,8 +310,22 @@ class PCAWrapper:
             raise ValueError(f"Minimum observations {min_obs} is less than {self.n_components} n_components.")
 
         # get expanding window expl var
-        self.expl_var_ratio = expanding_window(PCAWrapper, self.data, min_obs, n_components=self.n_components,
-                                        method='get_expl_var_ratio', **kwargs)
+        out = None
+
+        # loop through rows of data
+        for row in range(min_obs, self.data.shape[0] + 1):
+
+            # set expanding window
+            self.data_window = self.data[: row, :]
+            # get expl var ratio
+            self.get_expl_var_ratio()
+
+            if row == min_obs:
+                out = self.expl_var_ratio
+            else:
+                out = np.vstack([out, self.expl_var_ratio])
+
+        self.expl_var_ratio = out
 
         # add index and cols if available
         if self.index is not None:
@@ -536,9 +603,31 @@ class R2PCA:
             self.n_components = window_size
             self.create_pca_instance()
 
+        # output
+        out = None
+
         # get rolling window expl var
-        self.expl_var_ratio = rolling_window(R2PCA, self.data, window_size, n_components=self.n_components,
-                                        method='get_expl_var_ratio', **kwargs)
+        for row in range(self.data.shape[0] - window_size + 1):
+
+            # set rolling window
+            self.data_window = self.data[row: row + window_size, :]
+
+            # get expl var ratio
+            self.get_expl_var_ratio()
+
+            if row == 0:
+                if len(self.expl_var_ratio.shape) == 1:
+                    out = self.expl_var_ratio.reshape(1, -1)
+                else:
+                    out = self.expl_var_ratio[-1]
+            else:
+                # add output to array
+                if len(self.expl_var_ratio.shape) == 1:
+                    self.expl_var_ratio = self.expl_var_ratio.reshape(1, -1)
+                out = np.vstack([out, self.expl_var_ratio[-1]])
+
+        self.expl_var_ratio = out
+
         # add index and cols if available
         if self.expl_var_ratio is not None:
             self.expl_var_ratio = pd.DataFrame(self.expl_var_ratio, index=self.index[-self.expl_var_ratio.shape[0]:])
@@ -606,8 +695,7 @@ class R2PCA:
 
         return self.pcs
 
-    def get_expanding_expl_var_ratio(self, min_obs: Optional[int] = None, **kwargs: Any) \
-            -> Union[np.array, pd.DataFrame]:
+    def get_expanding_expl_var_ratio(self, min_obs: Optional[int] = None) -> Union[np.array, pd.DataFrame]:
         """
         Get expanding explained variance ratio.
 
@@ -615,7 +703,6 @@ class R2PCA:
         ----------
         min_obs: int, default 1
             Minimum number of observations for expanding window computation.
-        **kwargs: Optional keyword arguments, for R2PCA object. See sklearn.decomposition.PCA for details.
 
         Returns
         -------
@@ -638,9 +725,31 @@ class R2PCA:
             self.n_components = min_obs
             self.create_pca_instance(n_components=self.n_components)
 
+        # output
+        out = None
+
         # get expanding window expl var
-        self.expl_var_ratio = expanding_window(R2PCA, self.data, min_obs, n_components=self.n_components,
-                                        method='get_expl_var_ratio', **kwargs)
+        for row in range(min_obs, self.data.shape[0] + 1):
+
+            # set expanding window
+            self.data_window = self.data[: row]
+
+            # get expl var ratio
+            self.get_expl_var_ratio()
+
+            if row == min_obs:
+                if len(self.expl_var_ratio.shape) == 1:
+                    out = self.expl_var_ratio.reshape(1, -1)
+                else:
+                    out = self.expl_var_ratio[-1]
+            else:
+                # add output to array
+                if len(self.expl_var_ratio.shape) == 1:  # reshape to 2d arr
+                    self.expl_var_ratio = self.expl_var_ratio.reshape(1, -1)
+                out = np.vstack([out, self.expl_var_ratio[-1]])
+
+        self.expl_var_ratio = out
+
         # add index and cols if available
         if self.index is not None:
             self.expl_var_ratio = pd.DataFrame(self.expl_var_ratio, index=self.index[-self.expl_var_ratio.shape[0]:])

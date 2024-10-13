@@ -99,8 +99,8 @@ class TestPCAWrapper:
         Test get_rolling_pcs method.
         """
         # get rolling and fixed pcs
-        rolling = self.default_pca_instance.get_rolling_pcs(window_size=window_size)
         fixed = self.default_pca_instance.get_pcs()
+        rolling = self.default_pca_instance.get_rolling_pcs(window_size=window_size)
 
         # test pc1 correl
         assert pd.concat([fixed[0], rolling[0]], axis=1).corr().iloc[0, 1] > 0.9
@@ -116,8 +116,8 @@ class TestPCAWrapper:
         Test get_rolling_expl_var method.
         """
         # get rolling and fixed pcs
-        rolling = self.default_pca_instance.get_rolling_expl_var_ratio(window_size=window_size)
         fixed = self.default_pca_instance.get_expl_var_ratio()
+        rolling = self.default_pca_instance.get_rolling_expl_var_ratio(window_size=window_size)
 
         # test values
         assert all(np.abs(fixed - rolling.mean()) < 0.15)
@@ -251,8 +251,8 @@ class TestR2PCA:
         Test get_expanding_pcs method.
         """
         # get exp and fixed pcs
-        exp = self.default_pca_instance.get_expanding_pcs(min_obs=min_obs)
         fixed = self.default_pca_instance.get_pcs()
+        exp = self.default_pca_instance.get_expanding_pcs(min_obs=min_obs)
 
         # test pc1 correl
         assert pd.concat([fixed[0], exp[0]], axis=1).corr().iloc[0, 1] > 0.9
@@ -269,8 +269,8 @@ class TestR2PCA:
         Test get_expanding_expl_var method.
         """
         # get exp and fixed pcs
-        exp = self.default_pca_instance.get_expanding_expl_var_ratio(min_obs=min_obs)
         fixed = self.default_pca_instance.get_expl_var_ratio()
+        exp = self.default_pca_instance.get_expanding_expl_var_ratio(min_obs=min_obs)
 
         # test values
         assert all(np.abs(fixed - exp.mean()) < 0.15)
