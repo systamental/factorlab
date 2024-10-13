@@ -846,17 +846,29 @@ class RiskEstimators:
         if method in ['turbulence_index']:
 
             if self.window_type == 'rolling':
-                self.portfolio_risk = rolling_window(RiskEstimators,
-                                                     self.returns,
-                                                     window_size=self.window_size,
-                                                     method=method,
-                                                     **kwargs)
+
+                # loop through rows of returns
+                for row in range(self.returns.shape[0] - self.window_size + 1):
+
+                    # compute risk estimator
+                    risk = getattr(RiskEstimators(self.returns.iloc[row:row + self.window_size]), method)(**kwargs)
+                    if row == 0:
+                        self.portfolio_risk = pd.DataFrame(risk.iloc[-1]).T
+                    else:
+                        self.portfolio_risk = pd.concat([self.portfolio_risk, pd.DataFrame(risk.iloc[-1]).T])
+
             elif self.window_type == 'expanding':
-                self.portfolio_risk = expanding_window(RiskEstimators,
-                                                       self.returns,
-                                                       min_obs=self.min_obs,
-                                                       method=method,
-                                                       **kwargs)
+
+                # loop through rows of returns
+                for row in range(self.min_obs, self.returns.shape[0] + 1):
+
+                    # compute risk estimator
+                    risk = getattr(RiskEstimators(self.returns.iloc[:row]), method)(**kwargs)
+                    if row == self.min_obs:
+                        self.portfolio_risk = pd.DataFrame(risk.iloc[-1]).T
+                    else:
+                        self.portfolio_risk = pd.concat([self.portfolio_risk, pd.DataFrame(risk.iloc[-1]).T])
+
             else:
                 self.portfolio_risk = getattr(self, method)(**kwargs)
 

@@ -234,11 +234,15 @@ class TestRiskEstimators:
                              "'minimum_covariance_determinant', 'semi_covariance', 'exponential_covariance', " \
                              "'denoised_covariance'"
 
-    def test_compute_turbulence_index(self) -> None:
+    @pytest.mark.parametrize("method, component", [('turbulence_index', 'turbulence'),
+                                                     ('turbulence_index', 'correlation_surprise'),
+                                                     ('turbulence_index', 'magnitude_surprise')])
+    def test_compute_portfolio_risk(self, method, component) -> None:
         """
         Test compute turbulence index.
         """
-        turb = self.nomissing_risk_est_instance.compute_turbulence_index()
+        turb = self.nomissing_risk_est_instance.compute_portfolio_risk(method=method, component=component)
+
         # type
         assert isinstance(turb, pd.DataFrame)
         # shape
