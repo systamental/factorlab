@@ -84,13 +84,16 @@ class Trend:
         price: pd.DataFrame
             DataFrame with DatetimeIndex and price (cols).
         """
+        # convert dtype to float
+        self.df = self.df.astype(float)
+
         # compute price
         if self.vwap:
             self.price = Transform(self.df).vwap()[['vwap']].copy()
         else:
             self.price = self.df.copy()
         if self.log:
-            self.price = Transform(self.price).log()
+            self.price = Transform(self.price).log().copy()
 
         return self.price
 
