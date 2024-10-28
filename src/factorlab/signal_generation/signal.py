@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
 from scipy.stats import norm, logistic
 
 from factorlab.feature_engineering.transformations import Transform
@@ -11,11 +11,11 @@ class Signal:
     Signal construction class.
     """
     def __init__(self,
-                 returns: pd.Series,
                  factors: pd.DataFrame,
+                 returns: Optional[Union[pd.Series, pd.DataFrame]] = None,
                  strategy: str = 'ts_ls',
-                 return_bins: int = 3,
-                 factor_bins: int = 5,
+                 combine: Optional[str] = None,
+                 bins: int = 5,
                  n_factors: int = 10,
                  disc_thresh: float = 0,
                  window_type: str = 'expanding',
@@ -26,18 +26,19 @@ class Signal:
 
         Parameters
         ----------
-        returns: pd.Series or pd.DataFrame - Single or MultiIndex
-            Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
         factors: pd.Series or pd.DataFrame - Single or MultiIndex
             Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
+        returns: optional, pd.Series or pd.DataFrame - Single or MultiIndex, default None
+            Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
         strategy: str, {'ts_ls' 'ts_l', 'cs_ls', 'cs_l', 'dual_ls', 'dual_l', default 'ts_ls'
-            Time series, cross-sectional or dual strategy, long/short, long-only or short-only.
-        factor_bins: int, default 5
-            Number of bins to create for factors.
-        return_bins: int, default 3
-            Number of bins to create for returns.
+            Time series (directional), cross-sectional (market neutral) or dual strategy.
+            Long/short, long-only or short-only.
+        combine: str, default None
+            Combine factors using a summary statistic.
+        bins: int, default 5
+            Number of bins to use for quantization.
         n_factors: int, default 10
-            Number of factors to use for cross-sectional strategies.
+            Number of factors to use for cross-sectional strategies ranking.
         disc_thresh: float, default 0
             Threshold cutoff for converting continuous signal values to discrete signals.
         window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
@@ -45,19 +46,17 @@ class Signal:
         window_size: int, default 90
             Minimal number of observations to include in moving window (rolling or expanding).
         """
-        self.returns = returns.astype(float).to_frame() if isinstance(returns, pd.Series) else returns
         self.factors = factors.to_frame() if isinstance(factors, pd.Series) else factors
+        self.returns = returns.astype(float).to_frame() if isinstance(returns, pd.Series) else returns
         self.strategy = strategy
-        self.factor_bins = factor_bins if factor_bins > 1 else self._raise_value_error()
-        self.return_bins = return_bins if return_bins > 1 else self._raise_value_error()
+        self.combine = combine
+        self.bins = bins if bins > 1 else self._raise_value_error()
         self.n_factors = n_factors
         self.disc_thresh = disc_thresh
         self.window_type = window_type
         self.window_size = window_size
         self.norm_factors = None
-        self.norm_ret = None
         self.factor_quantiles = None
-        self.ret_quantiles = None
         self.signals = None
         self.signal_rets = None
         self.signal_disp = None
@@ -67,7 +66,7 @@ class Signal:
 
     def normalize(self,
                   method: str = 'z-score',
-                  centering: bool = True,
+                  centering: bool = False,
                   ts_norm: bool = False,
                   winsorize: Optional[int] = None
                   ) -> pd.DataFrame:
@@ -101,9 +100,6 @@ class Signal:
             self.norm_factors = Transform(self.factors).normalize(method=method, axis='ts', centering=centering,
                                                                   window_type=self.window_type,
                                                                   window_size=self.window_size, winsorize=winsorize)
-            self.norm_ret = Transform(self.returns).normalize(method=method, axis='ts', centering=centering,
-                                                          window_type=self.window_type, window_size=self.window_size,
-                                                          winsorize=winsorize)
 
         # cross-sectional
         elif self.strategy.split('_')[0] == 'cs':
@@ -111,24 +107,21 @@ class Signal:
                 factor_norm_ts = Transform(self.factors).normalize(method=method, axis='ts', centering=centering,
                                                                    window_type=self.window_type,
                                                                    window_size=self.window_size, winsorize=winsorize)
-                ret_norm_ts = Transform(self.returns).normalize(method=method, axis='ts', centering=centering,
-                                                            window_type=self.window_type,
-                                                            window_size=self.window_size, winsorize=winsorize)
                 self.norm_factors = Transform(factor_norm_ts).normalize(method=method, axis='cs', centering=centering,
                                                                         winsorize=winsorize)
-                self.norm_ret = Transform(ret_norm_ts).normalize(method=method, axis='cs', centering=centering,
-                                                                 winsorize=winsorize)
+
             else:
                 self.norm_factors = Transform(self.factors).normalize(method=method, axis='cs', centering=centering,
                                                                       winsorize=winsorize)
-                self.norm_ret = Transform(self.returns).normalize(method=method, axis='cs', centering=centering,
-                                                              winsorize=winsorize)
+
+        # combine
+        self.combine_factors()
 
         return self.norm_factors
 
     def quantize(self, ts_norm: bool = False) -> pd.DataFrame:
         """
-        Quantizes factors and/or targets.
+        Quantizes factors.
 
         Parameters
         ---------
@@ -142,27 +135,50 @@ class Signal:
         """
         # time series
         if self.strategy.split('_')[0] == 'ts':
-            self.factor_quantiles = Transform(self.factors).quantize(bins=self.factor_bins, axis='ts',
+            self.factor_quantiles = Transform(self.factors).quantize(bins=self.bins, axis='ts',
                                                                      window_type=self.window_type,
                                                                      window_size=self.window_size)
-            self.ret_quantiles = Transform(self.returns).quantize(bins=self.return_bins, axis='ts',
-                                                              window_type=self.window_type,
-                                                              window_size=self.window_size)
+
         # cross-sectional
         elif self.strategy.split('_')[0] == 'cs':
             if ts_norm:
                 norm_factors_ts = Transform(self.factors).normalize(window_type=self.window_type, axis='ts',
                                                                     window_size=self.window_size)
-                norm_ret_ts = Transform(self.returns).normalize(window_type=self.window_type, axis='ts',
-                                                            window_size=self.window_size)
-                self.factor_quantiles = Transform(norm_factors_ts).quantize(bins=self.factor_bins, axis='cs')
-                self.ret_quantiles = Transform(norm_ret_ts).quantize(bins=self.return_bins, axis='cs')
+                self.factor_quantiles = Transform(norm_factors_ts).quantize(bins=self.bins, axis='cs')
 
             else:
-                self.factor_quantiles = Transform(self.factors).quantize(bins=self.factor_bins, axis='cs')
-                self.ret_quantiles = Transform(self.returns).quantize(bins=self.return_bins, axis='cs')
+                self.factor_quantiles = Transform(self.factors).quantize(bins=self.bins, axis='cs')
 
         return self.factor_quantiles
+
+    def combine_factors(self) -> pd.DataFrame:
+        """
+        Combines factors using a summary statistic.
+
+        Returns
+        -------
+        norm_factors: pd.DataFrame
+            Combined factors with DatetimeIndex and combined values (cols).
+        """
+        if self.combine is not None:
+            if self.combine == 'mean':
+                self.norm_factors = self.norm_factors.mean(axis=1)
+            elif self.combine == 'median':
+                self.norm_factors = self.norm_factors.median(axis=1)
+            elif self.combine == 'min':
+                self.norm_factors = self.norm_factors.min(axis=1)
+            elif self.combine == 'max':
+                self.norm_factors = self.norm_factors.max(axis=1)
+            elif self.combine == 'sum':
+                self.norm_factors = self.norm_factors.sum(axis=1)
+            elif self.combine == 'prod':
+                self.norm_factors = self.norm_factors.prod(axis=1)
+            else:
+                raise ValueError(f"Combine method {self.combine} is not available.")
+
+            self.norm_factors = self.norm_factors.to_frame('combined_factor')
+
+            return self.norm_factors
 
     def convert_to_signals(self,
                            transformation: Optional[str] = 'norm',
@@ -193,8 +209,9 @@ class Signal:
         if transformation == 'norm':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             # cumulative distribution function of normal distribution
-            self.signals = pd.DataFrame(norm.cdf(self.norm_factors), index=self.norm_factors.index,
-                                        columns=self.norm_factors.columns)
+            self.signals = Transform(self.norm_factors).to_signal(transformation='norm')
+            # self.signals = pd.DataFrame(norm.cdf(self.norm_factors), index=self.norm_factors.index,
+            #                             columns=self.norm_factors.columns)
 
         # uniform distribution
         elif transformation == 'percentile':
@@ -210,13 +227,15 @@ class Signal:
         elif transformation == 'logistic':
             self.normalize(method='z-score', centering=True, ts_norm=ts_norm, winsorize=winsorize)
             # cdf of logistic distribution
-            self.signals = pd.DataFrame(logistic.cdf(self.norm_factors), index=self.norm_factors.index,
-                                        columns=self.norm_factors.columns)
+            self.signals = Transform(self.norm_factors).to_signal(transformation='logistic')
+            # self.signals = pd.DataFrame(logistic.cdf(self.norm_factors), index=self.norm_factors.index,
+            #                             columns=self.norm_factors.columns)
 
         # adjusted normal distribution
         elif transformation == 'adj_norm':
             self.normalize(method='adj_norm', centering=True, ts_norm=ts_norm, winsorize=winsorize)
-            self.signals = self.norm_factors * np.exp((-1 * self.norm_factors ** 2) / 4) / 0.89
+            self.signals = Transform(self.norm_factors).to_signal(transformation='adj_norm')
+            # self.signals = self.norm_factors * np.exp((-1 * self.norm_factors ** 2) / 4) / 0.89
 
         # sign
         elif transformation == 'sign':
@@ -226,7 +245,7 @@ class Signal:
             self.signals = self.factors
 
         # convert to signals
-        if transformation not in ['adj_norm', 'sign']:
+        if transformation in ['percentile', 'min-max']:
             self.signals = (self.signals * 2) - 1
 
         return self.signals
@@ -287,13 +306,13 @@ class Signal:
         self.convert_to_signals(transformation=transformation, ts_norm=ts_norm, winsorize=winsorize)
 
         # quantiles
-        self.factor_quantiles = Transform(self.signals).quantize(bins=self.factor_bins,
+        self.factor_quantiles = Transform(self.signals).quantize(bins=self.bins,
                                                                  axis=self.strategy.split('_')[0],
                                                                  window_type=self.window_type,
                                                                  window_size=self.window_size)
 
         # median centered
-        med = np.median(range(1, self.factor_bins + 1))
+        med = np.median(range(1, self.bins + 1))
         self.signals = (self.factor_quantiles - med) / (med - 1)
 
         return self.signals
