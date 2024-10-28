@@ -1,14 +1,15 @@
 import pandas as pd
 import numpy as np
 from typing import Union, Optional
+from scipy.stats import norm, logistic
 from sklearn.preprocessing import KBinsDiscretizer
+from sklearn.preprocessing import power_transform
 
 
 class Transform:
     """
     Transformations on raw data, returns or features.
     """
-
     def __init__(self, data: Union[pd.Series, pd.DataFrame, np.array], **kwargs: dict):
         """
         Constructor
@@ -37,13 +38,13 @@ class Transform:
             self.df = self.raw_data.astype('float64').copy()
             self.arr = self.raw_data.to_numpy(dtype='float64').copy()
             self.index = self.raw_data.index
+            # series
+            if isinstance(self.df, pd.Series):
+                self.df = self.df.to_frame()
             if isinstance(self.index, pd.MultiIndex):
                 self.freq = pd.infer_freq(self.index.get_level_values(0).unique())
             else:
                 self.freq = pd.infer_freq(self.index)
-        # series
-        elif isinstance(self.raw_data, pd.Series):
-            self.df = self.df.to_frame()
         # array
         elif isinstance(self.raw_data, np.ndarray):
             self.arr = self.raw_data.astype(float).copy()
@@ -82,6 +83,289 @@ class Transform:
         self.trans_df[self.trans_df <= 0] = np.nan
         # log and replace inf
         self.trans_df = np.log(self.trans_df).replace([np.inf, -np.inf], np.nan)
+
+        return self.trans_df
+
+    def square_root(self) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes square root transformation.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with square root-transformed values.
+        """
+        # remove negative values
+        self.trans_df[self.trans_df < 0] = np.nan
+        # square root
+        self.trans_df = np.sqrt(self.trans_df)
+
+        return self.trans_df
+
+    def square(self) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes square transformation.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with square-transformed values.
+        """
+        # square
+        self.trans_df = np.square(self.trans_df)
+
+        return self.trans_df
+
+    def power(self, exp: int) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes power transformation.
+
+        Parameters
+        ----------
+        exp: int
+            Exponent for power transformation.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with cube-transformed values.
+        """
+        if not isinstance(exp, int) or exp < 0:
+            raise ValueError("Exponent must be a positive integer.")
+
+        # cube
+        self.trans_df = np.power(self.trans_df, exp)
+
+        return self.trans_df
+
+    def power_transform(self,
+                        method: str = 'yeo-johnson',
+                        axis: str = 'ts',
+                        window_type: str = 'expanding',
+                        window_size: int = 30,
+                        min_periods: int = 2,
+                        adjustment: float = 1e-6) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes power transformation.
+
+        Parameters
+        ----------
+        method: str, {'box-cox', 'yeo-johnson'}, default 'yeo-johnson'
+            Method for power transformation.
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute power transformation, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+        adjustment: float, default 1e-6
+            Adjustment for negative values for box-cox transformation.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Series or DataFrame with power-transformed values.
+        """
+        out = None
+
+        if method == 'box-cox':
+
+            # time series
+            if axis == 'ts':
+
+                # unstack multi-index
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    df = self.trans_df.unstack().copy()
+                else:
+                    df = self.trans_df.copy()
+
+                # rolling window
+                if window_type == 'rolling':
+
+                    # loop through columns of df
+                    for col in df.columns:
+
+                        # loop through rows of df
+                        for row in range(df.shape[0] - window_size + 1):
+
+                            # adjust for negative vals
+                            adjusted_series = (df[col].iloc[row:row + window_size] -
+                                               df[col].iloc[row:row + window_size].min() + adjustment).to_frame()
+                            # box cox transformation
+                            transformed_vals = power_transform(adjusted_series, method='box-cox', standardize=True,
+                                                               copy=True)
+                            # reshape to 2d arr
+                            if row == 0:
+                                if len(transformed_vals.shape) == 1:
+                                    out = transformed_vals.reshape(1, -1)
+                                else:
+                                    out = transformed_vals[-1]
+                            else:
+                                if len(transformed_vals.shape) == 1:
+                                    transformed_vals = transformed_vals.reshape(1, -1)
+                                # add output to array
+                                out = np.vstack([out, transformed_vals[-1]])
+
+                        # add transformed values to df
+                        df[col] = pd.Series(index=df.index[-out.shape[0]:], data=out.reshape(-1))
+
+                # expanding window
+                elif window_type == 'expanding':
+
+                    # loop through columns of df
+                    for col in df.columns:
+
+                        # loop through rows of df
+                        for row in range(min_periods, df.shape[0] + 1):
+
+                            # adjust for negative vals
+                            adjusted_series = (df[col].iloc[:row] - df[col].iloc[:row].min() + adjustment).to_frame()
+                            # box cox transformation
+                            transformed_vals = power_transform(adjusted_series, method='box-cox', standardize=True,
+                                                               copy=True)
+                            # reshape to 2d arr
+                            if row == min_periods:
+                                if len(transformed_vals.shape) == 1:
+                                    out = transformed_vals.reshape(1, -1)
+                                else:
+                                    out = transformed_vals[-1]
+                            else:
+                                if len(transformed_vals.shape) == 1:
+                                    transformed_vals = transformed_vals.reshape(1, -1)
+                                # add output to array
+                                out = np.vstack([out, transformed_vals[-1]])
+
+                        # add transformed values to df
+                        df[col] = pd.Series(index=df.index[-out.shape[0]:], data=out.reshape(-1))
+
+                # fixed window
+                else:
+
+                    # loop through columns of df
+                    for col in df.columns:
+
+                        # adjust for negative vals
+                        adjusted_series = (df[col] - df[col].min() + adjustment).to_frame()
+                        # box cox transformation
+                        transformed_vals = power_transform(adjusted_series, method='box-cox', standardize=True,
+                                                           copy=True)
+                        # add transformed values to df
+                        df[col] = pd.Series(index=adjusted_series.index, data=transformed_vals.reshape(-1))
+
+                # stack multi-index
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = df.stack(future_stack=True)
+                else:
+                    self.trans_df = df
+
+            # cross-section
+            else:
+                def bc_transformation(data):
+                    return pd.DataFrame(power_transform(data, method='box-cox', standardize=True, copy=True),
+                                        index=data.index, columns=data.columns)
+
+                self.trans_df = self.trans_df.groupby(level=0, group_keys=False).apply(lambda x: bc_transformation(x))
+
+        # yeo-johnson
+        else:
+
+            # time series
+            if axis == 'ts':
+
+                # unstack multi-index
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    df = self.trans_df.unstack().copy()
+                else:
+                    df = self.trans_df.copy()
+
+                # rolling window
+                if window_type == 'rolling':
+
+                    # loop through columns of df
+                    for col in df.columns:
+
+                        # loop through rows of df
+                        for row in range(df.shape[0] - window_size + 1):
+
+                            # adjust for negative vals
+                            adjusted_series = df[col].iloc[row:row + window_size].to_frame()
+                            # yeo johnson transformation
+                            transformed_vals = power_transform(adjusted_series, method='yeo-johnson', standardize=True,
+                                                               copy=True)
+                            # reshape to 2d arr
+                            if row == 0:
+                                if len(transformed_vals.shape) == 1:
+                                    out = transformed_vals.reshape(1, -1)
+                                else:
+                                    out = transformed_vals[-1]
+                            else:
+                                if len(transformed_vals.shape) == 1:
+                                    transformed_vals = transformed_vals.reshape(1, -1)
+                                # add output to array
+                                out = np.vstack([out, transformed_vals[-1]])
+
+                        # add transformed values to df
+                        df[col] = pd.Series(index=df.index[-out.shape[0]:], data=out.reshape(-1))
+
+                # expanding window
+                elif window_type == 'expanding':
+
+                    # loop through columns of df
+                    for col in df.columns:
+
+                        # loop through rows of df
+                        for row in range(min_periods, df.shape[0] + 1):
+
+                            # adjust for negative vals
+                            adjusted_series = df[col].iloc[:row].to_frame()
+                            # yeo johnson transformation
+                            transformed_vals = power_transform(adjusted_series, method='yeo-johnson', standardize=True,
+                                                               copy=True)
+                            # reshape to 2d arr
+                            if row == min_periods:
+                                if len(transformed_vals.shape) == 1:
+                                    out = transformed_vals.reshape(1, -1)
+                                else:
+                                    out = transformed_vals[-1]
+                            else:
+                                if len(transformed_vals.shape) == 1:
+                                    transformed_vals = transformed_vals.reshape(1, -1)
+                                # add output to array
+                                out = np.vstack([out, transformed_vals[-1]])
+
+                        # add transformed values to df
+                        df[col] = pd.Series(index=df.index[-out.shape[0]:], data=out.reshape(-1))
+
+                # fixed window
+                else:
+
+                    # loop through columns of df
+                    for col in df.columns:
+
+                        # adjust for negative vals
+                        adjusted_series = df[col].to_frame()
+                        # yeo johnson transformation
+                        transformed_vals = power_transform(adjusted_series, method='yeo-johnson', standardize=True,
+                                                           copy=True)
+                        # add transformed values to df
+                        df[col] = pd.Series(index=adjusted_series.index, data=transformed_vals.reshape(-1))
+
+                # stack multi-index
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = df.stack(future_stack=True)
+                else:
+                    self.trans_df = df
+
+            # cross-section
+            else:
+                def yj_transformation(data):
+                    return pd.DataFrame(power_transform(data, method='yeo-johnson', standardize=True, copy=True),
+                                        index=data.index, columns=data.columns)
+
+                self.trans_df = self.trans_df.groupby(level=0, group_keys=False).apply(lambda x: yj_transformation(x))
 
         return self.trans_df
 
@@ -1069,7 +1353,7 @@ class Transform:
 
         Parameters
         ----------
-        method: str, {'std', 'iqr', 'range', 'atr', 'range', 'mad'}, default 'std'
+        method: str, {'std', 'iqr', 'range', 'atr', 'mad'}, default 'std'
             Method for computing dispersion.
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute dispersion, time series or cross-section.
@@ -1112,13 +1396,13 @@ class Transform:
 
         Parameters
         ----------
-        method: str, {'z-score', 'iqr', 'mod_z', 'min-max', 'percentile'}, default 'z-score'
+        method: str, {'z-score', 'iqr', 'mod_z', 'atr', 'min-max', 'percentile'}, default 'z-score'
             z-score: subtracts mean and divides by standard deviation.
             iqr:  subtracts median and divides by interquartile range.
             mod_z: modified z-score using median absolute deviation.
-            min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range.
-            percentile: converts values to their percentile rank relative to the observations in the
-            defined window type.
+            atr: subtracts mean and divides by average true range.
+            min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range of values.
+            percentile: converts values to percentiles.
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute dispersion, time series or cross-section.
         centering: bool, default True
@@ -1184,6 +1468,14 @@ class Transform:
                                           window_type=window_type,
                                           window_size=window_size,
                                           min_periods=min_periods)
+
+            elif method == 'atr':
+                disp = self.compute_atr(axis=axis,
+                                        window_type=window_type,
+                                        window_size=window_size,
+                                        min_periods=min_periods
+                                        )
+
             else:
                 disp = self.compute_std(axis=axis,
                                         window_type=window_type,
@@ -1355,3 +1647,122 @@ class Transform:
         disc = disc.astype(float) + 1
 
         return disc
+
+    def rank(self,
+             axis: str = 'ts',
+             window_type: str = 'expanding',
+             window_size: int = 30,
+             min_periods: int = 2
+             ) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Ranks features based on values.
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute dispersion, time series or cross-section.
+        window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
+            Provide a window type. If None, all observations are used in the calculation.
+        window_size: int, default 30
+            Size of the moving window. This is the minimum number of observations used for the rolling or expanding
+            window statistic.
+        min_periods: int, default 2
+            Minimum number of observations in window required to have a value; otherwise, result is np.nan.
+
+        Returns
+        -------
+        ranked_features: pd.Series or pd.DataFrame
+            Series or DataFrame with ranked values.
+        """
+        # axis time series
+        if axis == 'ts':
+
+            if window_type == 'rolling':
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = (
+                        self.trans_df
+                        .groupby(level=1)
+                        .rolling(window=window_size, min_periods=min_periods)
+                        .rank(method='first')
+                        .droplevel(0)
+                    )
+                else:
+                    self.trans_df = (
+                        self.trans_df
+                        .rolling(window=window_size, min_periods=min_periods)
+                        .rank(method='first')
+                    )
+
+            elif window_type == 'expanding':
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = (
+                        self.trans_df
+                        .groupby(level=1)
+                        .expanding(min_periods=min_periods)
+                        .rank(method='first')
+                        .droplevel(0)
+                    )
+                else:
+                    self.trans_df = self.trans_df.expanding(min_periods=min_periods).rank(method='first')
+
+            else:
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = self.trans_df.groupby(level=1).rank(method='first')
+                else:
+                    self.trans_df = self.trans_df.rank(method='first')
+
+        # axis cross-section
+        else:
+            if isinstance(self.trans_df.index, pd.MultiIndex):
+                self.trans_df = self.trans_df.groupby(level=0).rank()
+            else:
+                self.trans_df = self.trans_df.rank(axis=1)
+
+        # sort index
+        self.trans_df = self.trans_df.sort_index()
+
+        return self.trans_df
+
+    def to_signal(self, transformation: str = 'norm'):
+        """
+        Converts standardized/normalized values to signals within a fixed range of [-1, 1].
+
+        Parameters
+        ----------
+        transformation: str, {'norm',  'logistic', 'adj_norm', 'tanh', 'sign'}, default 'norm'
+            norm: normal cumulative distribution function.
+            logistic: logistic cumulative distribution function.
+            adj_norm: adjusted normal distribution.
+            tanh: hyperbolic tangent.
+            sign: sign function.
+
+        Returns
+        -------
+        signals: pd.Series or pd.DataFrame
+            Series or DataFrame with signals.
+        """
+        # cdf of normal distribution
+        if transformation == 'norm':
+            self.trans_df = pd.DataFrame(norm.cdf(self.trans_df),
+                                         index=self.trans_df.index,
+                                         columns=self.trans_df.columns)
+
+        # cdf of logistic distribution
+        elif transformation == 'logistic':
+            self.trans_df = pd.DataFrame(logistic.cdf(self.trans_df),
+                                         index=self.trans_df.index,
+                                         columns=self.trans_df.columns)
+
+        # tanh
+        elif transformation == 'tanh':
+            self.trans_df = np.tanh(self.trans_df)
+
+        # adjusted normal distribution
+        elif transformation == 'adj_norm':
+            self.trans_df = self.trans_df * np.exp((-1 * self.trans_df ** 2) / 4) / 0.89
+
+        # convert to signals
+        if transformation in ['norm', 'logistic']:
+            self.trans_df = (self.trans_df * 2) - 1
+
+        return self.trans_df
