@@ -82,6 +82,11 @@ class Target:
         """
         Computes price change.
 
+        Parameters
+        ----------
+        method: str, {'simple', 'log', 'diff'}, default 'log'
+            Method to compute price changes.
+
         Returns
         -------
         price_chg: pd.Series or pd.DataFrame
@@ -119,9 +124,9 @@ class Target:
 
         # shift price chg forward
         if isinstance(self.df.index, pd.MultiIndex):
-            self.target = self.target.groupby(level=1).shift(self.lead * -1).sort_index().dropna()
+            self.target = self.target.groupby(level=1).shift(self.lead * -1).dropna(how='all').sort_index()
         else:
-            self.target = self.target.shift(self.lead * -1).sort_index().dropna()
+            self.target = self.target.shift(self.lead * -1).dropna(how='all').sort_index()
 
         return self.target
 
@@ -163,7 +168,7 @@ class Target:
                              'percentile')
 
         # normalize price chg
-        if ts_norm and self.strategy == 'cs':
+        if self.strategy == 'cs' and ts_norm:
             price_chg_norm_ts = Transform(self.target).normalize(method=method,
                                                                  axis='ts',
                                                                  centering=centering,
@@ -185,6 +190,9 @@ class Target:
                                                            window_type=self.window_type,
                                                            window_size=self.window_size,
                                                            winsorize=winsorize)
+
+        # drop NaN values and sort
+        self.target = self.target.dropna(how='all').sort_index()
 
         return self.target
 
@@ -210,36 +218,38 @@ class Target:
                                                              window_size=self.window_size
                                                              )
 
+        # drop NaN values and sort
+        self.target = self.target.dropna(how='all').sort_index()
+
         return self.target
 
     def quantize_target(self) -> Union[pd.Series, pd.DataFrame]:
         """
-        Quantizes the target variable.
+        Quantizes the target variable into discrete bins.
         """
         if self.bins <= 1 or self.bins is None:
             raise ValueError('Number of bins must be larger than 1. Please increase number of bins.')
 
-        if self.normalize:
-            self.target = Transform(self.target).quantize(bins=self.bins,
-                                                          axis=self.strategy,
-                                                          window_type=self.window_type,
-                                                          window_size=self.window_size)
-        else:
-            self.target = Transform(self.target).quantize(bins=self.bins,
-                                                          axis=self.strategy,
-                                                          window_type=self.window_type,
-                                                          window_size=self.window_size)
+        self.target = Transform(self.target).quantize(bins=self.bins,
+                                                      axis=self.strategy,
+                                                      window_type=self.window_type,
+                                                      window_size=self.window_size)
+
+        # drop NaN values and sort
+        self.target = self.target.dropna(how='all').sort_index()
 
         return self.target
 
     def rank_target(self):
         """
-        Ranks the target variable.
+        Ranks the target variable in ascending order.
         """
-        if self.normalize is not None:
-            self.target = Transform(self.target).rank(axis=self.strategy)
-        else:
-            self.target = Transform(self.target).rank(axis=self.strategy)
+        self.target = Transform(self.target).rank(axis=self.strategy,
+                                                  window_type=self.window_type,
+                                                  window_size=self.window_size)
+
+        # drop NaN values and sort
+        self.target = self.target.dropna(how='all').sort_index()
 
         return self.target
 
@@ -275,5 +285,8 @@ class Target:
         # rank
         if self.rank:
             self.rank_target()
+
+        # drop NaN values and sort
+        self.target = self.target.dropna(how='all').sort_index()
 
         return self.target
