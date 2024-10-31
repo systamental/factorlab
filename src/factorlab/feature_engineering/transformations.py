@@ -267,7 +267,18 @@ class Transform:
                     return pd.DataFrame(power_transform(data, method='box-cox', standardize=True, copy=True),
                                         index=data.index, columns=data.columns)
 
-                self.trans_df = self.trans_df.groupby(level=0, group_keys=False).apply(lambda x: bc_transformation(x))
+                # adjust for negative vals
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = self.trans_df - self.trans_df.groupby(level=0).min() + adjustment
+                else:
+                    self.trans_df = self.trans_df.subtract(self.trans_df.min(axis=1), axis=0) + adjustment
+
+                # box cox transformation
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = self.trans_df.groupby(level=0,
+                                                          group_keys=False).apply(lambda x: bc_transformation(x))
+                else:
+                    self.trans_df = bc_transformation(self.trans_df.T).T
 
         # yeo-johnson
         else:
@@ -365,7 +376,12 @@ class Transform:
                     return pd.DataFrame(power_transform(data, method='yeo-johnson', standardize=True, copy=True),
                                         index=data.index, columns=data.columns)
 
-                self.trans_df = self.trans_df.groupby(level=0, group_keys=False).apply(lambda x: yj_transformation(x))
+                # yeo johnson transformation
+                if isinstance(self.trans_df.index, pd.MultiIndex):
+                    self.trans_df = self.trans_df.groupby(level=0,
+                                                          group_keys=False).apply(lambda x: yj_transformation(x))
+                else:
+                    self.trans_df = yj_transformation(self.trans_df.T).T
 
         return self.trans_df
 
@@ -425,7 +441,7 @@ class Transform:
         # simple returns
         if method == 'simple':
             if isinstance(self.index, pd.MultiIndex):
-                self.trans_df = self.df.groupby(level=1).pct_change(lags, fill_method=None)
+                self.trans_df = self.df.groupby(level=1).pct_change(lags, fill_method=None).sort_index()
             else:
                 self.trans_df = self.df.pct_change(lags, fill_method=None)
 
@@ -434,14 +450,14 @@ class Transform:
             # remove negative values
             self.df[self.df <= 0] = np.nan
             if isinstance(self.index, pd.MultiIndex):
-                self.trans_df = np.log(self.df).groupby(level=1).diff(lags)
+                self.trans_df = np.log(self.df).groupby(level=1).diff(lags).sort_index()
             else:
                 self.trans_df = np.log(self.df).diff(lags)
 
         # forward returns
         if forward:
             if isinstance(self.index, pd.MultiIndex):
-                self.trans_df = self.trans_df.groupby(level=1).shift(lags * -1)
+                self.trans_df = self.trans_df.groupby(level=1).shift(lags * -1).sort_index()
             else:
                 self.trans_df = self.trans_df.shift(lags * -1)
 
@@ -449,14 +465,14 @@ class Transform:
         if market:
             if mkt_weighting is None:
                 if isinstance(self.index, pd.MultiIndex):
-                    self.trans_df = self.trans_df.groupby(level=0).mean()[mkt_field].to_frame('mkt_ret')
+                    self.trans_df = self.trans_df.groupby(level=0).mean()[mkt_field].to_frame('mkt_ret').sort_index()
                 else:
                     self.trans_df = self.trans_df[mkt_field].to_frame('mkt_ret')
             else:
                 # TODO: add other market computations
                 raise ValueError("Market weighting not supported yet.")
 
-        return self.trans_df.sort_index()
+        return self.trans_df
 
     @staticmethod
     def returns_to_price(returns: Union[pd.Series, pd.DataFrame],
@@ -1483,9 +1499,19 @@ class Transform:
                                         min_periods=min_periods)
 
             # normalize
-            if isinstance(self.df.index, pd.MultiIndex):  # multiindex
+            # atr
+            if method == 'atr':
+                if window_type == 'fixed':
+                    disp = disp.reindex(center.index.get_level_values('ticker')).set_index(center.index)
+                df = pd.concat([center, disp], axis=1)
+                df = df.div(df.atr.values, axis=0).drop(columns='atr')
+                self.trans_df = df
+
+            # multiindex
+            elif isinstance(self.df.index, pd.MultiIndex):
                 self.trans_df = center / disp
-            else:  # single index
+            # single index
+            else:
                 if axis == 'ts':
                     if window_type == 'fixed':
                         self.trans_df = center / disp.iloc[:, 0]
@@ -1683,14 +1709,14 @@ class Transform:
                         self.trans_df
                         .groupby(level=1)
                         .rolling(window=window_size, min_periods=min_periods)
-                        .rank(method='first')
+                        .rank()
                         .droplevel(0)
                     )
                 else:
                     self.trans_df = (
                         self.trans_df
                         .rolling(window=window_size, min_periods=min_periods)
-                        .rank(method='first')
+                        .rank()
                     )
 
             elif window_type == 'expanding':
@@ -1699,17 +1725,17 @@ class Transform:
                         self.trans_df
                         .groupby(level=1)
                         .expanding(min_periods=min_periods)
-                        .rank(method='first')
+                        .rank()
                         .droplevel(0)
                     )
                 else:
-                    self.trans_df = self.trans_df.expanding(min_periods=min_periods).rank(method='first')
+                    self.trans_df = self.trans_df.expanding(min_periods=min_periods).rank()
 
             else:
                 if isinstance(self.trans_df.index, pd.MultiIndex):
-                    self.trans_df = self.trans_df.groupby(level=1).rank(method='first')
+                    self.trans_df = self.trans_df.groupby(level=1).rank()
                 else:
-                    self.trans_df = self.trans_df.rank(method='first')
+                    self.trans_df = self.trans_df.rank()
 
         # axis cross-section
         else:
@@ -1729,7 +1755,7 @@ class Transform:
 
         Parameters
         ----------
-        transformation: str, {'norm',  'logistic', 'adj_norm', 'tanh', 'sign'}, default 'norm'
+        transformation: str, {'norm',  'logistic', 'adj_norm', 'tanh'}, default 'norm'
             norm: normal cumulative distribution function.
             logistic: logistic cumulative distribution function.
             adj_norm: adjusted normal distribution.
