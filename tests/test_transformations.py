@@ -11,9 +11,21 @@ def binance_spot():
     Fixture for crypto OHLCV prices.
     """
     # read csv from datasets/data
-    return pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv",
-                       index_col=['date', 'ticker'],
-                       parse_dates=True).loc[:, : 'close']
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv",
+                     index_col=['date', 'ticker'],
+                     parse_dates=['date']).loc[:, : 'close']
+
+    # drop tickers with nobs < ts_obs
+    obs = df.groupby(level=1).count().min(axis=1)
+    drop_tickers_list = obs[obs < 365].index.to_list()
+    df = df.drop(drop_tickers_list, level=1, axis=0)
+
+    # drop tickers with nobs < cs_obs
+    obs = df.groupby(level=0).count().min(axis=1)
+    idx_start = obs[obs > 3].index[0]
+    df = df.unstack()[df.unstack().index > idx_start].stack()
+
+    return df
 
 
 @pytest.fixture
@@ -22,16 +34,16 @@ def btc_spot_prices(binance_spot):
     Fixture for BTC OHLCV prices.
     """
     # read csv from datasets/data
-    return binance_spot.loc[pd.IndexSlice[:, 'BTC'], : 'close'].droplevel(1).dropna()
+    return binance_spot.loc[:, 'BTC', :]
 
 
 @pytest.fixture
-def btc_spot_close_price(binance_spot):
+def btc_spot_close_price(btc_spot_prices):
     """
     Fixture for BTC close price.
     """
     # read csv from datasets/data
-    return binance_spot.loc[pd.IndexSlice[:, 'BTC'], 'close'].droplevel(1)
+    return btc_spot_prices.close
 
 
 @pytest.fixture
@@ -411,8 +423,9 @@ class TestTransform:
         assert mkt.columns == ['mkt_ret']
 
     @pytest.mark.parametrize("ret_type, start_val",
-                             [('simple', 1), ('log', 1), ('simple', 100), ('log', 100), ('simple', 16616.75),
-                              ('log', 16616.75)]
+                             [
+                                 ('simple', 1), ('log', 1), ('simple', 100), ('log', 100)
+                             ]
                              )
     def test_returns_to_price(self, ret_type, start_val):
         """
@@ -433,8 +446,8 @@ class TestTransform:
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
         # values
         if start_val == 16616.75:
-            assert np.allclose(actual.unstack().close.BTC.iloc[1:],
-                           self.default_transform_instance.df.unstack().close.BTC.iloc[1:])
+            assert np.allclose(actual.unstack().close.BTC.iloc[:],
+                           self.default_transform_instance.df.unstack().close.BTC.iloc[:])
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
@@ -1464,19 +1477,23 @@ class TestTransform:
         assert (self.default_transform_instance.trans_df.columns == self.default_transform_instance.df.columns).all()
         assert (self.btc_transform_instance.trans_df.columns == self.btc_transform_instance.df.columns).all()
 
-    @pytest.mark.parametrize("transformation", ['norm',  'logistic', 'adj_norm', 'tanh'])
-    def test_to_signal(self, transformation) -> None:
+    @pytest.mark.parametrize("transformation", ['norm',  'logistic', 'adj_norm', 'tanh', 'min-max', 'percentile'])
+    def test_zscore_to_signal(self, transformation) -> None:
         """
         Test to_signal method.
         """
         # get actual and expected
         self.default_transform_instance.returns(lags=30)
-        self.default_transform_instance.normalize()
         self.btc_transform_instance.returns(lags=30)
-        self.btc_transform_instance.normalize()
+        if transformation in ['min-max', 'percentile']:
+            self.default_transform_instance.normalize(method=transformation)
+            self.btc_transform_instance.normalize(method=transformation)
+        else:
+            self.default_transform_instance.normalize()
+            self.btc_transform_instance.normalize()
 
-        self.default_transform_instance.to_signal(transformation=transformation)
-        self.btc_transform_instance.to_signal(transformation=transformation)
+        self.default_transform_instance.scores_to_signals(transformation=transformation)
+        self.btc_transform_instance.scores_to_signals(transformation=transformation)
 
         # shape
         assert self.default_transform_instance.trans_df.shape == self.default_transform_instance.df.shape
@@ -1496,4 +1513,78 @@ class TestTransform:
         assert (self.btc_transform_instance.trans_df.index == self.btc_transform_instance.df.index).all()
         # cols
         assert (self.default_transform_instance.trans_df.columns == self.default_transform_instance.df.columns).all()
+        assert (self.btc_transform_instance.trans_df.columns == self.btc_transform_instance.df.columns).all()
+
+    @pytest.mark.parametrize("axis, bins",
+                            [
+                                 ('ts', 4),
+                                 ('cs', 4),
+                                 ('ts', 5),
+                                 ('cs', 5),
+                                 ('ts', 10),
+                                 ('cs', 10),
+                                 ('ts', None),
+                                 ('cs', None)
+                                 ]
+                             )
+    def test_quantiles_to_signals(self, axis, bins) -> None:
+        """
+        Test quantiles_to_signals method.
+        """
+        # get actual and expected
+        self.default_transform_instance.returns(lags=30)
+
+        # multiindex
+        if bins is not None:
+            self.default_transform_instance.quantize(axis=axis, bins=bins, window_type='fixed')
+            self.default_transform_instance.quantiles_to_signals(axis=axis, bins=bins)
+        else:
+            self.default_transform_instance.quantize(axis=axis, window_type='fixed')
+            self.default_transform_instance.quantiles_to_signals(axis=axis)
+
+        # shape
+        if axis == 'ts':
+            assert self.default_transform_instance.trans_df.shape == self.default_transform_instance.df.shape
+        # values
+        assert ((self.default_transform_instance.trans_df.dropna().abs() >= 0) &
+                (self.default_transform_instance.trans_df.dropna().abs() <= 1)).all().all()
+        if bins is not None:
+            assert (self.default_transform_instance.trans_df.nunique() == bins).all()
+        # dtypes
+        assert isinstance(self.default_transform_instance.trans_df, pd.DataFrame)
+        assert (self.default_transform_instance.trans_df.dtypes == np.float64).all()
+        # index
+        if axis == 'ts':
+            assert (self.default_transform_instance.trans_df.index == self.default_transform_instance.index).all()
+        # cols
+        assert (self.default_transform_instance.trans_df.columns == self.default_transform_instance.df.columns).all()
+
+        # single index
+        self.btc_transform_instance.returns(lags=30)
+
+        if axis == 'ts':
+            if bins is not None:
+                self.btc_transform_instance.quantize(axis=axis, bins=bins, window_type='fixed')
+                self.btc_transform_instance.quantiles_to_signals(axis=axis, bins=bins)
+            else:
+                self.btc_transform_instance.quantize(axis=axis, window_type='fixed')
+                self.btc_transform_instance.quantiles_to_signals(axis=axis)
+        elif axis == 'cs' and bins in [None, 4]:
+            if bins is not None:
+                self.btc_transform_instance.quantize(axis=axis, bins=bins, window_type='fixed')
+                self.btc_transform_instance.quantiles_to_signals(axis=axis, bins=bins)
+
+        # shape
+        assert self.btc_transform_instance.trans_df.shape == self.btc_transform_instance.df.shape
+        # values
+        assert ((self.btc_transform_instance.trans_df.dropna().abs() >= 0) &
+                (self.btc_transform_instance.trans_df.dropna().abs() <= 1)).all().all()
+        if axis == 'ts' and bins is not None:
+            assert (self.btc_transform_instance.trans_df.nunique() == bins).all()
+        # dtypes
+        assert isinstance(self.btc_transform_instance.trans_df, pd.DataFrame)
+        assert (self.btc_transform_instance.trans_df.dtypes == np.float64).all()
+        # index
+        assert (self.btc_transform_instance.trans_df.index == self.btc_transform_instance.df.index).all()
+        # cols
         assert (self.btc_transform_instance.trans_df.columns == self.btc_transform_instance.df.columns).all()

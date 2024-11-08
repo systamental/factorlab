@@ -1676,6 +1676,7 @@ class Transform:
 
     def rank(self,
              axis: str = 'ts',
+             percentile: bool = False,
              window_type: str = 'expanding',
              window_size: int = 30,
              min_periods: int = 2
@@ -1687,6 +1688,8 @@ class Transform:
         ----------
         axis: str, {'ts', 'cs'}, default 'ts'
             Axis along which to compute dispersion, time series or cross-section.
+        percentile: bool, default False
+            If True, computes percentile rank.
         window_type: str, {'fixed', 'expanding', 'rolling'}, default 'expanding'
             Provide a window type. If None, all observations are used in the calculation.
         window_size: int, default 30
@@ -1709,14 +1712,14 @@ class Transform:
                         self.trans_df
                         .groupby(level=1)
                         .rolling(window=window_size, min_periods=min_periods)
-                        .rank()
+                        .rank(pct=percentile)
                         .droplevel(0)
                     )
                 else:
                     self.trans_df = (
                         self.trans_df
                         .rolling(window=window_size, min_periods=min_periods)
-                        .rank()
+                        .rank(pct=percentile)
                     )
 
             elif window_type == 'expanding':
@@ -1725,42 +1728,43 @@ class Transform:
                         self.trans_df
                         .groupby(level=1)
                         .expanding(min_periods=min_periods)
-                        .rank()
+                        .rank(pct=percentile)
                         .droplevel(0)
                     )
                 else:
-                    self.trans_df = self.trans_df.expanding(min_periods=min_periods).rank()
+                    self.trans_df = self.trans_df.expanding(min_periods=min_periods).rank(pct=percentile)
 
             else:
                 if isinstance(self.trans_df.index, pd.MultiIndex):
-                    self.trans_df = self.trans_df.groupby(level=1).rank()
+                    self.trans_df = self.trans_df.groupby(level=1).rank(pct=percentile)
                 else:
-                    self.trans_df = self.trans_df.rank()
+                    self.trans_df = self.trans_df.rank(pct=percentile)
 
         # axis cross-section
         else:
             if isinstance(self.trans_df.index, pd.MultiIndex):
-                self.trans_df = self.trans_df.groupby(level=0).rank()
+                self.trans_df = self.trans_df.groupby(level=0).rank(pct=percentile)
             else:
-                self.trans_df = self.trans_df.rank(axis=1)
+                self.trans_df = self.trans_df.rank(axis=1, pct=percentile)
 
         # sort index
         self.trans_df = self.trans_df.sort_index()
 
         return self.trans_df
 
-    def to_signal(self, transformation: str = 'norm'):
+    def scores_to_signals(self, transformation: str = 'norm'):
         """
         Converts standardized/normalized values to signals within a fixed range of [-1, 1].
 
         Parameters
         ----------
-        transformation: str, {'norm',  'logistic', 'adj_norm', 'tanh'}, default 'norm'
+        transformation: str, {'norm',  'logistic', 'adj_norm', 'tanh', 'percentile', 'min-max'}, default 'norm'
             norm: normal cumulative distribution function.
             logistic: logistic cumulative distribution function.
             adj_norm: adjusted normal distribution.
             tanh: hyperbolic tangent.
-            sign: sign function.
+            percentile: percentile rank.
+            min-max: rescales to values between 0 and 1 by subtracting the min and dividing by the range of values.
 
         Returns
         -------
@@ -1788,7 +1792,99 @@ class Transform:
             self.trans_df = self.trans_df * np.exp((-1 * self.trans_df ** 2) / 4) / 0.89
 
         # convert to signals
-        if transformation in ['norm', 'logistic']:
+        if transformation in ['norm', 'logistic', 'percentile', 'min-max']:
             self.trans_df = (self.trans_df * 2) - 1
+
+        return self.trans_df
+
+    def quantiles_to_signals(self, axis: str = 'ts', bins: Optional[int] = None) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Converts quantiles/bins to signals within a fixed range of [-1, 1].
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute dispersion, time series or cross-section.
+        bins: int, default None
+            Number of bins to use for quantization. If None, bins are inferred from the number of unique values.
+
+        Returns
+        -------
+        signals: pd.Series or pd.DataFrame
+            Series or DataFrame with signals.
+        """
+        # number of bins
+        if bins is None:
+            bins = self.trans_df.nunique().median()
+
+        # axis time series
+        if axis == 'ts':
+            if isinstance(self.trans_df.index, pd.MultiIndex):
+                ts_min = self.trans_df.groupby(level=1).min()
+                ts_range = self.trans_df.groupby(level=1).max() - self.trans_df.groupby(level=1).min()
+            else:
+                ts_min = self.trans_df.min()
+                ts_range = self.trans_df.max() - self.trans_df.min()
+
+            self.trans_df = ((self.trans_df - ts_min) / ts_range) * 2 - 1
+
+        # axis cross-section
+        else:
+            if isinstance(self.index, pd.MultiIndex):
+                # min number of observations in the cross-section
+                self.trans_df = self.trans_df[(self.trans_df.groupby(level=0).count() >= bins)].dropna()
+                if self.trans_df.empty:
+                    raise ValueError("Number of bins is larger than the number of observations in the cross-section.")
+                cs_min = self.trans_df.groupby(level=0).min()
+                cs_range = self.trans_df.groupby(level=0).max() - self.trans_df.groupby(level=0).min()
+
+                self.trans_df = (self.trans_df - cs_min) / cs_range * 2 - 1
+            else:
+                if self.df.shape[1] < bins:
+                    raise ValueError("Number of bins is larger than the number of observations in the cross-section.")
+                cs_min = self.trans_df.min(axis=1)
+                cs_range = self.trans_df.max(axis=1) - self.trans_df.min(axis=1)
+
+                self.trans_df = self.trans_df.subtract(cs_min, axis=0).div(cs_range, axis=0) * 2 - 1
+
+        return self.trans_df
+
+    def ranks_to_signals(self, axis: str = 'ts') -> Union[pd.Series, pd.DataFrame]:
+        """
+        Converts ranks to signals within a fixed range of [-1, 1].
+
+        Parameters
+        ----------
+        axis: str, {'ts', 'cs'}, default 'ts'
+            Axis along which to compute signals, time series or cross-section.
+
+        Returns
+        -------
+        signals: pd.Series or pd.DataFrame
+            Series or DataFrame with signals.
+        """
+        # axis time series
+        if axis == 'ts':
+            if isinstance(self.trans_df.index, pd.MultiIndex):
+                ts_min = self.trans_df.groupby(level=1).min()
+                ts_range = self.trans_df.groupby(level=1).max() - self.trans_df.groupby(level=1).min()
+            else:
+                ts_min = self.trans_df.min()
+                ts_range = self.trans_df.max() - self.trans_df.min()
+
+            self.trans_df = ((self.trans_df - ts_min) / ts_range) * 2 - 1
+
+        # axis cross-section
+        else:
+            if isinstance(self.index, pd.MultiIndex):
+                cs_min = self.trans_df.groupby(level=0).min()
+                cs_range = self.trans_df.groupby(level=0).max() - self.trans_df.groupby(level=0).min()
+
+                self.trans_df = (self.trans_df - cs_min) / cs_range * 2 - 1
+            else:
+                cs_min = self.trans_df.min(axis=1)
+                cs_range = self.trans_df.max(axis=1) - self.trans_df.min(axis=1)
+
+                self.trans_df = self.trans_df.subtract(cs_min, axis=0).div(cs_range, axis=0) * 2 - 1
 
         return self.trans_df
