@@ -19,8 +19,8 @@ class Trend:
                  log: bool = True,
                  normalize: bool = True,
                  central_tendency: str = 'mean',
-                 disp_method: str = 'std',
-                 window_size: int = 20,
+                 norm_method: str = 'std',
+                 window_size: int = 30,
                  short_window_size: int = None,
                  long_window_size: int = None,
                  window_type: str = 'rolling',
@@ -40,11 +40,11 @@ class Trend:
         log: bool, default False
             Converts to log price.
         normalize: bool, default True
-            Normalize trend factor.
+            Normalize signal.
         central_tendency: str, {'mean', 'median'}, default 'mean'
             Measure of central tendency used for the smoothing rolling window.
-        disp_method: str, {'std', 'iqr', 'mad', 'atr'}, default 'std'
-            Method for computing dispersion.
+        norm_method: str, {'std', 'iqr', 'mad', 'atr', 'range'}, default 'std'
+            Normalization method.
         window_size: int, default 20
             Number of observations in moving window.
         short_window_size: int, default None
@@ -58,12 +58,12 @@ class Trend:
         lags: int, default 0
             Number of periods to lag values by.
         """
-        self.df = df.to_frame().copy() if isinstance(df, pd.Series) else df.copy()
+        self.df = df
         self.vwap = vwap
         self.log = log
         self.normalize = normalize
         self.central_tendency = central_tendency
-        self.disp_method = disp_method
+        self.norm_method = norm_method
         self.price = self.compute_price()
         self.window_size = window_size
         self.short_window_size = short_window_size
@@ -85,7 +85,10 @@ class Trend:
             DataFrame with DatetimeIndex and price (cols).
         """
         # convert dtype to float
-        self.df = self.df.astype(float)
+        if isinstance(self.df, pd.Series):
+            self.df = self.df.to_frame().astype(float)
+        else:
+            self.df = self.df.astype(float)
 
         # compute price
         if self.vwap:
@@ -107,20 +110,20 @@ class Trend:
             DataFrame with DatetimeIndex and dispersion values (cols).
         """
         # check method
-        if self.disp_method not in ['std', 'iqr', 'mad', 'atr']:
+        if self.norm_method not in ['std', 'iqr', 'mad', 'atr']:
             raise ValueError('Invalid dispersion method. Method must be: std, iqr, range, atr, mad.')
 
         # compute dispersion
-        if self.disp_method == 'atr':
+        if self.norm_method == 'atr':
             # compute atr
-            self.disp = Transform(self.df).dispersion(method=self.disp_method,
+            self.disp = Transform(self.df).dispersion(method=self.norm_method,
                                                       window_type=self.window_type,
                                                       window_size=self.window_size)
         else:
             # price chg
             chg = Transform(self.price).diff()
             # dispersion
-            self.disp = Transform(chg).dispersion(method=self.disp_method,
+            self.disp = Transform(chg).dispersion(method=self.norm_method,
                                                   window_type=self.window_type,
                                                   window_size=self.window_size)
 
@@ -144,45 +147,18 @@ class Trend:
         if method not in ['min-max', 'percentile', 'norm', 'logistic', 'adj_norm']:
             raise ValueError('Invalid method. Method must be: min-max, percentile, norm, logistic or adj_norm.')
 
-        # uniform distribution
-        if method == 'min-max':
-            self.trend = Transform(self.price).normalize(method='min-max',
-                                                         window_type='rolling',
-                                                         window_size=self.window_size)
-
-        # percentile rank
-        elif method == 'percentile':
-            self.trend = Transform(self.price).normalize(method='percentile',
-                                                         window_type='rolling',
-                                                         window_size=self.window_size)
-
-        # normal distribution
-        elif method == 'norm':
-            self.trend = Transform(self.price).normalize(method='z-score',
-                                                         window_type=self.window_type,
-                                                         window_size=self.window_size)
-            # convert to cdf
-            self.trend = pd.DataFrame(norm.cdf(self.trend), index=self.trend.index, columns=self.trend.columns)
-
-        # logistic
-        elif method == 'logistic':
-            self.trend = Transform(self.price).normalize(method='z-score',
-                                                         window_type=self.window_type,
-                                                         window_size=self.window_size)
-            # convert to cdf
-            self.trend = pd.DataFrame(logistic.cdf(self.trend), index=self.trend.index, columns=self.trend.columns)
-
-        # adjusted normal distribution
+        # normalize
+        if method in ['min-max', 'percentile']:
+            self.trend = Transform(self.price).normalize(method=method,
+                                                        window_type='rolling',
+                                                        window_size=self.window_size)
         else:
-            self.trend = Transform(self.price).normalize(method='adj_norm',
-                                                         window_type=self.window_type,
-                                                         window_size=self.window_size)
+            self.trend = Transform(self.price).normalize(method='z-score',
+                                                        window_type=self.window_type,
+                                                        window_size=self.window_size)
 
         # convert to signal
-        if method == 'adj_norm':
-            self.trend = self.trend * np.exp((-1 * self.trend ** 2) / 4) / 0.89
-        else:
-            self.trend = (self.trend * 2) - 1
+        self.trend = Transform(self.trend).scores_to_signals(transformation=method)
 
         # name
         if self.trend.shape[1] == 1:
@@ -205,7 +181,7 @@ class Trend:
         # compute price returns
         self.trend = Transform(self.price).diff(lags=self.window_size)
 
-        # normalize
+        # scale
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp, axis=0)
@@ -231,7 +207,7 @@ class Trend:
         # chg
         chg = Transform(self.price).diff()
 
-        # normalize
+        # scale
         if self.normalize:
             self.compute_dispersion()
             chg = chg.div(self.disp, axis=0)
@@ -303,7 +279,7 @@ class Trend:
         # time trend
         self.trend = coeff[['trend']]
 
-        # normalize
+        # scale
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
@@ -345,7 +321,7 @@ class Trend:
         # price acceleration
         self.trend = coeff[['trend_squared']]
 
-        # normalize
+        # scale
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
@@ -393,7 +369,7 @@ class Trend:
         # alpha
         self.trend = alpha[['const']]
 
-        # normalize
+        # scale
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
@@ -565,7 +541,8 @@ class Trend:
                                                  window_fcn=self.window_fcn)
 
         # name
-        self.trend = self.trend.to_frame(f"{inspect.currentframe().f_code.co_name}_{self.window_size}")
+        if self.trend.shape[1] == 1:
+            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
 
         # sort index
         self.trend = self.trend.sort_index()
@@ -597,7 +574,7 @@ class Trend:
                                          window_fcn=self.window_fcn,
                                          lags=self.short_window_size)
 
-        # normalize
+        # scale
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp, axis=0)
@@ -660,12 +637,12 @@ class Trend:
             factor_df[f"x_k{i}"] = (self.price.unstack().ewm(halflife=hl_s[i]).mean() -
                                     self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack(future_stack=True)
 
-        # normalize by std of price
+        # scale by std of price
         for i in range(0, len(s_k)):
             factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
                                     self.price.unstack().rolling(90).std()).stack(future_stack=True)
 
-        # normalize by normalized y_k diff
+        # scale by normalized y_k diff
         for i in range(0, len(s_k)):
             factor_df[f"z_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
                                     factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack(future_stack=True)
@@ -848,6 +825,23 @@ class Trend:
             self.trend = adx
 
         return self.trend
+
+    def term_structure(self, window_intervals: tuple = (2, 5, 1)) -> pd.DataFrame:
+        """
+        Computes the term structure of the price series.
+
+        Parameters
+        ----------
+        window_intervals: tuple, default (2, 5, 1)
+            Tuple with start, stop and step interval for term structure calculation.
+
+        Returns
+        -------
+        term_structure: pd.DataFrame
+            DataFrame with DatetimeIndex and term structure values (cols).
+        """
+        pass
+        # TODO: implement term structure calculation
 
 
 # TODO: add hurst exponent, fractal dimension, detrended fluctuation analysis, wavelet transform, etc.

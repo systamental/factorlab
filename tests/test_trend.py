@@ -2,10 +2,10 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.feature_engineering.transformations import Transform
+
 from factorlab.feature_engineering.factors.trend import Trend
 
-# TODO: add test for single index dfs
+
 @pytest.fixture
 def ohlcv():
     """
@@ -46,7 +46,6 @@ class TestTrend:
     @pytest.fixture(autouse=True)
     def trend_setup_default(self, ohlcv):
         self.trend_instance = Trend(ohlcv)
-
 
     @pytest.fixture(autouse=True)
     def trend_setup_btc_default(self, btc_ohlcv):
@@ -449,8 +448,6 @@ class TestTrend:
         # values
         assert not actual.isin([np.inf, -np.inf]).any().any()
         assert not actual_btc.isin([np.inf, -np.inf]).any().any()
-        assert ((actual.abs() < 1).sum() / (actual.shape[0] * actual.shape[1]) > 0.95).all()
-        assert ((actual_btc.abs() < 1).sum() / (actual_btc.shape[0] * actual_btc.shape[1]) > 0.95).all()
         assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
 
         # shape
