@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Union, Any
+from abc import ABC, abstractmethod
+
 from sklearn.linear_model import LinearRegression, Lasso, LassoCV, LassoLars, LassoLarsCV, LassoLarsIC, Lars, LarsCV, \
     Ridge, RidgeCV, ElasticNet, ElasticNetCV
 from sklearn.ensemble import RandomForestRegressor
@@ -10,12 +12,67 @@ from factorlab.signal_generation.unsupervised_learning import PCAWrapper
 from factorlab.signal_generation.time_series_analysis import add_lags
 
 
-class LinearModel:
+class SuperviseLearning(ABC):
     """
-    Linear model class.
+    Abstract class for supervised learning.
+    """
+    def __init__(self,
+                 target: Union[np.array, pd.Series, pd.DataFrame],
+                 features: Union[np.array, pd.DataFrame],
+                 method: str,
+                 target_lookahead: int = 1,
+                 feature_lags: int = 6
+                 ):
+        """
+        Initialize SupervisedLearning object.
 
-    Wrapper for scikit-learn Linear regression methods where the target value is expected to be a
-    linear combination of the features.
+        Parameters
+        ----------
+        target: pd.Series, pd.DataFrame or np.ndarray
+            Factor to select features for.
+        features: pd.DataFrame or np.ndarray
+            Features to select from. If None, target is used as the only feature.
+        method: str
+            Supervised learning model method to use.
+        target_lookahead: int, default 1
+            Number of look-ahead periods for target variable.
+        feature_lags: int, default 4
+            Number of lags to include for features.
+        """
+        self.target = target
+        self.features = features
+        self.method = method
+        self.target_lookahead = target_lookahead
+        self.feature_lags = feature_lags
+
+    @abstractmethod
+    def preprocess_data(self):
+        """
+        Pre-process data into a format suitable for supervised learning using scikit-learn.
+        """
+        # to be implemented by subclasses
+
+    @abstractmethod
+    def fit(self) -> pd.DataFrame:
+        """
+        Fit data.
+        """
+        # to be implemented by subclasses
+
+    @abstractmethod
+    def predict(self) -> pd.DataFrame:
+        """
+        Predict target.
+        """
+        # to be implemented by subclasses
+
+
+class Regression(SuperviseLearning):
+    """
+    Regression model class.
+
+    Wrapper for scikit-learn regression methods where the target value is expected to be a
+    continuous variable (returns).
 
     See https://scikit-learn.org/stable/modules/classes.html#module-sklearn.linear_model for details.
 
@@ -40,11 +97,9 @@ class LinearModel:
                  target: Union[np.array, pd.Series, pd.DataFrame],
                  features: Union[np.array, pd.DataFrame],
                  method: str,
-                 oos: bool = False,
-                 t_lags: int = 6,
-                 h_lookahead: int = 1,
-                 **kwargs: Any
-                 ):
+                 target_lookahead: int = 1,
+                 feature_lags: int = 6,
+                 **kwargs: Any):
         """
         Initialize LinearRegression object.
 
@@ -57,21 +112,18 @@ class LinearModel:
         method: str, {'ols', 'lasso', 'lasso_cv', 'lasso_lars', 'lasso_lars_cv', 'lasso_lars_ic', 'lars', 'lars_cv',
                         'ridge', 'ridge_cv', 'elastic_net', 'elastic_net_cv', 'random_forest', 'xgboost'}
             Linear model method to use.
-        oos: bool, default False
-            Out-of-sample prediction. If True, uses previous period coefficients to predict next period target.
-            Otherwise, uses in-sample coefficients.
-        t_lags: int, default 4
+        target_lookahead: int, default 1
+            Number of look-ahead periods for target variable.
+        feature_lags: int, default 4
             Number of lags to include for features.
-        h_lookahead: int, default 1
-            Number of look-ahead periods for target forecast.
         **kwargs: Optional keyword arguments, for model object. See sklearn.linear_model for details.
         """
+        super().__init__(target, features, method, target_lookahead, feature_lags)
         self.target = target
         self.features = features
         self.method = method
-        self.oos = oos
-        self.t_lags = t_lags
-        self.h_lookahead = h_lookahead
+        self.target_lookahead = target_lookahead
+        self.feature_lags = feature_lags
         self.target_lags = None
         self.feature_lags = None
         self.predictors = None
@@ -99,16 +151,12 @@ class LinearModel:
         if not isinstance(self.target, (pd.Series,  np.ndarray)):
             raise TypeError("Target must be a pandas Series or np.array.")
         elif isinstance(self.target, pd.Series) and (isinstance(self.features, pd.DataFrame) or self.features is None):
-            if self.features is None:
-                self.feature_lags = None
-            else:
-                # self.feature_lags = self.add_lags(self.features).copy()  # features + L lags
-                self.feature_lags = add_lags(self.features, n_lags=self.t_lags).copy()  # features + L lags
-            # self.target_lags = self.add_lags(self.target).copy()  # target + L lags
-            self.target_lags = add_lags(self.target, n_lags=self.t_lags).copy()  # target + L lags
+            if self.features is not None:
+                self.feature_lags = add_lags(self.features, n_lags=self.feature_lags).copy()  # features + L lags
+            self.target_lags = add_lags(self.target, n_lags=self.feature_lags).copy()  # target + L lags
             self.features = pd.concat([self.target_lags, self.feature_lags], axis=1).dropna().copy()  # features
-            self.target_fcst = self.target.shift(-self.h_lookahead).\
-                rename(f"{self.target.name}_F{self.h_lookahead}").copy()  # target forecast
+            self.target_fcst = self.target.shift(-self.target_lookahead).\
+                rename(f"{self.target.name}_F{self.target_lookahead}").copy()  # target forecast
             self.data = pd.concat([self.target_fcst, self.features], axis=1).dropna().copy()
             self.target_fcst = self.data.iloc[:, 0]
             self.predictors = self.data.iloc[:, 1:]
@@ -128,6 +176,8 @@ class LinearModel:
         Fit data.
 
         """
+        #TODO: review and refactor
+
         # out of sample oos
         if self.oos:
             self.predictors = self.predictors.iloc[:-1]
@@ -493,7 +543,7 @@ class SPCA:
             Selected features.
         """
         # model
-        lm = LinearModel(self.target, self.features_window, method=self.method, oos=self.oos, t_lags=self.t_lags,
+        lm = Regression(self.target, self.features_window, method=self.method, oos=self.oos, t_lags=self.t_lags,
                          h_lookahead=self.h_lookahead, **self.kwargs)
 
         # drop feature lags for feature selection step
@@ -558,7 +608,7 @@ class SPCA:
         self.pcs = self.get_pcs()
 
         # linear model
-        self.model = LinearModel(self.target, self.pcs, method=method, oos=self.oos, t_lags=self.t_lags,
+        self.model = Regression(self.target, self.pcs, method=method, oos=self.oos, t_lags=self.t_lags,
                          h_lookahead=self.h_lookahead, **kwargs)
         # predict
         self.yhat = self.model.predict()
@@ -751,3 +801,191 @@ class SPCA:
         self.yhat = yhat_df
 
         return self.yhat
+
+
+class Classification(SuperviseLearning):
+    """
+    Classification model class.
+
+    Wrapper for scikit-learn classification methods where the target value is expected to be a binary or multi-class
+    classification (up/down, buy/sell/hold, etc.).
+
+    See https://scikit-learn.org/stable/modules/classes.html#module-sklearn.linear_model for details.
+
+    """
+    def __init__(self,
+                 target: Union[np.array, pd.Series, pd.DataFrame],
+                 features: Union[np.array, pd.DataFrame],
+                 method: str, target_lookahead: int = 1,
+                 feature_lags: int = 6,
+                 **kwargs: Any):
+        """
+        Initialize Classification object.
+
+        Parameters
+        ----------
+        target
+        features
+        method
+        target_lookahead
+        feature_lags
+        kwargs
+        """
+        super().__init__(target, features, method, target_lookahead, feature_lags)
+        self.target = target
+        self.features = features
+        self.method = method
+        self.target_lookahead = target_lookahead
+        self.feature_lags = feature_lags
+        self.target_lags = None
+        self.feature_lags = None
+        self.predictors = None
+        self.target_fcst = None
+        self.features_window = None
+        self.model = None
+        self.yhat = None
+        self.yhat_name = None
+        self.score = None
+        self.selected_features = None
+        self.feature_importance = None
+        self.data = self.preprocess_data()
+        self.index = self.features.index
+        self.kwargs = kwargs
+
+    def preprocess_data(self) -> Union[pd.DataFrame, np.array]:
+        """
+        Pre-process data into a format suitable for supervised learning using scikit-learn.
+
+        Returns
+        -------
+        data: pd.DataFrame or np.ndarray
+            Data matrix.
+        """
+        # if not isinstance(self.target, (pd.Series,  np.ndarray)):
+        #     raise TypeError("Target must be a pandas Series or np.array.")
+        # elif isinstance(self.target, pd.Series) and (isinstance(self.features, pd.DataFrame) or self.features is None):
+        #     if self.features is not None:
+        #         self.feature_lags = add_lags(self.features, n_lags=self.feature_lags).copy()
+        #
+
+    def fit(self) -> None:
+        """
+        Fit data.
+
+        """
+        pass
+
+    def predict(self) -> None:
+        """
+        Predict target.
+
+        """
+        pass
+
+
+class Forecast(SuperviseLearning):
+    """
+    Forecast model class.
+
+    Wrapper for scikit-learn regression methods where the target value is expected to be a continuous variable (returns).
+
+    See https://scikit-learn.org/stable/modules/classes.html#module-sklearn.linear_model for details.
+
+    See Also
+    --------
+    sklearn.linear_model.LinearRegression
+    sklearn.linear_model.Lasso
+    sklearn.linear_model.LassoCV
+    sklearn.linear_model.LassoLars
+    sklearn.linear_model.LassoLarsCV
+    sklearn.linear_model.LassoLarsIC
+    sklearn.linear_model.Lars
+    sklearn.linear_model.LarsCV
+    sklearn.linear_model.Ridge
+    sklearn.linear_model.RidgeCV
+    sklearn.linear_model.ElasticNet
+    sklearn.linear_model.ElasticNetCV
+    sklearn.ensemble.RandomForestRegressor
+    xgboost.XGBRegressor
+    """
+    def __init__(self,
+                 target: Union[np.array, pd.Series, pd.DataFrame],
+                 features: Union[np.array, pd.DataFrame],
+                 method: str,
+                 target_lookahead: int = 1,
+                 feature_lags: int = 6,
+                 **kwargs: Any):
+        """
+        Initialize Forecast object.
+
+        Parameters
+        ----------
+        target
+        features
+        method
+        target_lookahead
+        feature_lags
+        kwargs
+        """
+        super().__init__(target, features, method, target_lookahead, feature_lags)
+        self.target = target
+        self.features = features
+        self.method = method
+        self.target_lookahead = target_lookahead
+        self.feature_lags = feature_lags
+        self.target_lags = None
+        self.feature_lags = None
+        self.predictors = None
+        self.target_fcst = None
+        self.features_window = None
+        self.model = None
+        self.yhat = None
+        self.yhat_name = None
+        self.score = None
+        self.selected_features = None
+        self.feature_importance = None
+        self.data = self.preprocess_data()
+        self.index = self.features.index
+        self.kwargs = kwargs
+
+    def preprocess_data(self) -> Union[pd.DataFrame, np.array]:
+        """
+        Pre-process data into a format suitable for supervised learning using scikit-learn.
+
+        Returns
+        -------
+        data: pd.DataFrame or np.ndarray
+            Data matrix.
+        """
+        pass
+
+    def fit(self) -> None:
+        """
+        Fit data.
+
+        """
+        pass
+
+    def predict(self) -> None:
+        """
+        Predict target.
+
+        """
+        pass
+
+    def compute_score(self, metric: str = 'mse') -> float:
+        """
+        Model score.
+
+        Parameters
+        ----------
+        metric: str, {'mse', 'rmse', 'mae', 'r2', 'adj_r2', 'chg_accuracy'}, default='mse'
+            Score metric.
+
+        Returns
+        -------
+        score: float
+            Model score.
+        """
+        pass
+
