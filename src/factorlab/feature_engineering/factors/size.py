@@ -43,6 +43,7 @@ class Size:
         """
         if not isinstance(self.df.index, pd.MultiIndex):
             self.df = self.df.stack()
+            self.df.columns = [self.size_metric]
 
         return self.df
 
