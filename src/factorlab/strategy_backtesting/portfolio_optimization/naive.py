@@ -6,6 +6,8 @@ from factorlab.strategy_backtesting.portfolio_optimization.return_estimators imp
 from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
 from factorlab.data_viz.plot import plot_bar
 
+# TODO: add signal-based weights
+
 
 class NaiveOptimization:
     """
@@ -28,7 +30,7 @@ class NaiveOptimization:
         Parameters
         ----------
         returns: pd.DataFrame or pd.Series
-            The returns of the assets or strategies. If not provided, the returns are computed from the prices.
+            The returns of the assets or strategies.
         method: str, {'equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random'},
         default 'equal_weight'
             Optimization method to compute weights.
