@@ -129,7 +129,7 @@ class Trend:
 
         return self.disp
 
-    def breakout(self, method: str = 'min-max') -> pd.DataFrame:
+    def breakout(self, method: str = 'min-max', signal: bool = True) -> pd.DataFrame:
         """
          Computes the breakout trend factor.
 
@@ -137,6 +137,8 @@ class Trend:
         ----------
         method: str, {'min-max', 'percentile', 'norm'}, default 'min-max'
             Method to use to normalize price series between 0 and 1.
+        signal: bool, default True
+            Converts breakout to a signal between -1 and 1.
 
          Returns
          -------
@@ -158,7 +160,8 @@ class Trend:
                                                         window_size=self.window_size)
 
         # convert to signal
-        self.trend = Transform(self.trend).scores_to_signals(transformation=method)
+        if signal:
+            self.trend = Transform(self.trend).scores_to_signals(transformation=method)
 
         # name
         if self.trend.shape[1] == 1:
@@ -454,6 +457,7 @@ class Trend:
             Stochastic to return.
         signal: bool, default True
             Converts stochastic to a signal between -1 and 1.
+            Typically, stochastic is normalized to between 0 and 100.
 
         Returns
         -------
@@ -592,7 +596,7 @@ class Trend:
     def ewma_diff(self,
                   s_k: list = [2, 4, 8],
                   l_k: list = [6, 12, 24],
-                  signal: bool = False
+                  signal: bool = True
                   ) -> pd.DataFrame:
         """
         Computes the exponentially weighted moving average (EWMA) crossover trend factor.
