@@ -517,8 +517,8 @@ class TestTrend:
         Test intensity method.
         """
         # get actual
-        actual = self.trend_instance.ewma_diff(signal=True)
-        actual_btc = self.btc_trend_instance.ewma_diff(signal=True)
+        actual = self.trend_instance.triple_ewma_diff(signal=True)
+        actual_btc = self.btc_trend_instance.triple_ewma_diff(signal=True)
 
         # values
         assert not actual.isin([np.inf, -np.inf]).any().any()
@@ -538,8 +538,10 @@ class TestTrend:
         assert all(actual_btc.dtypes == np.float64)
 
         # cols
-        assert actual.columns[0].split('_')[0] == 'ewma'
-        assert actual.columns[0].split('_')[1] == 'diff'
+        assert actual.columns[0].split('_')[0] == 'triple'
+        assert actual.columns[0].split('_')[1] == 'ewma'
+        assert actual.columns[0].split('_')[2] == 'diff'
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
     def test_energy(self) -> None:
         """
