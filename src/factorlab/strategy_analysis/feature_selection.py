@@ -71,6 +71,7 @@ class FeatureSelection:
         self.target_bins = target_bins
         self.window_type = window_type
         self.window_size = window_size
+
         self.lagged_target = None
         self.data = None
         self.index = None
