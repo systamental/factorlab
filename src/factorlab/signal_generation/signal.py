@@ -612,7 +612,7 @@ class Signal:
                                ts_norm: bool = False,
                                winsorize: int = 3,
                                leverage: Optional[int] = None,
-                               lags: Optional[int] = None
+                               lags:  int = 1
                                ):
         """
         Compute the signal returns.
@@ -644,7 +644,7 @@ class Signal:
             Max/min value to use for winsorization/clipping for signals when method is z-score, iqr or mod z.
         leverage: int, default None
             Multiplies signals by leverage factor.
-        lags: int, optional, default None
+        lags: int, optional, default 1
             Number of periods to lag signals.
 
         Returns
