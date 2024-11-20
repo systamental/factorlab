@@ -2,8 +2,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import inspect
-from typing import Union, Optional
-from scipy.stats import norm, logistic
+from typing import Union, Optional, List
 
 from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
 from factorlab.feature_engineering.transformations import Transform
@@ -11,7 +10,10 @@ from factorlab.feature_engineering.transformations import Transform
 
 class Trend:
     """
-    Trend factor.
+    Trend factor class for computing trend-based features.
+
+    This class provides methods for transforming price data into trend-based
+    alpha factors, such as price momentum, breakouts, and others.
     """
     def __init__(self,
                  df: pd.DataFrame,
@@ -21,42 +23,43 @@ class Trend:
                  central_tendency: str = 'mean',
                  norm_method: str = 'std',
                  window_size: int = 30,
-                 short_window_size: int = None,
-                 long_window_size: int = None,
-                 window_type: str = 'rolling',
+                 short_window_size: Optional[int] = None,
+                 long_window_size: Optional[int] = None,
+                 window_type: str = "rolling",
                  window_fcn: Optional[str] = None,
                  lags: int = 0,
-                 **kwargs
+                 **kwargs,
                  ):
         """
         Constructor
 
         Parameters
         ----------
-        df: pd.DataFrame - MultiIndex
-            DataFrame MultiIndex with DatetimeIndex (level 0), ticker (level 1) and prices (cols).
-         vwap: bool, default False
-            Compute signal on vwap price.
-        log: bool, default False
-            Converts to log price.
-        normalize: bool, default True
-            Normalize signal.
-        central_tendency: str, {'mean', 'median'}, default 'mean'
-            Measure of central tendency used for the smoothing rolling window.
-        norm_method: str, {'std', 'iqr', 'mad', 'atr', 'range'}, default 'std'
+        df : pd.DataFrame
+            DataFrame with MultiIndex (DatetimeIndex at level 0, ticker at level 1)
+            and price columns.
+        vwap : bool, optional, default=True
+            Whether to compute signals based on VWAP prices.
+        log : bool, optional, default=True
+            Whether to convert prices to logarithmic scale.
+        normalize : bool, optional, default=True
+            Whether to normalize the signals.
+        central_tendency : {'mean', 'median'}, optional, default='mean'
+            Central tendency measure for smoothing.
+        norm_method : {'std', 'iqr', 'mad', 'atr', 'range'}, optional, default='std'
             Normalization method.
-        window_size: int, default 20
-            Number of observations in moving window.
-        short_window_size: int, default None
-            Number of observations in short-term moving window.
-        long_window_size: int, default None
-            Number of observations in long-term moving window.
-        window_type: str, {'rolling', 'ewm'}, default 'rolling'
-            Smoothing window type.
-        window_fcn: str, optional, default None
+        window_size : int, optional, default=30
+            Size of the smoothing window.
+        short_window_size : int, optional, default=None
+            Size of the short-term smoothing window.
+        long_window_size : int, optional, default=None
+            Size of the long-term smoothing window.
+        window_type : {'rolling', 'ewm'}, optional, default='rolling'
+            Type of smoothing window.
+        window_fcn : str, optional, default=None
             Smoothing window function.
-        lags: int, default 0
-            Number of periods to lag values by.
+        lags : int, optional, default=0
+            Number of periods to lag the values by.
         """
         self.df = df
         self.vwap = vwap
@@ -72,8 +75,26 @@ class Trend:
         self.window_fcn = window_fcn
         self.lags = lags
         self.kwargs = kwargs
+
+        self.price = self.compute_price()
         self.trend = None
         self.disp = None
+
+    @staticmethod
+    def available_methods() -> List[str]:
+        """
+        Lists all trend computation methods available in this class.
+
+        Returns
+        -------
+        List[str]
+            A list of method names representing available trend computations.
+        """
+        return [
+            name for name, method in inspect.getmembers(Trend, predicate=inspect.isfunction)
+            if not name.startswith('_') and
+               name not in {'compute_price', 'compute_dispersion', 'gen_factor_name', 'available_methods'}
+        ]
 
     def compute_price(self) -> pd.DataFrame:
         """
@@ -129,6 +150,33 @@ class Trend:
 
         return self.disp
 
+    def gen_factor_name(self) -> pd.DataFrame:
+        """
+        Renames the columns of the trend factor DataFrame.
+
+        Returns
+        -------
+        trend: pd.DataFrame
+            DataFrame with renamed columns.
+        """
+        # name
+        if isinstance(self.trend.index, pd.MultiIndex):
+            if isinstance(self.trend, pd.Series):
+                self.trend = self.trend.to_frame(f"{inspect.stack()[1].function}_{self.window_size}")
+            elif isinstance(self.trend, pd.DataFrame) and self.trend.shape[1] == 1:
+                self.trend.columns = [f"{inspect.stack()[1].function}_{self.window_size}"]
+
+        else:
+            if isinstance(self.trend, pd.Series):
+                self.trend = self.trend.to_frame(f"{inspect.stack()[1].function}_{self.window_size}")
+            elif isinstance(self.trend, pd.DataFrame) and self.trend.shape[1] == 1:
+                self.trend.columns = [f"{inspect.stack()[1].function}_{self.window_size}"]
+
+        # sort index
+        self.trend = self.trend.sort_index()
+
+        return self.trend
+
     def breakout(self, method: str = 'min-max', signal: bool = True) -> pd.DataFrame:
         """
          Computes the breakout trend factor.
@@ -136,9 +184,9 @@ class Trend:
         Parameters
         ----------
         method: str, {'min-max', 'percentile', 'norm'}, default 'min-max'
-            Method to use to normalize price series between 0 and 1.
+            Method to use to normalize price series.
         signal: bool, default True
-            Converts breakout to a signal between -1 and 1.
+            Converts normalized price series to a signal between -1 and 1.
 
          Returns
          -------
@@ -156,19 +204,15 @@ class Trend:
                                                         window_size=self.window_size)
         else:
             self.trend = Transform(self.price).normalize(method='z-score',
-                                                        window_type=self.window_type,
+                                                        window_type='rolling',
                                                         window_size=self.window_size)
 
         # convert to signal
         if signal:
             self.trend = Transform(self.trend).scores_to_signals(transformation=method)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -184,17 +228,13 @@ class Trend:
         # compute price returns
         self.trend = Transform(self.price).diff(lags=self.window_size)
 
-        # scale
+        # normalize
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp, axis=0)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -210,7 +250,7 @@ class Trend:
         # chg
         chg = Transform(self.price).diff()
 
-        # scale
+        # normalize
         if self.normalize:
             self.compute_dispersion()
             chg = chg.div(self.disp, axis=0)
@@ -220,12 +260,8 @@ class Trend:
                                            window_type='ewm',
                                            **self.kwargs)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -250,12 +286,8 @@ class Trend:
                                             central_tendency=self.central_tendency,
                                             window_fcn=self.window_fcn)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -282,7 +314,7 @@ class Trend:
         # time trend
         self.trend = coeff[['trend']]
 
-        # scale
+        # normalize
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
@@ -291,12 +323,8 @@ class Trend:
         if isinstance(self.df.index, pd.MultiIndex) is False:
             self.trend = self.trend.iloc[:, 0].unstack()
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -324,7 +352,7 @@ class Trend:
         # price acceleration
         self.trend = coeff[['trend_squared']]
 
-        # scale
+        # normalize
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
@@ -333,12 +361,8 @@ class Trend:
         if isinstance(self.df.index, pd.MultiIndex) is False:
             self.trend = self.trend.iloc[:, 0].unstack()
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -372,7 +396,7 @@ class Trend:
         # alpha
         self.trend = alpha[['const']]
 
-        # scale
+        # normalize
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
@@ -381,12 +405,8 @@ class Trend:
         if isinstance(self.df.index, pd.MultiIndex) is False:
             self.trend = self.trend.iloc[:, 0].unstack()
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -438,12 +458,8 @@ class Trend:
         # rsi
         self.trend = rs
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -502,12 +518,8 @@ class Trend:
         # stochastic
         self.trend = stoch_df[[stochastic]]
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -544,12 +556,8 @@ class Trend:
                                                  central_tendency=self.central_tendency,
                                                  window_fcn=self.window_fcn)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -583,29 +591,23 @@ class Trend:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp, axis=0)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_"
-                                  f"{self.short_window_size}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
-    def ewma_diff(self,
-                  s_k: list = [2, 4, 8],
-                  l_k: list = [6, 12, 24],
-                  signal: bool = True
-                  ) -> pd.DataFrame:
+    def triple_ewma_diff(self, signal: bool = True) -> pd.DataFrame:
         """
-        Computes the exponentially weighted moving average (EWMA) crossover trend factor.
+        Computes the exponentially weighted moving average (EWMA) crossover trend factor for 3 different short
+        and long window combinations.
 
         A CTA-momentum signal, based on the cross-over of multiple exponentially weighted moving averages (EWMA) with
         different half-lives.
 
         Computed as described in Dissecting Investment Strategies in the Cross-Section and Time Series:
         https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2695101
+
+        Span parameter is used instead of halflife in the ewm function.
 
         Parameters
         ----------
@@ -629,31 +631,36 @@ class Trend:
             self.price = self.price.stack().to_frame()
             self.price.index.names = ['date', 'ticker']
 
+        def span_to_halflife(span):
+            alpha = 2 / (span + 1)
+            return np.ceil(np.log(0.5) / np.log(1 - alpha))
+
         # half-life lists for short and long windows
-        hl_s = [np.log(0.5) / np.log(1 - 1 / i) for i in s_k]
-        hl_l = [np.log(0.5) / np.log(1 - 1 / i) for i in l_k]
+        hl_s = [span_to_halflife(self.window_size), span_to_halflife(self.window_size) * 2,
+                span_to_halflife(self.window_size) * 4]
+        hl_l = [hl_s[0] * 3, hl_s[1] * 3, hl_s[2] * 3]
 
         # create emtpy df
         factor_df = pd.DataFrame()
 
         # compute ewma diff for short, medium and long windows
-        for i in range(0, len(s_k)):
+        for i in range(len(hl_s)):
             factor_df[f"x_k{i}"] = (self.price.unstack().ewm(halflife=hl_s[i]).mean() -
                                     self.price.unstack().ewm(halflife=hl_l[i]).mean()).stack(future_stack=True)
 
         # scale by std of price
-        for i in range(0, len(s_k)):
+        for i in range(len(hl_s)):
             factor_df[f"y_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
                                     self.price.unstack().rolling(90).std()).stack(future_stack=True)
 
         # scale by normalized y_k diff
-        for i in range(0, len(s_k)):
+        for i in range(len(hl_s)):
             factor_df[f"z_k{i}"] = (factor_df[f"x_k{i}"].unstack() /
                                     factor_df[f"x_k{i}"].unstack().rolling(365).std()).stack(future_stack=True)
 
         # convert to signal
         if signal:
-            for i in range(0, len(s_k)):
+            for i in range(len(hl_s)):
                 factor_df[f"signal_k{i}"] = (factor_df[f"z_k{i}"] * np.exp((-1 * factor_df[f"z_k{i}"] ** 2) / 4)) / 0.89
 
         # mean of short, medium and long window signals
@@ -667,11 +674,8 @@ class Trend:
         else:
             self.trend = ewma_diff.ffill()
 
-        # name
-        self.trend = ewma_diff.to_frame(f"{inspect.currentframe().f_code.co_name}_{s_k[0]}")
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         # single index
         if isinstance(self.df.index, pd.MultiIndex) is False:
@@ -713,12 +717,8 @@ class Trend:
         # energy
         self.trend = speed.multiply(mass.values, axis=0)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -743,12 +743,8 @@ class Trend:
         # compute snr
         self.trend = chg / abs_roll_chg
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         return self.trend
 
@@ -816,12 +812,8 @@ class Trend:
                                                  central_tendency=self.central_tendency,
                                                  window_fcn=self.window_fcn)
 
-        # name
-        if self.trend.shape[1] == 1:
-            self.trend.columns = [f"{inspect.currentframe().f_code.co_name}_{self.window_size}"]
-
-        # sort index
-        self.trend = self.trend.sort_index()
+        # rename cols
+        self.gen_factor_name()
 
         if signal:
             self.trend = (self.trend / 100).clip(-1, 1)
@@ -846,7 +838,6 @@ class Trend:
         """
         pass
         # TODO: implement term structure calculation
-
 
 # TODO: add hurst exponent, fractal dimension, detrended fluctuation analysis, wavelet transform, etc.
 # def he(series: pd.Series, window_size: int):

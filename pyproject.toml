@@ -6,6 +6,14 @@ authors = ["Systamental"]
 license = "Apache License 2.0"
 readme = "README.md"
 
+# Trend class, added signal bool param to breakout method
+# added available methods
+# added gen_factor_name method
+# refactored tripple_ewma_diff to convert window_size (span) param to half-life
+
+# PortfolioOptimization, added signals argument and weights attribute
+
+
 [tool.poetry.dependencies]
 python = ">=3.9"
 numpy = ">=1.23.3"
