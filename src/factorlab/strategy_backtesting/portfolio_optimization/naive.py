@@ -6,8 +6,6 @@ from factorlab.strategy_backtesting.portfolio_optimization.return_estimators imp
 from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
 from factorlab.data_viz.plot import plot_bar
 
-# TODO: add signal-based weights
-
 
 class NaiveOptimization:
     """
@@ -18,6 +16,7 @@ class NaiveOptimization:
     """
     def __init__(self,
                  returns: pd.DataFrame,
+                 signals: Optional[pd.DataFrame] = None,
                  method: str = 'equal_weight',
                  asset_names: Optional[str] = None,
                  leverage: Optional[float] = None,
@@ -31,6 +30,8 @@ class NaiveOptimization:
         ----------
         returns: pd.DataFrame or pd.Series
             The returns of the assets or strategies.
+        signals: pd.DataFrame, default None
+            The signals of the assets or strategies.
         method: str, {'equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random'},
         default 'equal_weight'
             Optimization method to compute weights.
@@ -44,11 +45,13 @@ class NaiveOptimization:
             Annualization factor.
         """
         self.returns = returns
+        self.signals = signals
         self.method = method
         self.asset_names = asset_names
         self.leverage = leverage
         self.target_vol = target_vol
         self.ann_factor = ann_factor
+
         self.freq = None
         self.n_assets = None
         self.exp_ret = None
@@ -62,24 +65,54 @@ class NaiveOptimization:
         """
         Preprocess the data for the portfolio optimization.
         """
-        # returns
-        if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):  # check data type
-            raise ValueError('rets must be a pd.DataFrame or pd.Series')
-        if isinstance(self.returns, pd.Series):  # convert to df
+        # check data type
+        if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):
+            raise ValueError('Returns must be a pd.DataFrame or pd.Series')
+        # convert to DataFrame
+        if isinstance(self.returns, pd.Series):
             self.returns = self.returns.to_frame()
-        if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
-            self.returns = self.returns.unstack()
-        if not isinstance(self.returns.index, pd.DatetimeIndex):  # convert to single index
-            self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+        # convert to single index
+        if isinstance(self.returns.index, pd.MultiIndex):
+            if self.returns.shape[1] == 1:
+                self.returns = self.returns.unstack()
+            else:
+                raise ValueError('Returns must be a single index pd.DataFrame or pd.Series, '
+                                 'or a multi-index pd.DataFrame with a single column')
+        # convert to datetime index
+        if not isinstance(self.returns.index, pd.DatetimeIndex):
+            self.returns.index = pd.to_datetime(self.returns.index)
+
+        # signals
+        if self.signals is not None:
+            if not isinstance(self.signals, pd.DataFrame) and not isinstance(self.signals, pd.Series):
+                raise ValueError('Signals must be a pd.DataFrame or pd.Series')
+            if isinstance(self.signals, pd.Series):
+                self.signals = self.signals.to_frame()
+            if isinstance(self.signals.index, pd.MultiIndex):
+                if self.signals.shape[1] == 1:
+                    self.signals = self.signals.unstack()
+                else:
+                    raise ValueError('Signals must be a single index pd.DataFrame or pd.Series, '
+                                     'or a multi-index pd.DataFrame with a single column')
+            if not isinstance(self.signals.index, pd.DatetimeIndex):
+                self.signals.index = pd.to_datetime(self.signals.index)
+
         # remove missing vals
         last_row = self.returns.iloc[-1]  # select the last row
         columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
         self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
 
+        # signals
+        if self.signals is not None:
+            last_row = self.signals.iloc[-1]  # select the last row
+            columns_to_drop = last_row[last_row.isna()].index
+            self.signals = self.signals.drop(columns=columns_to_drop).dropna(how='all')
+
         # method
-        if self.method not in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
-            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance', "
-                             "'inverse_vol', 'target_vol, 'random'")
+        if self.method not in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol',
+                               'random']:
+            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'signal_weight',"
+                             " 'inverse_variance', 'inverse_vol', 'target_vol, 'random'")
 
         # asset names
         if self.asset_names is None:
@@ -120,7 +153,7 @@ class NaiveOptimization:
         Compute estimators.
         """
         # expected returns
-        self.exp_ret = ReturnEstimators(self.returns, method='mean').compute_expected_returns().values
+        self.exp_ret = ReturnEstimators(self.returns, method='historical_mean').compute_expected_returns().values
 
         # covariance matrix
         self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method='covariance')
@@ -133,13 +166,35 @@ class NaiveOptimization:
         self.compute_estimators()
 
         # weights
-        self.weights = ((np.sign(self.returns.abs()).iloc[-1]) /
-                        (np.sign(self.returns.abs().iloc[-1].dropna()).sum())).values
+        self.weights = np.sign(self.returns).abs().div(np.sign(self.returns).abs().sum(axis=1).values, axis=0)
         self.weights = self.weights * self.leverage
 
         # portfolio risk and return
-        self.portfolio_ret = np.dot(self.weights, self.exp_ret)
-        self.portfolio_risk = np.dot(self.weights.T, np.dot(self.cov_matrix, self.weights))
+        weights = self.weights.iloc[-1].values
+        self.portfolio_ret = np.dot(weights, self.exp_ret)
+        self.portfolio_risk = np.dot(weights.T, np.dot(self.cov_matrix, weights))
+
+        return self.weights
+
+    def compute_signal_weight(self):
+        """
+        Compute signal-based weights for assets or strategies.
+        """
+        # check signals
+        if self.signals is None:
+            raise ValueError('Signals must be provided to compute signal-based weights')
+
+        # estimators
+        self.compute_estimators()
+
+        # weights
+        self.weights = self.signals.abs().div(self.signals.abs().sum(axis=1).values, axis=0)
+        self.weights = self.weights * self.leverage
+
+        # portfolio risk and return
+        weights = self.weights.iloc[-1].values
+        self.portfolio_ret = np.dot(weights, self.exp_ret)
+        self.portfolio_risk = np.dot(weights.T, np.dot(self.cov_matrix, weights))
 
         return self.weights
 
@@ -252,13 +307,14 @@ class NaiveOptimization:
             The portfolio weights.
         """
         # compute weights
-        if self.method in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
+        if self.method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
             getattr(self, f'compute_{self.method}')()
         else:
-            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance', "
-                             "'inverse_vol', 'target_vol', 'random'")
+            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'signal_weight', "
+                             "'inverse_variance', 'inverse_vol', 'target_vol', 'random'")
 
-        self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=[self.returns.index[-1]]).T
+        if self.method not in ['equal_weight', 'signal_weight']:
+            self.weights = pd.DataFrame(self.weights, index=self.asset_names, columns=[self.returns.index[-1]]).T
 
         return self.weights
 
