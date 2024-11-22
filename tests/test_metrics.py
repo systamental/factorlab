@@ -365,6 +365,7 @@ class TestMetrics:
         """
         self.metrics_log_ret_instance.window_type = window_type
         sr = self.metrics_log_ret_instance.sortino_ratio()
+
         # dtypes
         assert isinstance(sr, (pd.Series, pd.DataFrame))
         if window_type == 'fixed':

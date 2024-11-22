@@ -386,12 +386,16 @@ class Metrics:
             Sortino ratio for each asset or strategy.
         """
         if self.window_type == 'rolling':
-            sr = (getattr(self.returns, self.window_type)(window=self.window_size).mean() /
-                  getattr(self.returns[self.returns < 0], self.window_type)(window=self.window_size).std()) \
-                  * np.sqrt(self.ann_factor)
+            sr = (
+                         getattr(self.returns, self.window_type)(window=self.window_size, min_periods=1).mean() /
+                         getattr(self.returns[self.returns < 0], self.window_type)
+                         (window=self.window_size, min_periods=2).std()
+                 ) * np.sqrt(self.ann_factor)
         elif self.window_type == 'expanding':
-            sr = (getattr(self.returns, self.window_type)().mean() /
-                  getattr(self.returns[self.returns < 0], self.window_type)().std()) * np.sqrt(self.ann_factor)
+            sr = (
+                         getattr(self.returns, self.window_type)().mean() /
+                         getattr(self.returns[self.returns < 0], self.window_type)().std()
+                 ) * np.sqrt(self.ann_factor)
         else:
             sr = (self.returns.mean() / self.returns[self.returns < 0].std()) * np.sqrt(self.ann_factor)
 
