@@ -13,7 +13,7 @@ class ReturnEstimators:
     """
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
-                 method: str = 'mean',
+                 method: str = 'historical_mean',
                  as_excess_returns: bool = False,
                  risk_free_rate: Optional[Union[pd.Series, pd.DataFrame, float]] = None,
                  as_ann_returns: bool = False,
@@ -27,7 +27,8 @@ class ReturnEstimators:
         ----------
         returns: pd.DataFrame or pd.Series
             The returns of the assets or strategies. If not provided, the returns are computed from the prices.
-        method: str, {'median', 'mean', 'ewma'}, default 'mean'
+        method: str, {'historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
+                      'rolling_sharpe', 'rolling_sortino'}
             Method to compute the expected returns.
         as_excess_returns: bool, default False
             Whether to compute excess returns.
@@ -51,7 +52,7 @@ class ReturnEstimators:
         self.freq = None
         self.preprocess_data()
 
-    def preprocess_data(self):
+    def preprocess_data(self) -> None:
         """
         Preprocess the data for the return estimation.
         """
@@ -66,8 +67,10 @@ class ReturnEstimators:
         self.returns = self.returns.dropna(how='all')  # drop missing rows
 
         # method
-        if self.method not in ['median', 'mean', 'ewma']:
-            raise ValueError("Method is not supported. Valid methods are: 'median', 'mean', 'ewma'")
+        if self.method not in ['historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
+                               'rolling_sharpe', 'rolling_sortino']:
+            raise ValueError("Method is not supported. Valid methods are: 'historical_mean', 'historical_median', "
+                             "'rolling_mean', 'rolling_median', 'ewma', 'rolling_sharpe', 'rolling_sortino.")
 
         # risk-free rate
         if self.risk_free_rate is None:
@@ -80,36 +83,67 @@ class ReturnEstimators:
 
         # ann_factor
         if self.ann_factor is None:
-            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
+            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().max()
 
         # window size
         if self.window_size is None:
             self.window_size = self.ann_factor
 
-    def historical_mean_returns(self):
+    def historical_mean(self) -> Union[pd.Series, pd.DataFrame]:
         """
         Compute expected returns using mean method.
         """
         self.exp_returns = self.returns.mean()
 
-    def historical_median_returns(self):
+    def historical_median(self) -> Union[pd.Series, pd.DataFrame]:
         """
         Compute expected returns using median method.
         """
         self.exp_returns = self.returns.median()
 
-    def ewma_returns(self):
+    def rolling_mean(self):
+        """
+        Compute expected returns using rolling mean method.
+        """
+        self.exp_returns = self.returns.rolling(window=self.window_size).mean().iloc[-1]
+
+    def rolling_median(self):
+        """
+        Compute expected returns using rolling median method.
+        """
+        self.exp_returns = self.returns.rolling(window=self.window_size).median().iloc[-1]
+
+    def ewma(self):
         """
         Compute expected returns using EWMA method.
         """
         self.exp_returns = self.returns.ewm(span=self.window_size).mean().iloc[-1]
+
+    def rolling_sharpe(self):
+        """
+        Compute expected returns using rolling Sharpe ratio.
+        """
+        self.exp_returns = (self.returns.rolling(window=self.window_size).mean() /
+                            self.returns.rolling(window=self.window_size).std()).iloc[-1]
+
+    def rolling_sortino(self):
+        """
+        Compute expected returns using rolling Sortino ratio.
+        """
+        self.exp_returns = (
+                self.returns.rolling(window=self.window_size, min_periods=1).mean() /
+                self.returns[self.returns < 0].rolling(window=self.window_size, min_periods=2).std()
+        ).iloc[-1]
 
     def annualize_returns(self):
         """
         Annualize the expected returns.
         """
         if self.as_ann_returns:
-            self.exp_returns = self.exp_returns * self.ann_factor
+            if self.method in ['rolling_sharpe', 'rolling_sortino']:
+                self.exp_returns = self.exp_returns * np.sqrt(self.ann_factor)
+            else:
+                self.exp_returns = self.exp_returns * self.ann_factor
 
     def deannualize_rf_rate(self):
         """
@@ -134,20 +168,13 @@ class ReturnEstimators:
         self.compute_excess_returns()
 
         # expected returns
-        if self.method == 'mean':
-            self.historical_mean_returns()
-        elif self.method == 'median':
-            self.historical_median_returns()
-        elif self.method == 'ewma':
-            self.ewma_returns()
-        else:
-            raise ValueError('Invalid method. Please choose from: median, mean, ewma.')
+        getattr(self, self.method)()
 
         # annualize returns
         self.annualize_returns()
 
         # excess returns for annualized returns
-        if self.as_excess_returns:
+        if self.as_excess_returns and self.method not in ['rolling_sharpe', 'rolling_sortino']:
             if isinstance(self.risk_free_rate, float):
                 if self.as_ann_returns:
                     self.exp_returns = self.exp_returns - self.risk_free_rate

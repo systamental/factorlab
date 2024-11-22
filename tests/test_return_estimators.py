@@ -11,7 +11,8 @@ def btc_spot_ret():
     Fixture for BTC OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv",
+                     index_col=['date', 'ticker'],
                      parse_dates=['date'])
     return df.loc[:, 'BTC', :]['close'].pct_change()
 
@@ -22,7 +23,8 @@ def risk_free_rates():
     Fixture for US real rates data.
     """
     # read csv from datasets/data
-    return pd.read_csv("../src/factorlab/datasets/data/us_real_rates_10y_monthly.csv", index_col=['date'],
+    return pd.read_csv("../src/factorlab/datasets/data/us_real_rates_10y_monthly.csv",
+                       index_col=['date'],
                        parse_dates=['date']).loc[:, 'US_Rates_3M'] / 100
 
 
@@ -33,7 +35,8 @@ class TestReturnEstimators:
 
     @pytest.fixture(autouse=True)
     def re_default_instance(self, btc_spot_ret, risk_free_rates):
-        self.default_ret_est_instance = ReturnEstimators(btc_spot_ret, risk_free_rate=risk_free_rates,
+        self.default_ret_est_instance = ReturnEstimators(btc_spot_ret,
+                                                         risk_free_rate=risk_free_rates,
                                                          as_excess_returns=True)
 
     def test_initialization(self) -> None:
@@ -59,6 +62,7 @@ class TestReturnEstimators:
         rf_rate = self.default_ret_est_instance.risk_free_rate.copy()
         # de-annualize
         self.default_ret_est_instance.deannualize_rf_rate()
+
         assert rf_rate.dropna().abs().ge(self.default_ret_est_instance.risk_free_rate.dropna().abs()).all()
 
     def test_compute_excess_returns(self) -> None:
@@ -68,39 +72,89 @@ class TestReturnEstimators:
         rets = self.default_ret_est_instance.returns.copy()
         # excess returns
         self.default_ret_est_instance.compute_excess_returns()
+
         assert ((rets > self.default_ret_est_instance.returns).sum() /
                 self.default_ret_est_instance.returns.shape[0] > 0.9).all()
 
-    def test_historical_mean_returns(self) -> None:
+    def test_historical_mean(self) -> None:
         """
         Test compute historical mean returns.
         """
-        self.default_ret_est_instance.historical_mean_returns()
+        self.default_ret_est_instance.historical_mean()
+
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.mean()).all()
 
-    def test_historical_median_returns(self) -> None:
+    def test_historical_median(self) -> None:
         """
         Test compute historical median returns.
         """
-        self.default_ret_est_instance.historical_median_returns()
+        self.default_ret_est_instance.historical_median()
+
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.median()).all()
 
-    def test_ewma_returns(self) -> None:
+    def test_rolling_means(self) -> None:
+        """
+        Test compute rolling mean returns.
+        """
+        self.default_ret_est_instance.rolling_mean()
+
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.rolling(
+            window=self.default_ret_est_instance.window_size).mean().iloc[-1]).all()
+
+    def test_rolling_median(self) -> None:
+        """
+        Test compute rolling median returns.
+        """
+        self.default_ret_est_instance.rolling_median()
+
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.rolling(
+            window=self.default_ret_est_instance.window_size).median().iloc[-1]).all()
+
+    def test_ewma(self) -> None:
         """
         Test compute EWMA returns.
         """
-        self.default_ret_est_instance.ewma_returns()
+        self.default_ret_est_instance.ewma()
+
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.ewm(
             span=self.default_ret_est_instance.window_size).mean().iloc[-1]).all()
 
-    @pytest.mark.parametrize("method", ['median', 'mean', 'ewma'])
+    def test_rolling_sharpe(self) -> None:
+        """
+        Test compute rolling Sharpe ratio.
+        """
+        self.default_ret_est_instance.rolling_sharpe()
+
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert (self.default_ret_est_instance.exp_returns == (self.default_ret_est_instance.returns.rolling(
+            window=self.default_ret_est_instance.window_size).mean() / self.default_ret_est_instance.returns.rolling(
+            window=self.default_ret_est_instance.window_size).std()).iloc[-1]).all()
+
+    def test_rolling_sortino(self) -> None:
+        """
+        Test compute rolling Sortino ratio.
+        """
+        self.default_ret_est_instance.window_size = 10
+        self.default_ret_est_instance.rolling_sortino()
+
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert (self.default_ret_est_instance.exp_returns == (self.default_ret_est_instance.returns.rolling(
+            window=self.default_ret_est_instance.window_size).mean() / self.default_ret_est_instance.returns[
+            self.default_ret_est_instance.returns < 0].rolling(
+            window=self.default_ret_est_instance.window_size, min_periods=2).std()).iloc[-1]).all()
+
+    @pytest.mark.parametrize("method", ['historical_mean', 'historical_median', 'rolling_mean', 'rolling_median',
+                                        'ewma', 'rolling_sharpe', 'rolling_sortino'])
     def test_compute_expected_returns(self, method) -> None:
         """
         Test compute expected returns.
         """
         self.default_ret_est_instance.method = method
         self.default_ret_est_instance.compute_expected_returns()
+
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
