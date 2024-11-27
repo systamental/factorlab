@@ -19,7 +19,7 @@ class Performance:
                  returns: Union[pd.Series, pd.DataFrame],
                  risk_free_rate: Optional[Union[pd.DataFrame, pd.Series, float]] = None,
                  as_excess_returns: bool = False,
-                 mkt_ret: Optional[Union[pd.Series, pd.DataFrame]] = None,
+                 factor_returns: Optional[Union[pd.Series, pd.DataFrame]] = None,
                  ret_type: str = 'log',
                  window_type: str = 'fixed',
                  window_size: Optional[int] = None,
@@ -36,7 +36,7 @@ class Performance:
             Risk-free rate for computing risk-adjusted returns.
         as_excess_returns: bool, default False
             Whether to compute excess returns.
-        mkt_ret: pd.Series, pd.DataFrame, default None
+        factor_returns: pd.Series, pd.DataFrame, default None
             Market returns for computing beta.
         ret_type: str, {'log', 'simple'}, default 'log'
             Type of returns.
@@ -50,7 +50,7 @@ class Performance:
         self.returns = returns
         self.risk_free_rate = risk_free_rate
         self.as_excess_returns = as_excess_returns
-        self.mkt_ret = mkt_ret
+        self.factor_returns = factor_returns
         self.ret_type = ret_type
         self.window_type = window_type
         self.window_size = window_size
@@ -66,7 +66,7 @@ class Performance:
             DataFrame with computed performance metrics.
         """
         return Metrics(self.returns, risk_free_rate=self.risk_free_rate, as_excess_returns=self.as_excess_returns,
-                       mkt_ret=self.mkt_ret, ret_type=self.ret_type, window_type=self.window_type,
+                       factor_returns=self.factor_returns, ret_type=self.ret_type, window_type=self.window_type,
                        window_size=self.window_size, ann_factor=self.ann_factor)
 
     def get_table(self, metrics: Union[str, List[str]] = 'key_metrics', rank_on: str = None) -> pd.DataFrame:
