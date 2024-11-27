@@ -160,17 +160,10 @@ class Trend:
             DataFrame with renamed columns.
         """
         # name
-        if isinstance(self.trend.index, pd.MultiIndex):
-            if isinstance(self.trend, pd.Series):
-                self.trend = self.trend.to_frame(f"{inspect.stack()[1].function}_{self.window_size}")
-            elif isinstance(self.trend, pd.DataFrame) and self.trend.shape[1] == 1:
-                self.trend.columns = [f"{inspect.stack()[1].function}_{self.window_size}"]
-
-        else:
-            if isinstance(self.trend, pd.Series):
-                self.trend = self.trend.to_frame(f"{inspect.stack()[1].function}_{self.window_size}")
-            elif isinstance(self.trend, pd.DataFrame) and self.trend.shape[1] == 1:
-                self.trend.columns = [f"{inspect.stack()[1].function}_{self.window_size}"]
+        if isinstance(self.trend, pd.Series):
+            self.trend = self.trend.to_frame(f"{inspect.stack()[1].function}_{self.window_size}")
+        elif isinstance(self.trend, pd.DataFrame) and self.trend.shape[1] == 1:
+            self.trend.columns = [f"{inspect.stack()[1].function}_{self.window_size}"]
 
         # sort index
         self.trend = self.trend.sort_index()
