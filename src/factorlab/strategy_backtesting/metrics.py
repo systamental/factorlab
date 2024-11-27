@@ -13,7 +13,7 @@ class Metrics:
                  returns: Union[pd.Series, pd.DataFrame],
                  risk_free_rate: Optional[Union[pd.DataFrame, pd.Series, float]] = None,
                  as_excess_returns: bool = False,
-                 mkt_ret: Optional[Union[pd.Series, pd.DataFrame]] = None,
+                 factor_returns: Optional[Union[pd.Series, pd.DataFrame]] = None,
                  ret_type: str = 'log',
                  window_type: str = 'fixed',
                  window_size: Optional[int] = None,
@@ -30,8 +30,8 @@ class Metrics:
             Risk-free rate series for net returns computation.
         as_excess_returns: bool, default False
             Whether to metrics with excess returns.
-        mkt_ret: pd.Series, default None
-            Market return to compute beta.
+        factor_returns: pd.Series, default None
+            Factor returns for factor model regression.
         ret_type: str, {'simple', 'log'}, default 'simple'
             Return type.
         window_type: str, {'fixed', 'expanding', 'rolling'}, default 'fixed'
@@ -44,7 +44,7 @@ class Metrics:
         self.returns = returns
         self.risk_free_rate = risk_free_rate
         self.as_excess_returns = as_excess_returns
-        self.mkt_ret = mkt_ret
+        self.factor_returns = factor_returns
         self.ret_type = ret_type
         self.window_type = window_type
         self.window_size = window_size
@@ -81,8 +81,8 @@ class Metrics:
             self.risk_free_rate = np.log(1 + self.risk_free_rate) / self.ann_factor  # de-annualize
 
         # market return
-        if self.mkt_ret is None:
-            self.mkt_ret = self.returns.mean(axis=1)
+        if self.factor_returns is None:
+            self.factor_returns = self.returns.mean(axis=1)
 
         # window size
         if self.window_size is None:
@@ -490,6 +490,92 @@ class Metrics:
 
         return stability_df
 
+    # TODO: fix bug in TSA rolling regression for multivariate regression, missing param output
+    def beta(self) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Estimates the beta coefficient by regressing asset or strategy returns on the market portfolio return,
+        proxied by the equally weighted average of the cross-section of returns.
+
+        Returns
+        -------
+        df: pd.Series or pd.DataFrame
+            Dataframe with beta parameter estimate values and p-values.
+        """
+        # df
+        beta_df, pval_df = pd.DataFrame(), pd.DataFrame()
+
+        # compute stability
+        if self.window_type == 'rolling' or self.window_type == 'expanding':
+            for ticker in self.returns.columns:
+
+                # fit OLS regression
+                # beta
+                coef = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type=self.window_type,
+                           window_size=self.window_size).linear_regression(output='params')
+                beta = coef.iloc[:, 1:].squeeze().to_frame(ticker)
+                beta_df = pd.concat([beta_df, beta], axis=1)
+
+                # p-values
+                if self.window_type == 'rolling':
+                    p_vals = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type=self.window_type,
+                                 window_size=self.window_size).linear_regression(output='pvalues')
+                    beta_pval = p_vals.iloc[:, 1:].squeeze().to_frame(ticker)
+                    pval_df = pd.concat([pval_df, beta_pval], axis=1)
+
+            # add col names and stack
+            beta_df.columns.name = 'ticker'
+            beta_df = beta_df.stack().to_frame('beta')
+            if self.window_type == 'rolling':
+                pval_df.columns.name = 'ticker'
+                pval_df = pval_df.stack().to_frame('p_val')
+            else:
+                pval_df = None
+
+            # concat dfs
+            df = pd.concat([beta_df, pval_df], axis=1)
+
+        else:
+            beta_list, beta_pval_list = [], []
+            for ticker in self.returns.columns:
+                # fit OLS regression
+                # beta
+                coef = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type='fixed',
+                           window_size=self.window_size).linear_regression(output='params')
+                beta = coef.iloc[1]
+                beta_list.append(beta)
+
+                # p-values
+                p_vals = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type='fixed',
+                             window_size=self.window_size).linear_regression(output='pvalues')
+                beta_pval = p_vals.iloc[1]
+                beta_pval_list.append(beta_pval)
+
+            # create df
+            df = pd.DataFrame({'beta': beta_list, 'p_val': beta_pval_list}, index=self.returns.columns)
+
+        return df
+
+    def beta_returns(self) -> Union[pd.Series, pd.DataFrame]:
+        """
+        Computes the beta returns of an asset or strategy.
+
+        Returns
+        -------
+        beta_ret: pd.Series or pd.DataFrame
+            Beta returns.
+        """
+        beta = self.beta()
+
+        if self.window_type == 'rolling' or self.window_type == 'expanding':
+            beta_ret = beta.beta * self.returns.stack()
+        else:
+            beta_ret = beta.beta * self.returns.stack().groupby('ticker').mean() * self.ann_factor
+
+        # col name
+        beta_ret = beta_ret.to_frame('beta_ret')
+
+        return beta_ret
+
     def alpha(self) -> Union[pd.Series, pd.DataFrame]:
         """
         Estimates the alpha coefficient by regressing asset or strategy returns on the market return,
@@ -503,27 +589,34 @@ class Metrics:
         # df
         alpha_df, pval_df = pd.DataFrame(), pd.DataFrame()
 
-        if self.window_type == 'rolling':
+        if self.window_type == 'rolling' or self.window_type == 'expanding':
             for ticker in self.returns.columns:
 
                 # fit OLS regression
                 # alpha
-                coef = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type=self.window_type,
+                coef = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type=self.window_type,
                            window_size=self.window_size).linear_regression(output='params')
                 alpha = ((coef['const'] + 1) ** self.ann_factor) - 1
-                alpha_df = pd.concat([alpha_df, alpha.to_frame()], axis=1)
+                alpha_df = pd.concat([alpha_df, alpha.to_frame(ticker)], axis=1)
 
                 # p-values
-                p_vals = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type=self.window_type,
-                             window_size=self.window_size).linear_regression(output='pvalues')
-                alpha_pval = p_vals['const']
-                pval_df = pd.concat([pval_df, alpha_pval.to_frame()], axis=1)
+                if self.window_type == 'rolling':
+                    p_vals = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type=self.window_type,
+                                 window_size=self.window_size).linear_regression(output='pvalues')
+                    alpha_pval = p_vals['const']
+                    pval_df = pd.concat([pval_df, alpha_pval.to_frame(ticker)], axis=1)
 
-            # rename cols
-            alpha_df.columns, pval_df.columns = self.returns.columns, self.returns.columns
-            alpha_df.columns.name, pval_df.columns.name = 'ticker', 'ticker'
-            alpha_df, pval_df = alpha_df.stack().to_frame('alpha'), pval_df.stack().to_frame('p_val')
-            # stack dfs
+            # add col names and stack
+            alpha_df.columns.name = 'ticker'
+            alpha_df = alpha_df.stack().to_frame('alpha')
+
+            if self.window_type == 'rolling':
+                pval_df.columns.name = 'ticker'
+                pval_df = pval_df.stack().to_frame('p_val')
+            else:
+                pval_df = None
+
+            # concat dfs
             df = pd.concat([alpha_df, pval_df], axis=1)
 
         else:
@@ -531,13 +624,13 @@ class Metrics:
             for ticker in self.returns.columns:
                 # fit OLS regression
                 # alpha
-                coef = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type='fixed',
+                coef = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type='fixed',
                            window_size=self.window_size).linear_regression(output='params')
                 alpha = ((coef['const'] + 1) ** self.ann_factor) - 1
                 alpha_list.append(alpha)
 
                 # p-values
-                p_vals = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type='fixed',
+                p_vals = TSA(self.returns[ticker], self.factor_returns, trend='c', window_type='fixed',
                              window_size=self.window_size).linear_regression(output='pvalues')
                 alpha_pval = p_vals['const']
                 alpha_pval_list.append(alpha_pval)
@@ -547,60 +640,34 @@ class Metrics:
 
         return df
 
-    def beta(self) -> Union[pd.Series, pd.DataFrame]:
+    def alpha_returns(self) -> Union[pd.Series, pd.DataFrame]:
         """
-        Estimates the beta coefficient by regressing asset or strategy returns on the market return,
-        proxied by the equally weighted average of the cross-section of returns.
+        Computes the alpha returns of an asset or strategy.
 
         Returns
         -------
-        df: pd.Series or pd.DataFrame
-            Dataframe with beta parameter estimate values and p-values.
+        alpha_ret: pd.Series or pd.DataFrame
+            Alpha returns.
         """
-        # df
-        beta_df, pval_df = pd.DataFrame(), pd.DataFrame()
+        beta_ret = self.beta_returns()
 
-        # compute stability
-        if self.window_type == 'rolling':
-            for ticker in self.returns.columns:
-
-                # fit OLS regression
-                # beta
-                coef = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type=self.window_type,
-                           window_size=self.window_size).linear_regression(output='params')
-                beta = coef.iloc[:, 1].to_frame()
-                beta_df = pd.concat([beta_df, beta], axis=1)
-
-                # p-values
-                p_vals = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type=self.window_type,
-                             window_size=self.window_size).linear_regression(output='pvalues')
-                beta_pval = p_vals.iloc[:, 1]
-                pval_df = pd.concat([pval_df, beta_pval.to_frame()], axis=1)
-
-            # rename cols
-            beta_df.columns, pval_df.columns = self.returns.columns, self.returns.columns
-            beta_df.columns.name, pval_df.columns.name = 'ticker', 'ticker'
-            beta_df, pval_df = beta_df.stack().to_frame('beta'), pval_df.stack().to_frame('p_val')
-            # stack dfs
-            df = pd.concat([beta_df, pval_df], axis=1)
-
+        if self.window_type == 'rolling' or self.window_type == 'expanding':
+            alpha_ret = self.returns.stack() - beta_ret.beta_ret
         else:
-            beta_list, beta_pval_list = [], []
-            for ticker in self.returns.columns:
-                # fit OLS regression
-                # beta
-                coef = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type='fixed',
-                           window_size=self.window_size).linear_regression(output='params')
-                beta = coef.iloc[1]
-                beta_list.append(beta)
+            alpha_ret = None
 
-                # p-values
-                p_vals = TSA(self.returns[ticker], self.mkt_ret, trend='c', window_type='fixed',
-                             window_size=self.window_size).linear_regression(output='pvalues')
-                beta_pval = p_vals.iloc[1]
-                beta_pval_list.append(beta_pval)
+        # col name
+        alpha_ret = alpha_ret.to_frame('alpha_ret')
 
-            # create df
-            df = pd.DataFrame({'beta': beta_list, 'p_val': beta_pval_list}, index=self.returns.columns)
+        return alpha_ret
 
-        return df
+    def appraisal_ratio(self) -> Union[float, pd.Series, pd.DataFrame]:
+        """
+        Computes the appraisal ratio of asset or strategy returns.
+
+        Returns
+        -------
+        ar: float, pd.Series or pd.DataFrame
+            Appraisal ratio.
+        """
+        pass
