@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Optional
+from typing import Optional, List
 
 from factorlab.strategy_backtesting.portfolio_optimization.return_estimators import ReturnEstimators
 from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
@@ -18,7 +18,7 @@ class NaiveOptimization:
                  returns: pd.DataFrame,
                  signals: Optional[pd.DataFrame] = None,
                  method: str = 'equal_weight',
-                 asset_names: Optional[str] = None,
+                 asset_names: Optional[List[str]] = None,
                  leverage: Optional[float] = None,
                  target_vol: Optional[float] = None,
                  ann_factor: Optional[int] = None,
@@ -76,7 +76,7 @@ class NaiveOptimization:
             if self.returns.shape[1] == 1:
                 self.returns = self.returns.unstack()
             else:
-                raise ValueError('Returns must be a single index pd.DataFrame or pd.Series, '
+                raise ValueError('Returns must be a single index pd.DataFrame '
                                  'or a multi-index pd.DataFrame with a single column')
         # convert to datetime index
         if not isinstance(self.returns.index, pd.DatetimeIndex):
@@ -92,7 +92,7 @@ class NaiveOptimization:
                 if self.signals.shape[1] == 1:
                     self.signals = self.signals.unstack()
                 else:
-                    raise ValueError('Signals must be a single index pd.DataFrame or pd.Series, '
+                    raise ValueError('Signals must be a single index pd.DataFrame '
                                      'or a multi-index pd.DataFrame with a single column')
             if not isinstance(self.signals.index, pd.DatetimeIndex):
                 self.signals.index = pd.to_datetime(self.signals.index)
@@ -188,7 +188,7 @@ class NaiveOptimization:
         self.compute_estimators()
 
         # weights
-        self.weights = self.signals.abs().div(self.signals.abs().sum(axis=1).values, axis=0)
+        self.weights = self.signals.div(self.signals.abs().sum(axis=1).values, axis=0)
         self.weights = self.weights * self.leverage
 
         # portfolio risk and return
