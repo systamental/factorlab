@@ -16,12 +16,14 @@ class PortfolioOptimization:
     This class computes the optimized portfolio weights or returns based on the signals returns of assets or strategies.
     """
     # List of available optimizer names
-    available_optimizers = ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
-                            'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
-                            'efficient_return', 'efficient_risk', 'risk_parity', 'hrp', 'herc']
+    available_optimizers = ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol',
+                            'random', 'max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe',
+                            'max_diversification', 'efficient_return', 'efficient_risk', 'risk_parity', 'hrp', 'herc']
 
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
+                 signals: Optional[Union[pd.DataFrame, pd.Series]] = None,
+                 as_signal_returns: bool = False,
                  method: str = 'equal_weight',
                  lags: int = 1,
                  risk_free_rate: Optional[float] = 0.0,
@@ -30,7 +32,7 @@ class PortfolioOptimization:
                  min_weight: float = 0.0,
                  leverage: float = 1.0,
                  risk_aversion: float = 1.0,
-                 exp_ret_method: Optional[str] = 'mean',
+                 exp_ret_method: Optional[str] = 'historical_mean',
                  cov_matrix_method: Optional[str] = 'covariance',
                  target_return: Optional[float] = 0.15,
                  target_risk: Optional[float] = 0.1,
@@ -54,8 +56,12 @@ class PortfolioOptimization:
         Parameters
         ----------
         returns : pd.DataFrame or pd.Series
-            Returns of the assets or strategies.
-        method: str, {'equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
+            Asset or strategy returns.
+        signals: pd.DataFrame or pd.Series, default None
+            Asset signals.
+        as_signal_returns: bool, default False
+            Whether to compute signal returns for the optimization.
+        method: str, {'equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random',
          'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification', 'efficient_return', 'efficient_risk',
           'risk_parity', 'hrp', 'herc'}, default 'equal_weight'
             Optimization method to compute weights.
@@ -73,7 +79,8 @@ class PortfolioOptimization:
             Leverage factor.
         risk_aversion: float, default 1.0
             Risk aversion factor.
-        exp_ret_method: str, default 'mean'
+        exp_ret_method: str, {'historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
+        'rolling_sharpe', 'rolling_sortino'}, default 'historical_mean'
             Method to compute the expected returns.
         cov_matrix_method: str, default 'covariance'
             Method to compute the covariance matrix.
@@ -109,6 +116,8 @@ class PortfolioOptimization:
             Additional keyword arguments.
         """
         self.returns = returns
+        self.signals = signals
+        self.as_signal_returns = as_signal_returns
         self.method = method
         self.lags = lags
         self.risk_free_rate = risk_free_rate
@@ -134,44 +143,76 @@ class PortfolioOptimization:
         self.side_weights = side_weights
         self.solver = solver
         self.kwargs = kwargs
-        self.freq = None
-        self.signal_returns = None
+
         self.weights = None
-        self.optimizer = None
-        self.weighted_signals = None
         self.t_costs = None
         self.gross_returns = None
-        self.portfolio_ret = pd.DataFrame()
-        self.check_method()
+        self.net_returns = None
+        self.portfolio_returns = pd.DataFrame()  # sum of net returns
+        self.optimizer = None
 
-    def check_method(self) -> None:
+        self._preprocess_data()
+        self._check_methods()
+        self._compute_signal_returns()
+        self._get_optimizer(self.signal_returns) if as_signal_returns \
+            else self._get_optimizer(self.returns)
+
+    def _preprocess_data(self) -> None:
         """
-        Check if the method is valid.
+        Preprocess the data for the portfolio optimization.
         """
-        # method
-        if self.method not in self.available_optimizers:
-            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance',"
-                             "'inverse_vol', 'target_vol', 'random', 'min_vol', 'max_return_min_vol', "
-                             "'max_sharpe', 'max_diversification', 'efficient_return', 'efficient_risk', "
-                             "'risk_parity', 'hrp', 'herc'")
+        def validate_data(data, name):
+            if not isinstance(data, (pd.DataFrame, pd.Series)):
+                raise ValueError(f"{name} must be a pd.DataFrame or pd.Series")
+
+            if isinstance(data, pd.Series) and isinstance(data.index, pd.MultiIndex):
+                data = data.unstack()
+            elif isinstance(data, pd.DataFrame) and isinstance(data.index, pd.MultiIndex):
+                if data.shape[1] > 1:
+                    raise ValueError(
+                        f"{name} must be a single index pd.DataFrame or a multi-index pd.DataFrame with a single column")
+                data = data.unstack()
+            elif isinstance(data, pd.DataFrame) and data.shape[1] == 1:
+                data = data.squeeze()  # Convert to Series
+
+            if not isinstance(data.index, pd.DatetimeIndex):
+                data.index = pd.to_datetime(data.index)
+
+            return data
+
+        # validate and preprocess returns
+        self.returns = validate_data(self.returns, "Returns")
+
+        # validate and preprocess signals
+        if self.signals is not None:
+            self.signals = validate_data(self.signals, "Signals")
 
     @classmethod
     def get_available_optimizers(cls):
         """Returns a list of available optimizer names."""
         return cls.available_optimizers
 
-    def get_optimizer(self, returns: pd.DataFrame) -> Any:
+    def _check_methods(self) -> None:
+        """
+        Check if the method is valid.
+        """
+        # method
+        if self.method not in self.available_optimizers:
+            raise ValueError(f"'{self.method}' is not an available optimizer. "
+                             f"Choose from {self.available_optimizers}")
+
+    def _get_optimizer(self, returns: Union[pd.DataFrame, pd.Series]) -> Any:
         """
         Optimization algorithm.
         """
         # naive optimization
-        if self.method in ['equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
-            self.optimizer = NaiveOptimization(returns, method=self.method, leverage=self.leverage,
-                                               target_vol=self.target_risk, **self.kwargs)
+        if self.method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
+            self.optimizer = NaiveOptimization(returns, signals=self.signals, method=self.method,
+                                               leverage=self.leverage, target_vol=self.target_risk, **self.kwargs)
 
         # mean variance optimization
-        elif self.method in ['min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification', 'efficient_return',
-                             'efficient_risk', 'risk_parity']:
+        elif self.method in ['max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
+                             'efficient_return', 'efficient_risk', 'risk_parity']:
             self.optimizer = MVO(returns, method=self.method, max_weight=self.max_weight, min_weight=self.min_weight,
                                  budget=self.leverage, risk_aversion=self.risk_aversion,
                                  risk_free_rate=self.risk_free_rate, as_excess_returns=self.as_excess_returns,
@@ -190,26 +231,37 @@ class PortfolioOptimization:
                                   cov_matrix_method=self.cov_matrix_method, leverage=self.leverage, **self.kwargs)
 
         else:
-            raise ValueError("Method is not supported. Valid methods are: 'equal_weight', 'inverse_variance',"
-                             "'inverse_vol', 'target_vol', 'random', 'min_vol', 'max_return_min_vol', "
-                             "'max_sharpe', 'max_diversification', 'efficient_return', 'efficient_risk', 'risk_parity',"
-                             " 'hrp', 'herc'")
+            raise ValueError(f"Method is not supported. Valid methods are: {self.available_optimizers}")
 
         return self.optimizer
 
-    def compute_fixed_weights(self) -> pd.DataFrame:
+    def _compute_signal_returns(self) -> pd.DataFrame:
+        """
+        Compute signal returns.
+
+        Returns
+        -------
+        signal_returns: pd.DataFrame
+            Signal returns.
+        """
+        # signal returns
+        if self.signals is not None and self.as_signal_returns:
+
+            lagged_signals = self.signals.shift(self.lags)
+            self.signal_returns = lagged_signals.mul(self.returns, axis=0).dropna(how='all')
+
+            return self.signal_returns
+
+    def _compute_fixed_weights(self) -> pd.DataFrame:
         """
         Compute optimal weights.
         """
-        # initialize optimization
-        self.get_optimizer(self.returns)
-
         # compute weights
         self.weights = self.optimizer.compute_weights()
 
         return self.weights.astype(float).fillna(0)
 
-    def compute_expanding_window_weights(self) -> pd.DataFrame:
+    def _compute_expanding_window_weights(self) -> pd.DataFrame:
         """
         Compute expanding window weights.
 
@@ -219,11 +271,14 @@ class PortfolioOptimization:
             Expanding weights.
         """
         # dates
-        dates = self.get_optimizer(self.returns).returns.index[self.window_size - 1:]
+        dates = self.optimizer.returns.index[self.window_size - 1:]
 
         def compute_weights_for_date(end_date):
-            data_window = self.returns.loc[:end_date]
-            self.get_optimizer(data_window)
+            if self.as_signal_returns:
+                ret_window = self.signal_returns.loc[:end_date]
+            else:
+                ret_window = self.returns.loc[:end_date]
+            self._get_optimizer(ret_window)
             w = self.optimizer.compute_weights()
             return w
 
@@ -238,7 +293,7 @@ class PortfolioOptimization:
 
         return self.weights
 
-    def compute_rolling_window_weights(self) -> pd.DataFrame:
+    def _compute_rolling_window_weights(self) -> pd.DataFrame:
         """
         Compute rolling window weights.
 
@@ -248,12 +303,15 @@ class PortfolioOptimization:
             Rolling weights.
         """
         # dates
-        dates = self.get_optimizer(self.returns).returns.index[self.window_size - 1:]
+        dates = self.optimizer.returns.index[self.window_size - 1:]
 
         def compute_weights_for_date(end_date):
             loc_end = self.returns.index.get_loc(end_date)
-            data_window = self.returns.iloc[loc_end + 1 - self.window_size: loc_end + 1]
-            self.get_optimizer(data_window)
+            if self.as_signal_returns:
+                ret_window = self.signal_returns.iloc[loc_end + 1 - self.window_size: loc_end + 1]
+            else:
+                ret_window = self.returns.iloc[loc_end + 1 - self.window_size: loc_end + 1]
+            self._get_optimizer(ret_window)
             w = self.optimizer.compute_weights()
             return w
 
@@ -268,19 +326,34 @@ class PortfolioOptimization:
 
         return self.weights
 
-    def get_weights(self) -> pd.DataFrame:
+    def compute_weights(self) -> pd.DataFrame:
         """
         Compute optimal weights.
         """
-        if self.window_type == 'expanding':
-            self.weights = self.compute_expanding_window_weights()
-        elif self.window_type == 'rolling':
-            self.weights = self.compute_rolling_window_weights()
+        if self.method in ['equal_weight', 'signal_weight']:
+            self._compute_fixed_weights()
         else:
-            self.compute_fixed_weights()
+            if self.window_type == 'expanding':
+                self.weights = self._compute_expanding_window_weights()
+            elif self.window_type == 'rolling':
+                self.weights = self._compute_rolling_window_weights()
+            else:
+                self._compute_fixed_weights()
 
-        # lag weights
-        self.weights = self.weights.shift(self.lags).dropna(how='all')
+        # adjust weights for signals
+        if self.signals is not None:
+            if self.method != 'signal_weight':
+                if isinstance(self.signals.index, pd.MultiIndex):
+                    self.weights = self.weights * self.signals.unstack()
+                else:
+                    self.weights = self.weights * self.signals
+            # cap weights
+            self.weights = self.weights.clip(lower=self.max_weight * -1, upper=self.max_weight)
+        else:
+            self.weights = self.weights.clip(lower=self.min_weight, upper=self.max_weight)
+
+        # re-normalize weights
+        self.weights = self.weights.div(self.weights.abs().sum(axis=1), axis=0) * self.leverage
 
         return self.weights
 
@@ -338,76 +411,74 @@ class PortfolioOptimization:
 
         return self.t_costs
 
-    def compute_portfolio_returns(self) -> pd.DataFrame:
+    def compute_gross_returns(self) -> pd.DataFrame:
         """
-        Computes portfolio returns from the asset/strategy returns and weights.
+        Compute gross returns.
+
+        Returns
+        -------
+        gross_returns: pd.DataFrame
+            Gross returns.
+        """
+        if isinstance(self.returns.index, pd.MultiIndex):
+            self.gross_returns = self.weights * self.returns.unstack()
+        else:
+            self.gross_returns = self.weights * self.returns
+
+        return self.gross_returns
+
+    def compute_net_returns(self) -> pd.DataFrame:
+        """
+        Compute net returns.
+
+        Returns
+        -------
+        net_returns: pd.DataFrame
+            Net returns.
+        """
+        self.net_returns = self.gross_returns.subtract(self.t_costs, axis=0).dropna(how='all')
+
+        return self.net_returns
+
+    def compute_portfolio_returns(self, portfolio_name: Optional[str] = None) -> pd.DataFrame:
+        """
+        Compute portfolio returns for a single index dataframe of asset/strategy returns.
+
+        Parameters
+        ----------
+        portfolio_name: str, default None
+            Portfolio name.
 
         Returns
         -------
         portfolio_ret: pd.DataFrame
             Portfolio returns.
         """
-        # TODO: add progress bar
+        # get weights
+        self.compute_weights()
 
-        # copy returns
-        rets = self.returns.copy()
-        # df for weights reset
-        w = pd.DataFrame()
+        # lag weights
+        self.weights = self.weights.shift(self.lags)
 
-        # multi-index
-        if isinstance(rets.index, pd.MultiIndex):
+        # rebalance portfolio
+        self.rebalance_portfolio()
 
-            # iterate over columns
-            for col in rets.columns:
-                # get unstacked returns for each column
-                self.returns = rets[col].unstack()
+        # t-costs
+        self.compute_tcosts()
 
-                # get weights
-                self.get_weights()
+        # compute gross returns
+        self.compute_gross_returns()
 
-                # rebalance portfolio
-                self.rebalance_portfolio()
+        # compute net returns
+        self.compute_net_returns()
 
-                # t-costs
-                self.compute_tcosts()
+        # compute portfolio returns
+        if portfolio_name is None:
+            portfolio_name = 'portfolio'
 
-                # compute gross returns
-                self.gross_returns = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
+        self.portfolio_returns = self.net_returns.sum(axis=1).to_frame(portfolio_name)
 
-                # compute net returns
-                portfolio_ret = self.gross_returns.subtract(self.t_costs, axis=0).dropna(how='all')
-
-                # compute portfolio returns
-                self.portfolio_ret = pd.concat([self.portfolio_ret,
-                                                portfolio_ret.sum(axis=1).to_frame(col)], axis=1)
-
-                # weights
-                w = pd.concat([w, self.weights.stack(future_stack=True).to_frame(col)], axis=1)
-
-            # reset weights
-            self.weights = w
-
-        # single index
-        else:
-            # get weights
-            self.get_weights()
-
-            # rebalance portfolio
-            self.rebalance_portfolio()
-
-            # t-costs
-            self.compute_tcosts()
-
-            # compute gross returns
-            self.gross_returns = self.weights.mul(self.returns.reindex(self.weights.index), axis=0)
-
-            # compute net returns
-            self.portfolio_ret = self.gross_returns.subtract(self.t_costs, axis=0).dropna(how='all')
-
-            # compute portfolio returns
-            self.portfolio_ret = self.portfolio_ret.sum(axis=1).to_frame('portfolio')
-
-        return self.portfolio_ret
+        return self.portfolio_returns
 
     def plot_weights(self, plot_type: str = 'bar'):
         """
