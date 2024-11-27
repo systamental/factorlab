@@ -17,6 +17,7 @@ class MVO:
     using mean-variance optimization techniques.
 
     The mean-variance optimization problem can be solved using the following methods:
+    - Maximum return
     - Minimum volatility
     - Maximum return minimum volatility
     - Maximum Sharpe ratio
@@ -27,7 +28,7 @@ class MVO:
     """
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series],
-                 method: str = 'max_return_min_vol',
+                 method: str = 'max_return',
                  max_weight: float = 1.0,
                  min_weight: float = 0.0,
                  budget: float = 1.0,
@@ -100,6 +101,7 @@ class MVO:
         self.ann_factor = ann_factor
         self.solver = solver
         self.kwargs = kwargs
+
         self.freq = None
         self.n_assets = None
         self.weights = None
@@ -150,7 +152,7 @@ class MVO:
 
         # exp_ret_method
         if self.exp_ret_method is None:
-            self.exp_ret_method = 'mean'
+            self.exp_ret_method = 'historical_mean'
 
         # cov_matrix_method
         if self.cov_matrix_method is None:
@@ -205,13 +207,10 @@ class MVO:
         Compute estimators.
         """
         # expected returns
-        if self.method == 'max_sharpe':
-            self.exp_ret = ReturnEstimators(self.returns, method=self.exp_ret_method, as_excess_returns=True,
-                                            risk_free_rate=self.risk_free_rate, ann_factor=self.ann_factor,
-                                            window_size=window_size).compute_expected_returns().values
-        else:
-            self.exp_ret = ReturnEstimators(self.returns, method=self.exp_ret_method, ann_factor=self.ann_factor,
-                                        window_size=window_size).compute_expected_returns().values
+        self.exp_ret = ReturnEstimators(
+            self.returns, method=self.exp_ret_method, as_excess_returns=self.as_excess_returns,
+            risk_free_rate=self.risk_free_rate, ann_factor=self.ann_factor, window_size=window_size
+        ).compute_expected_returns().values
 
         # covariance matrix
         self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method=self.cov_matrix_method)
