@@ -666,6 +666,7 @@ class TimeSeriesAnalysis:
 
         return self.results
 
+    # TODO: fix bug in TSA rolling regression for multivariate regression, missing param output
     def rolling_ols(self,
                     output: str = 'predict',
                     cov_type: Optional[str] = 'nonrobust',
