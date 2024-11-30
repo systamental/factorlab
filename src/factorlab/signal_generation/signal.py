@@ -590,8 +590,8 @@ class Signal:
         self.factors = None
         factors = pd.concat([ts_factors, cs_factors], axis=1, join='inner')
         for factor in ts_factors.columns:
-            self.factors = pd.concat([self.factors, getattr(factors[factor],
-                                                            summary_stat)(axis=1).to_frame(factor)], axis=1)
+            self.factors = pd.concat([self.factors,
+                                      getattr(factors[factor], summary_stat)(axis=1).to_frame(factor)], axis=1)
 
         # compute dual signals
         self.strategy = 'dual'
