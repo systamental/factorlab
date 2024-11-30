@@ -359,6 +359,32 @@ class TestTrend:
         assert actual.columns[0].split('_')[1] == 'mom'
         assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
 
+    def test_alpha_ewma(self) -> None:
+        """
+        Test alpha_ewma method.
+        """
+        # get actual
+        actual = self.trend_instance.alpha_ewma()
+
+        # values
+        assert not actual.isin([np.inf, -np.inf]).any().any()
+
+        # shape
+        assert actual.shape[1] == 1
+        assert actual.shape[0] == self.trend_instance.df.shape[0]
+
+        # dtypes
+        assert isinstance(actual, pd.DataFrame)
+        assert all(actual.dtypes == np.float64)
+
+        # index
+        assert (actual.index == self.trend_instance.df.index).all()
+
+        # cols
+        assert actual.columns[0].split('_')[0] == 'alpha'
+        assert actual.columns[0].split('_')[1] == 'ewma'
+        assert actual.columns[0].split('_')[-1] == str(self.trend_instance.window_size)
+
     def test_rsi(self) -> None:
         """
         Test rsi method.
