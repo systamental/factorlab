@@ -1,18 +1,10 @@
 [tool.poetry]
 name = "factorlab"
-version = "0.1.13"
+version = "0.1.15"
 description = "Python library which enables the discovery and analysis of alpha and risk factors used in the investment algorithm development process"
 authors = ["Systamental"]
 license = "Apache License 2.0"
 readme = "README.md"
-
-# Trend class, added signal bool param to breakout method
-# added available methods
-# added gen_factor_name method
-# refactored tripple_ewma_diff to convert window_size (span) param to half-life
-
-# PortfolioOptimization, added signals argument and weights attribute
-
 
 [tool.poetry.dependencies]
 python = ">=3.9"
