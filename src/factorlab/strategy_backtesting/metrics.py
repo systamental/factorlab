@@ -569,10 +569,11 @@ class Metrics:
         if self.window_type == 'rolling' or self.window_type == 'expanding':
             beta_ret = beta.beta * self.returns.stack()
         else:
-            beta_ret = beta.beta * self.returns.stack().groupby('ticker').mean() * self.ann_factor
+            beta_ret = beta.beta * self.returns.mean()
 
         # col name
-        beta_ret = beta_ret.to_frame('beta_ret')
+        if isinstance(beta_ret, pd.Series):
+            beta_ret = beta_ret.to_frame('beta_ret')
 
         return beta_ret
 
@@ -651,13 +652,11 @@ class Metrics:
         """
         beta_ret = self.beta_returns()
 
+        # alpha returns, alpha_ret = returns - beta_returns
         if self.window_type == 'rolling' or self.window_type == 'expanding':
-            alpha_ret = self.returns.stack() - beta_ret.beta_ret
+            alpha_ret = self.returns.stack().to_frame('alpha_ret') - beta_ret.rename(columns={'beta_ret': 'alpha_ret'})
         else:
-            alpha_ret = None
-
-        # col name
-        alpha_ret = alpha_ret.to_frame('alpha_ret')
+            alpha_ret = self.returns.mean().to_frame('alpha_ret') - beta_ret.rename(columns={'beta_ret': 'alpha_ret'})
 
         return alpha_ret
 
@@ -670,4 +669,16 @@ class Metrics:
         ar: float, pd.Series or pd.DataFrame
             Appraisal ratio.
         """
-        pass
+        alpha_ret = self.alpha()
+
+        if self.window_type == 'rolling':
+            ar = (getattr(alpha_ret, self.window_type)(window=self.window_size).mean() /
+                  getattr(alpha_ret, self.window_type)(window=self.window_size).std()) * np.sqrt(self.ann_factor)
+
+        elif self.window_type == 'expanding':
+            ar = (getattr(alpha_ret, self.window_type)().mean() /
+                  getattr(alpha_ret, self.window_type)().std()) * np.sqrt(self.ann_factor)
+        else:
+            ar = (alpha_ret.mean() / alpha_ret.std()) * np.sqrt(self.ann_factor)
+
+        return ar
