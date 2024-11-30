@@ -403,6 +403,57 @@ class Trend:
 
         return self.trend
 
+    def alpha_ewma(self) -> pd.DataFrame:
+        """
+        Exponential weighted moving average of the alpha returns from a linear regression of price
+        on the market portfolio.
+
+        Returns
+        -------
+        alpha: pd.DataFrame
+            DataFrame with DatetimeIndex and alpha values (cols).
+       """
+        # check df index
+        if isinstance(self.price.index, pd.MultiIndex) and self.price.shape[1] > 1:
+            raise ValueError("Select a price series/col.")
+        elif not isinstance(self.price.index, pd.MultiIndex):
+            self.price = self.price.stack().to_frame()
+            self.price.index.names = ['date', 'ticker']
+
+        # compute ret
+        ret = self.price.groupby(level=1, group_keys=False).diff()
+
+        # compute mean ret for all assets
+        mkt_ret = ret.groupby(level=0).mean().reindex(ret.index, level=0)
+
+        # fit linear regression
+        beta = TSA(ret, mkt_ret, trend='c', window_type='rolling',
+                   window_size=self.window_size).linear_regression(output='params')
+
+        # compute alpha returns
+        beta = beta.iloc[:, 1:]
+        beta_ret = beta.squeeze() * ret.squeeze()
+        alpha_ret = ret.squeeze() - beta_ret
+
+        # normalize
+        if self.normalize:
+            self.compute_dispersion()
+            alpha_ret = alpha_ret.squeeze() / self.disp.squeeze()
+
+        # smoothing
+        self.trend = Transform(alpha_ret).smooth(self.window_size,
+                                                 window_type='ewm',
+                                                 **self.kwargs)
+
+        # single index
+        if isinstance(self.df.index, pd.MultiIndex) is False:
+            self.trend = self.trend.iloc[:, 0].unstack()
+
+        # rename cols
+        self.gen_factor_name()
+
+        return self.trend
+
     def rsi(self, signal: bool = True) -> pd.DataFrame:
         """
         Computes the RSI indicator.
