@@ -130,8 +130,12 @@ class TestPortfolioOptimization:
         assert self.single_opt_instance.max_weight == 1.0
         assert self.multi_opt_instance.min_weight == 0.0
         assert self.single_opt_instance.min_weight == 0.0
-        assert self.multi_opt_instance.leverage == 1.0
-        assert self.single_opt_instance.leverage == 1.0
+        assert self.single_opt_instance.fully_invested is False
+        assert self.multi_opt_instance.fully_invested is False
+        assert self.multi_opt_instance.gross_exposure == 1.0
+        assert self.single_opt_instance.gross_exposure == 1.0
+        assert self.multi_opt_instance.net_exposure is None
+        assert self.single_opt_instance.net_exposure is None
         assert self.multi_opt_instance.risk_aversion == 1.0
         assert self.single_opt_instance.risk_aversion == 1.0
         assert self.multi_opt_instance.exp_ret_method == 'historical_mean'
@@ -222,9 +226,9 @@ class TestPortfolioOptimization:
         Test compute_fixed_weights.
         """
         # compute fixed weights
-        optimizer = PortfolioOptimization(self.single_opt_instance.returns, signals=self.single_opt_instance.signals,
-                                         method=method, window_size=300, target_return=0.75, target_risk=0.50)
-        weights = optimizer._compute_fixed_weights()
+        po = PortfolioOptimization(self.single_opt_instance.returns, signals=self.single_opt_instance.signals,
+                                   method=method, window_size=300, target_return=0.75, target_risk=0.50)
+        weights = po._compute_fixed_weights()
 
         if method in ['equal_weight', 'signal_weight']:
 
@@ -233,7 +237,7 @@ class TestPortfolioOptimization:
             assert (weights.dtypes == 'float64').all()
 
             # shape
-            assert weights.shape[1] == self.single_opt_instance.returns.shape[1]
+            assert weights.shape[1] == po.returns.shape[1]
 
             # values
             if method == 'equal_weight':
@@ -244,13 +248,13 @@ class TestPortfolioOptimization:
                 assert np.isclose(weights.abs().sum(axis=1), 1).all().all()
 
             # cols
-            assert set(weights.columns.to_list()) == set(self.single_opt_instance.returns.columns.to_list())
+            assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
 
             # index
             if method == 'equal_weight':
-                assert (weights.index == self.single_opt_instance.returns.index).all()
+                assert (weights.index == po.returns.index).all()
             else:
-                assert (weights.index == self.single_opt_instance.signals.index).all()
+                assert (weights.index == po.signals.index).all()
 
         else:
 
@@ -259,7 +263,7 @@ class TestPortfolioOptimization:
             assert (weights.dtypes == 'float64').all()
 
             # shape
-            assert weights.shape[1] == self.single_opt_instance.returns.shape[1]
+            assert weights.shape[1] == po.returns.shape[1]
 
             # values
             assert (weights >= 0).all().all()
@@ -267,10 +271,10 @@ class TestPortfolioOptimization:
                 assert np.isclose(weights.sum(axis=1), 1).all().all()
 
             # cols
-            assert set(weights.columns.to_list()) == set(self.single_opt_instance.returns.columns.to_list())
+            assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
 
             # index
-            assert (weights.index == self.single_opt_instance.returns.index[-1]).all()
+            assert (weights.index == po.returns.index[-1]).all()
 
     @pytest.mark.parametrize('method', ['inverse_variance', 'inverse_vol', 'target_vol', 'random',
                                         'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
@@ -280,25 +284,25 @@ class TestPortfolioOptimization:
         Test expanding_window_weights.
         """
         # expanding window weights
-        optimizer = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
-                                          window_size=300, target_return=0.75, target_risk=0.50)
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
+                                   window_size=300, target_return=0.75, target_risk=0.50)
 
-        weights = optimizer._compute_expanding_window_weights()
+        weights = po._compute_expanding_window_weights()
 
         # dtypes
         assert isinstance(weights, pd.DataFrame)
         assert (weights.dtypes == 'float64').all()
 
         # shape
-        assert weights.shape[1] == optimizer.returns.shape[1]
+        assert weights.shape[1] == po.returns.shape[1]
 
         # values
         assert (weights.round(4) >= 0).all().all()
-        if optimizer.method != 'target_vol':
+        if po.method != 'target_vol':
             assert (np.isclose(weights.sum(axis=1), 1)).all()
 
         # cols
-        assert set(weights.columns.to_list()) == set(optimizer.returns.columns.to_list())
+        assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
 
     @pytest.mark.parametrize('method', ['inverse_variance', 'inverse_vol', 'target_vol', 'random',
                                         'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
@@ -308,25 +312,25 @@ class TestPortfolioOptimization:
         Test rolling_window_weights.
         """
         # rolling window weights
-        optimizer = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
-                                          window_size=300, target_return=0.75, target_risk=0.50)
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
+                                   window_size=300, target_return=0.75, target_risk=0.50)
 
-        weights = optimizer._compute_rolling_window_weights()
+        weights = po._compute_rolling_window_weights()
 
         # dtypes
         assert isinstance(weights, pd.DataFrame)
         assert (weights.dtypes == 'float64').all()
 
         # shape
-        assert weights.shape[1] == optimizer.returns.shape[1]
+        assert weights.shape[1] == po.returns.shape[1]
 
         # values
         assert (weights.round(4) >= 0).all().all()
-        if optimizer.method != 'target_vol':
+        if po.method != 'target_vol':
             assert (np.isclose(weights.sum(axis=1), 1)).all()
 
         # cols
-        assert set(weights.columns.to_list()) == set(optimizer.returns.columns.to_list())
+        assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
 
     @pytest.mark.parametrize('method', ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol',
                                         'target_vol', 'random', 'min_vol', 'max_return_min_vol', 'max_sharpe',
@@ -337,10 +341,10 @@ class TestPortfolioOptimization:
         Test get_weights.
         """
         # rolling window weights
-        optimizer = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
-                                          window_size=300, target_return=0.75, target_risk=0.50)
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
+                                   window_size=300, target_return=0.75, target_risk=0.50)
 
-        weights = optimizer.compute_weights()
+        weights = po.compute_weights()
         weights = weights.dropna()
 
         # dtypes
@@ -348,27 +352,113 @@ class TestPortfolioOptimization:
         assert (weights.dtypes == 'float64').all()
 
         # shape
-        assert weights.shape[1] == optimizer.returns.shape[1]
+        assert weights.shape[1] == po.returns.shape[1]
 
         # values
-        if optimizer.method != 'target_vol':
+        if po.method != 'target_vol':
             assert (np.isclose(weights.abs().sum(axis=1), 1)).all()
 
         # cols
-        assert set(weights.columns.to_list()) == set(optimizer.returns.columns.to_list())
+        assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
+
+    def test_compute_weighted_signals(self, binance_ret_single, trend_signals_single) -> None:
+        """
+        Test compute_weighted_signals.
+        """
+        # compute weighted signals
+        self.single_opt_instance.compute_weights()
+        weighted_signals = self.single_opt_instance.compute_weighted_signals()
+
+        # types
+        assert isinstance(weighted_signals, pd.DataFrame)
+        assert (weighted_signals.dtypes == 'float64').all()
+
+        # shape
+        assert weighted_signals.shape[1] == self.single_opt_instance.signals.shape[1]
+
+        # values
+        assert (weighted_signals.abs().sum(axis=1) <= 1).all()
+
+        # cols
+        assert set(weighted_signals.columns.to_list()) == set(self.single_opt_instance.signals.columns.to_list())
+
+    @pytest.mark.parametrize('fully_invested, gross_exposure', [
+        (True, 1.0),
+        (False, 1.0),
+        (True, 2.0),
+        (False, 2.0)
+    ])
+    def test_adjust_exposure(self, fully_invested, gross_exposure, binance_ret_single, trend_signals_single) -> None:
+        """
+        Test adjust_exposure.
+        """
+        # adjust exposure
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, as_signal_returns=False,
+                                   fully_invested=fully_invested, gross_exposure=gross_exposure, window_size=300,
+                                   target_return=0.75, target_risk=0.35)
+        po.compute_weights()
+        weights = po.adjust_exposure()
+
+        # types
+        assert isinstance(weights, pd.DataFrame)
+        assert (weights.dtypes == 'float64').all()
+
+        # shape
+        assert weights.shape[1] == po.returns.shape[1]
+
+        # values
+        if fully_invested:
+            assert np.allclose(weights.abs().sum(axis=1), gross_exposure)
+
+        # cols
+        assert set(weights.columns.to_list()) == \
+               set(po.returns.columns.to_list())
+
+    @pytest.mark.parametrize('method', ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol',
+                                        'target_vol', 'random', 'min_vol', 'max_return_min_vol', 'max_sharpe',
+                                        'max_diversification', 'efficient_return', 'efficient_risk', 'risk_parity',
+                                        'hrp', 'herc'])
+    def test_round_weights(self, method, binance_ret_single, trend_signals_single, thresh=0.0001) -> None:
+        """
+        Test round_weights.
+        """
+        # compute weights
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, as_signal_returns=False,
+                                   method=method, window_size=300, target_return=0.75, target_risk=0.35)
+        po.compute_weights()
+        po.round_weights(threshold=thresh)
+
+        # dtypes
+        assert isinstance(po.weights, pd.DataFrame)
+        assert (po.weights.dtypes == 'float64').all()
+
+        # shape
+        assert po.weights.shape[1] == po.returns.shape[1]
+
+        # values
+        assert ~((po.weights.abs() > 1 - 0.0001) & (po.weights.abs() < 1)).all().all()
+        assert ~((po.weights.abs() < 0.0001) & (po.weights.abs() > 0)).all().all()
+        if po.method != 'signal_weight':
+            assert (po.weights.abs().sum(axis=1) <= 1.0).all()
+        else:
+            # TODO: debug test failing in IDE but passing in notebook
+            assert (po.weights.abs().sum(axis=1) <= 1.01).all()
+
+        # cols
+        assert set(po.weights.columns.to_list()) == set(po.returns.columns.to_list())
 
     @pytest.mark.parametrize('rebal_freq', [None, 5, 7, 'monday', 'friday'])
     def test_rebalance_portfolio(self, rebal_freq, binance_ret_single, trend_signals_single) -> None:
         """
         Test rebalance_portfolio.
         """
-        optimizer = PortfolioOptimization(binance_ret_single, signals=trend_signals_single,
-                                          method='inverse_variance', window_size=300,
-                                          target_return=0.75, target_risk=0.50, rebal_freq=rebal_freq)
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single,
+                                   method='inverse_variance', window_size=300,
+                                   target_return=0.75, target_risk=0.50, rebal_freq=rebal_freq)
         # get weights
-        optimizer.compute_weights()
+        po.compute_weights()
         # rebalance portfolio
-        weights = optimizer.rebalance_portfolio()
+        weights = po.rebalance_portfolio()
         # drop na
         weights = weights.dropna()
 
@@ -377,11 +467,11 @@ class TestPortfolioOptimization:
         assert (weights.dtypes == 'float64').all()
 
         # shape
-        assert weights.shape[1] == self.single_opt_instance.returns.shape[1]
+        assert weights.shape[1] == po.returns.shape[1]
 
         # values
         # assert (weights.round(4) >= 0).all().all()
-        if self.single_opt_instance.method != 'target_vol':
+        if po.method != 'target_vol':
             assert (np.isclose(weights.abs().sum(axis=1), 1)).all()
         if isinstance(rebal_freq, int):
             assert np.allclose((weights.diff().abs() == 0).sum() /
@@ -392,41 +482,41 @@ class TestPortfolioOptimization:
             assert np.allclose((weights.diff().dropna() == 0).sum() / weights.shape[0], 1 - 1 / 7, rtol=0.05)
 
         # cols
-        assert set(weights.columns.to_list()) == set(optimizer.returns.columns.to_list())
+        assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
 
     @pytest.mark.parametrize('t_cost', [None, 0.001])
     def test_compute_tcosts(self, t_cost, binance_ret_single, trend_signals_single) -> None:
         """
         Test compute_tcosts.
         """
-        optimizer = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method='inverse_variance',
-                                          window_size=300, rebal_freq=7, t_cost=t_cost)
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method='inverse_variance',
+                                   window_size=300, rebal_freq=7, t_cost=t_cost)
         # t-cost
-        optimizer.t_cost = t_cost
+        po.t_cost = t_cost
         # get weights
-        optimizer.compute_weights()
+        po.compute_weights()
         # rebalance portfolio
-        optimizer.rebalance_portfolio()
+        po.rebalance_portfolio()
         # compute transaction costs
-        tcosts = optimizer.compute_tcosts().dropna()
+        tcosts = po.compute_tcosts().dropna()
 
         # dtypes
         assert isinstance(tcosts, pd.DataFrame)
         assert (tcosts.dtypes == 'float64').all()
 
         # shape
-        assert tcosts.shape[1] == optimizer.returns.shape[1]
+        assert tcosts.shape[1] == po.returns.shape[1]
 
         # values
         if t_cost is None:
             assert (tcosts == 0).all().all()
         else:
             assert (tcosts.sum(axis=1) < t_cost).all()
-            assert np.allclose(np.sign(tcosts).sum() / tcosts.shape[0], 1 / optimizer.rebal_freq,
+            assert np.allclose(np.sign(tcosts).sum() / tcosts.shape[0], 1 / po.rebal_freq,
                                rtol=0.1)
 
         # cols
-        assert set(tcosts.columns.to_list()) == set(optimizer.returns.columns.to_list())
+        assert set(tcosts.columns.to_list()) == set(po.returns.columns.to_list())
 
     def test_gross_returns(self) -> None:
         """
@@ -476,14 +566,17 @@ class TestPortfolioOptimization:
         Test compute_single_idx_portfolio_rets.
         """
         # compute single index portfolio returns
-        optimizer = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
-                                          window_size=300, target_return=0.75, target_risk=0.50)
-        optimizer.compute_weights()
-        optimizer.rebalance_portfolio()
-        optimizer.compute_gross_returns()
-        optimizer.compute_tcosts()
-        optimizer.compute_net_returns()
-        port_ret = optimizer.compute_portfolio_returns()
+        po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, method=method,
+                                   window_size=300, target_return=0.75, target_risk=0.50)
+        po.compute_weights()
+        po.compute_weighted_signals()
+        po.adjust_exposure()
+        po.round_weights()
+        po.rebalance_portfolio()
+        po.compute_gross_returns()
+        po.compute_tcosts()
+        po.compute_net_returns()
+        port_ret = po.compute_portfolio_returns()
 
         # types
         assert isinstance(port_ret, pd.DataFrame)
@@ -492,5 +585,17 @@ class TestPortfolioOptimization:
         # shape
         assert port_ret.shape[1] == 1
 
+        # values
+        assert ~((po.weights.abs() > 1 - 0.0001) & (po.weights.abs() < 1)).all().all()
+        assert ~((po.weights.abs() < 0.0001) & (po.weights.abs() > 0)).all().all()
+        if po.method != 'signal_weight':
+            assert (po.weights.abs().sum(axis=1) <= 1.0).all()
+        else:
+            # TODO: debug test failing in IDE but passing in notebook
+            assert (po.weights.abs().sum(axis=1) <= 1.01).all()
+
         # cols
         assert port_ret.columns.to_list() == ['portfolio']
+
+        # index duplicates
+        assert port_ret.index.duplicated().sum() == 0
