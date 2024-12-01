@@ -144,7 +144,7 @@ class Performance:
         if rank_on is not None:
             metrics_df = metrics_df.sort_values(by=rank_on, ascending=False)
 
-        return metrics_df.astype(float).round(decimals=2)
+        return metrics_df.astype(float).round(decimals=4)
 
     def compute_factor_exposure(self, factor_returns: pd.DataFrame, factor_exposures: pd.DataFrame) -> pd.DataFrame:
         """
