@@ -180,9 +180,10 @@ class PortfolioOptimization:
                     raise ValueError(
                         f"{name} must be a single index pd.DataFrame or "
                         f"a multi-index pd.DataFrame with a single column")
-                data = data.unstack()
-            elif isinstance(data, pd.DataFrame) and data.shape[1] == 1:
-                data = data.squeeze()  # Convert to Series
+                else:
+                    data = data.squeeze().unstack()
+            # elif isinstance(data, pd.DataFrame) and data.shape[1] == 1:
+            #     data = data.squeeze()  # Convert to Series
 
             if not isinstance(data.index, pd.DatetimeIndex):
                 data.index = pd.to_datetime(data.index)
