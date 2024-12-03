@@ -659,8 +659,13 @@ class Signal:
         if t_cost is None:
             t_costs = pd.DataFrame(data=0.0, index=self.signals.index, columns=self.signals.columns)
         # t-costs
+        elif isinstance(self.signals.index, pd.MultiIndex):
+            t_costs = self.signals.groupby(level=1).diff().abs() * t_cost
         else:
             t_costs = self.signals.diff().abs() * t_cost
+
+        # sort index
+        t_costs = t_costs.sort_index()
 
         return t_costs
 
