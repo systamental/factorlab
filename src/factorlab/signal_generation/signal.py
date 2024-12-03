@@ -602,6 +602,97 @@ class Signal:
 
         return self.signals
 
+    def rebalance_signal(self, rebal_freq: Optional[Union[str, int]] = None) -> pd.DataFrame:
+        """
+        Rebalance signals based on rebalancing frequency.
+
+        Returns
+        -------
+        signals: pd.DataFrame
+            Rebalanced portfolio weights with DatetimeIndex and weights (cols).
+        """
+        # frequency dictionary
+        freq_dict = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4, 'saturday': 5,
+                     'sunday': 6, '15th': 15, 'month_end': 'is_month_end', 'month_start': 'is_month_start'}
+
+        # rebalancing
+        if rebal_freq is not None:
+
+            if isinstance(self.signals.index, pd.MultiIndex):
+                signals = self.signals.unstack().copy()
+            else:
+                signals = self.signals.copy()
+
+            # day of the week
+            if rebal_freq in list(freq_dict.keys())[:7]:
+                rebal_df = signals[signals.index.dayofweek == freq_dict[rebal_freq]]
+            # mid-month
+            elif rebal_freq == '15th':
+                rebal_df = signals[signals.index.day == 15]
+            # fixed period
+            elif isinstance(rebal_freq, int):
+                rebal_df = signals.iloc[::rebal_freq, :]
+            # month start, month end
+            else:
+                rebal_df = signals[getattr(signals.index, freq_dict[rebal_freq])]
+
+            # reindex and forward fill
+            signals = rebal_df.reindex(signals.index).ffill().dropna(how='all')
+
+            if isinstance(self.signals.index, pd.MultiIndex):
+                self.signals = signals.stack(future_stack=True)
+            else:
+                self.signals = signals
+
+            return self.signals
+
+    def compute_tcosts(self, t_cost: Optional[float] = None) -> pd.DataFrame:
+        """
+        Computes transactions costs from changes in weights.
+
+        Returns
+        -------
+        t_costs: pd.Series
+            Series with DatetimeIndex (level 0), tickers (level 1) and transaction costs (cols).
+        """
+        # no t-costs
+        if t_cost is None:
+            t_costs = pd.DataFrame(data=0.0, index=self.signals.index, columns=self.signals.columns)
+        # t-costs
+        else:
+            t_costs = self.signals.diff().abs() * t_cost
+
+        return t_costs
+
+    def compute_gross_returns(self) -> pd.DataFrame:
+        """
+        Compute gross returns.
+
+        Returns
+        -------
+        gross_returns: pd.DataFrame
+            Gross returns.
+        """
+        # concat signals and returns
+        df = pd.concat([self.signals, self.returns], axis=1, join='inner')
+        # multiply signals by returns
+        self.signal_rets = df.iloc[:, :-1].mul(df.iloc[:, -1].values, axis=0).dropna(how='all')
+
+        return self.signal_rets
+
+    def compute_net_returns(self, t_costs: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute net returns.
+
+        Returns
+        -------
+        net_returns: pd.DataFrame
+            Net returns.
+        """
+        self.signal_rets = self.signal_rets.subtract(t_costs, axis=0).dropna(how='all')
+
+        return self.signal_rets
+
     def compute_signal_returns(self,
                                summary_stat: str = 'mean',
                                signal_type: str = 'signal',
@@ -612,8 +703,10 @@ class Signal:
                                ts_norm: bool = False,
                                winsorize: int = 3,
                                leverage: Optional[int] = None,
-                               lags:  int = 1
-                               ):
+                               lags:  int = 1,
+                               rebal_freq: Optional[Union[str, int]] = None,
+                               t_cost: Optional[float] = None,
+                                 ) -> pd.DataFrame:
         """
         Compute the signal returns.
 
@@ -646,6 +739,10 @@ class Signal:
             Multiplies signals by leverage factor.
         lags: int, optional, default 1
             Number of periods to lag signals.
+        rebal_freq: str, optional, default None
+            Rebalancing frequency.
+        t_cost: float, optional, default None
+            Transaction costs.
 
         Returns
         -------
@@ -666,10 +763,17 @@ class Signal:
                                  norm_transformation=norm_transformation, centering=centering, ts_norm=ts_norm,
                                  winsorize=winsorize, leverage=leverage, lags=lags)
 
-        # concat signals and returns
-        df = pd.concat([self.signals, self.returns], axis=1, join='inner')
-        # multiply signals by returns
-        self.signal_rets = df.iloc[:, :-1].mul(df.iloc[:, -1].values, axis=0).dropna(how='all')
+        # rebalance signals
+        self.rebalance_signal(rebal_freq=rebal_freq)
+
+        # compute transaction costs
+        t_costs = self.compute_tcosts(t_cost=t_cost)
+
+        # compute gross returns
+        self.compute_gross_returns()
+
+        # compute net returns
+        self.compute_net_returns(t_costs=t_costs)
 
         return self.signal_rets
 
