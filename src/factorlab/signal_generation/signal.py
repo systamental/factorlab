@@ -464,62 +464,64 @@ class Signal:
         signals: pd.DataFrame
             DataFrame with DatetimeIndex (level 0), tickers (level 1) and computed signals (cols).
         """
-        # normalize
-        self.normalize_factors(method=norm_method, centering=centering, ts_norm=ts_norm, winsorize=winsorize)
-        # transform
-        self.transform_factors(method=norm_transformation)
-        # quantize
-        self.quantize_factors()
-        # rank
-        self.rank_factors()
-        # combine
-        self.combine_factors()
+        if self.signals is None:
 
-        # raw factors, signal_type None
-        if signal_type is None:
-            self.signals = self.factors
+            # normalize
+            self.normalize_factors(method=norm_method, centering=centering, ts_norm=ts_norm, winsorize=winsorize)
+            # transform
+            self.transform_factors(method=norm_transformation)
+            # quantize
+            self.quantize_factors()
+            # rank
+            self.rank_factors()
+            # combine
+            self.combine_factors()
 
-        # signals, signal_type 'signal'
-        elif signal_type == 'signal':
-            if self.normalize is False:
-                raise ValueError("Normalization must be enabled to compute signals. Set normalize=True.")
-            else:
-                self.factors_to_signals(transformation=transformation)
+            # raw factors, signal_type None
+            if signal_type is None:
+                self.signals = self.factors.copy()
 
-        # quantized signals, signal_type 'signal_quantiles'
-        elif signal_type == 'signal_quantiles':
-            if self.quantize is False:
-                raise ValueError("Quantization must be enabled to compute quantized signals. Set quantize=True.")
-            else:
-                self.quantiles_to_signals()
+            # signals, signal_type 'signal'
+            elif signal_type == 'signal':
+                if self.normalize is False:
+                    raise ValueError("Normalization must be enabled to compute signals. Set normalize=True.")
+                else:
+                    self.factors_to_signals(transformation=transformation)
 
-        # ranked signals, signal_type 'signal_rank'
-        elif signal_type == 'signal_ranks':
-            if self.rank is False:
-                raise ValueError("Ranking must be enabled to compute ranked signals. Set rank=True.")
-            else:
-                self.ranks_to_signals()
+            # quantized signals, signal_type 'signal_quantiles'
+            elif signal_type == 'signal_quantiles':
+                if self.quantize is False:
+                    raise ValueError("Quantization must be enabled to compute quantized signals. Set quantize=True.")
+                else:
+                    self.quantiles_to_signals()
 
-        # discrete signals
-        if self.signal == 'discrete':
-            self.discretize_signals()
+            # ranked signals, signal_type 'signal_rank'
+            elif signal_type == 'signal_ranks':
+                if self.rank is False:
+                    raise ValueError("Ranking must be enabled to compute ranked signals. Set rank=True.")
+                else:
+                    self.ranks_to_signals()
 
-        # filter signals for direction
-        if self.direction in ['long', 'short']:
-            self.filter_direction()
+            # discrete signals
+            if self.signal == 'discrete':
+                self.discretize_signals()
 
-        # leverage
-        if leverage is not None:
-            self.signals *= leverage
+            # filter signals for direction
+            if self.direction in ['long', 'short']:
+                self.filter_direction()
 
-        # lags
-        if lags is not None:
-            if isinstance(self.signals.index, pd.MultiIndex):
-                self.signals = self.signals.groupby(level=1).shift(lags)
-            else:
-                self.signals = self.signals.shift(lags)
+            # leverage
+            if leverage is not None:
+                self.signals *= leverage
 
-        return self.signals
+            # lags
+            if lags is not None:
+                if isinstance(self.signals.index, pd.MultiIndex):
+                    self.signals = self.signals.groupby(level=1).shift(lags)
+                else:
+                    self.signals = self.signals.shift(lags)
+
+            return self.signals
 
     def compute_dual_signals(self,
                              summary_stat: str = 'mean',
@@ -758,15 +760,16 @@ class Signal:
             raise ValueError("Returns must be provided to compute signal returns.")
 
         # compute signals
-        if self.strategy == 'dual':
-            self.compute_dual_signals(summary_stat=summary_stat, signal_type=signal_type, transformation=transformation,
-                                      norm_method=norm_method, norm_transformation=norm_transformation,
-                                      centering=centering, ts_norm=ts_norm, winsorize=winsorize, leverage=leverage,
-                                      lags=lags)
-        else:
-            self.compute_signals(signal_type=signal_type, transformation=transformation, norm_method=norm_method,
-                                 norm_transformation=norm_transformation, centering=centering, ts_norm=ts_norm,
-                                 winsorize=winsorize, leverage=leverage, lags=lags)
+        if self.signals is None:
+            if self.strategy == 'dual':
+                self.compute_dual_signals(summary_stat=summary_stat, signal_type=signal_type, transformation=transformation,
+                                          norm_method=norm_method, norm_transformation=norm_transformation,
+                                          centering=centering, ts_norm=ts_norm, winsorize=winsorize, leverage=leverage,
+                                          lags=lags)
+            else:
+                self.compute_signals(signal_type=signal_type, transformation=transformation, norm_method=norm_method,
+                                     norm_transformation=norm_transformation, centering=centering, ts_norm=ts_norm,
+                                     winsorize=winsorize, leverage=leverage, lags=lags)
 
         # rebalance signals
         self.rebalance_signal(rebal_freq=rebal_freq)
