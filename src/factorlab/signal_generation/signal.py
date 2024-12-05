@@ -521,7 +521,7 @@ class Signal:
                 else:
                     self.signals = self.signals.shift(lags)
 
-            return self.signals
+        return self.signals
 
     def compute_dual_signals(self,
                              summary_stat: str = 'mean',
@@ -589,7 +589,7 @@ class Signal:
                                           winsorize=winsorize, leverage=leverage, lags=lags)
 
         # compute dual factors
-        self.factors = None
+        self.factors, self.signals = None, None
         factors = pd.concat([ts_factors, cs_factors], axis=1, join='inner')
         for factor in ts_factors.columns:
             self.factors = pd.concat([self.factors,
@@ -604,7 +604,7 @@ class Signal:
 
         return self.signals
 
-    def rebalance_signal(self, rebal_freq: Optional[Union[str, int]] = None) -> pd.DataFrame:
+    def rebalance_signals(self, rebal_freq: Optional[Union[str, int]] = None) -> pd.DataFrame:
         """
         Rebalance signals based on rebalancing frequency.
 
@@ -642,11 +642,13 @@ class Signal:
             signals = rebal_df.reindex(signals.index).ffill().dropna(how='all')
 
             if isinstance(self.signals.index, pd.MultiIndex):
-                self.signals = signals.stack(future_stack=True)
+                signals = signals.stack(future_stack=True)
+                self.signals = signals.reindex(index=self.signals.index)
+
             else:
                 self.signals = signals
 
-            return self.signals
+        return self.signals
 
     def compute_tcosts(self, t_cost: Optional[float] = None) -> pd.DataFrame:
         """
@@ -681,7 +683,7 @@ class Signal:
             Gross returns.
         """
         # concat signals and returns
-        df = pd.concat([self.signals, self.returns], axis=1, join='inner')
+        df = pd.concat([self.signals, self.returns], axis=1)
         # multiply signals by returns
         self.signal_rets = df.iloc[:, :-1].mul(df.iloc[:, -1].values, axis=0).dropna(how='all')
 
@@ -713,7 +715,7 @@ class Signal:
                                lags:  int = 1,
                                rebal_freq: Optional[Union[str, int]] = None,
                                t_cost: Optional[float] = None,
-                                 ) -> pd.DataFrame:
+                               ) -> pd.DataFrame:
         """
         Compute the signal returns.
 
@@ -762,17 +764,17 @@ class Signal:
         # compute signals
         if self.signals is None:
             if self.strategy == 'dual':
-                self.compute_dual_signals(summary_stat=summary_stat, signal_type=signal_type, transformation=transformation,
-                                          norm_method=norm_method, norm_transformation=norm_transformation,
-                                          centering=centering, ts_norm=ts_norm, winsorize=winsorize, leverage=leverage,
-                                          lags=lags)
+                self.compute_dual_signals(summary_stat=summary_stat, signal_type=signal_type,
+                                          transformation=transformation, norm_method=norm_method,
+                                          norm_transformation=norm_transformation, centering=centering,
+                                          ts_norm=ts_norm, winsorize=winsorize, leverage=leverage, lags=lags)
             else:
                 self.compute_signals(signal_type=signal_type, transformation=transformation, norm_method=norm_method,
                                      norm_transformation=norm_transformation, centering=centering, ts_norm=ts_norm,
                                      winsorize=winsorize, leverage=leverage, lags=lags)
 
         # rebalance signals
-        self.rebalance_signal(rebal_freq=rebal_freq)
+        self.rebalance_signals(rebal_freq=rebal_freq)
 
         # compute transaction costs
         t_costs = self.compute_tcosts(t_cost=t_cost)

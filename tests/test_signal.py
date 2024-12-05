@@ -766,6 +766,7 @@ class TestSignal:
         Test compute_dual_signals method.
         """
         # get actual
+
         actual = self.dual_signal.compute_dual_signals()
 
         # shape
@@ -784,19 +785,89 @@ class TestSignal:
         # cols
         assert (actual.columns == self.dual_signal.factors.columns).all()
 
-    def test_compute_signal_returns(self):
+    @pytest.mark.parametrize('rebal_freq',
+                             [None, 5, 7, 'monday', 'friday']
+                             )
+    def test_rebalance_signals(self, rebal_freq):
         """
-        Test compute_signal_returns method.
+        Test rebalance_signals method.
         """
         # get actual
-        self.ts_signal.compute_signal_returns()
-        self.cs_signal.compute_signal_returns()
-        self.btc_signal.compute_signal_returns()
+        signals = self.ts_signal.compute_signals().unstack()
+        rebal_signals = self.ts_signal.rebalance_signals(rebal_freq=rebal_freq).unstack()
 
         # shape
-        assert self.ts_signal.signal_rets.shape == self.ts_signal.signals.dropna().shape
-        assert self.cs_signal.signal_rets.shape == self.cs_signal.signals.dropna().shape
-        assert self.btc_signal.signal_rets.shape == self.btc_signal.signals.dropna().shape
+        assert signals.shape == rebal_signals.shape
+
+        # values
+        assert ((rebal_signals.dropna() >= -1) &
+                (rebal_signals.dropna() <= 1)).all().all()
+
+        if isinstance(rebal_freq, int):
+            assert np.allclose((rebal_signals.diff().abs().dropna() == 0).sum() /
+                               rebal_signals.dropna().shape[0], 1 - 1 / rebal_freq, rtol=0.05)
+        elif rebal_freq is None:
+            assert signals.equals(rebal_signals)
+        else:
+            assert np.allclose((rebal_signals.diff().abs().dropna() == 0).sum() /
+                              rebal_signals.dropna().shape[0], 1 - 1 / 7, rtol=0.05)
+
+        # dtypes
+        assert isinstance(rebal_signals, pd.DataFrame)
+        assert (rebal_signals.dtypes == np.float64).all()
+
+        # index
+        assert (signals.index == rebal_signals.index).all()
+
+        # cols
+        assert (signals.columns == rebal_signals.columns).all()
+
+    @pytest.mark.parametrize('t_cost', [None, 0.001])
+    def test_compute_tcosts(self, t_cost):
+        """
+        Test compute_tcosts method.
+        """
+        # get actual
+        self.ts_signal.compute_signals()
+        self.ts_signal.rebalance_signals()
+        actual = self.ts_signal.compute_tcosts(t_cost=t_cost)
+
+        # shape
+        assert self.ts_signal.signals.shape == actual.shape
+
+        # values
+        if t_cost is not None:
+            assert (actual.dropna() <= t_cost * 2).all().all()
+        else:
+            assert (actual == 0).all().all()
+
+        # dtypes
+        assert isinstance(actual, pd.DataFrame)
+        assert (actual.dtypes == np.float64).all()
+
+        # index
+        assert (actual.index == self.ts_signal.signals.index).all()
+
+        # cols
+        assert (actual.columns == self.ts_signal.signals.columns).all()
+
+    def test_compute_gross_returns(self):
+        """
+        Test compute_gross_returns method.
+        """
+        # get actual
+        self.ts_signal.compute_signals()
+        self.cs_signal.compute_signals()
+        self.btc_signal.compute_signals()
+
+        self.ts_signal.compute_gross_returns()
+        self.cs_signal.compute_gross_returns()
+        self.btc_signal.compute_gross_returns()
+
+        # shape
+        assert self.ts_signal.signal_rets.shape[1] == self.ts_signal.signals.shape[1]
+        assert self.cs_signal.signal_rets.shape[1] == self.cs_signal.signals.shape[1]
+        assert self.btc_signal.signal_rets.shape[1] == self.btc_signal.signals.shape[1]
 
         # dtypes
         assert isinstance(self.ts_signal.signal_rets, pd.DataFrame)
@@ -811,14 +882,109 @@ class TestSignal:
                            self.btc_signal.signal_rets.dropna())
 
         # index
-        assert (self.ts_signal.signal_rets.index == self.ts_signal.signals.dropna().index).all()
-        assert (self.cs_signal.signal_rets.index == self.cs_signal.signals.dropna().index).all()
-        assert (self.btc_signal.signal_rets.index == self.btc_signal.signals.dropna().index).all()
+        assert (set(self.ts_signal.signal_rets.index.droplevel(0).unique()) ==
+                set(self.ts_signal.signals.index.droplevel(0).unique()))
+        assert (set(self.cs_signal.signal_rets.index.droplevel(0).unique()) ==
+                set(self.cs_signal.signals.index.droplevel(0).unique()))
 
         # cols
-        assert (self.ts_signal.signal_rets.columns == self.ts_signal.signals.dropna().columns).all()
-        assert (self.cs_signal.signal_rets.columns == self.cs_signal.signals.dropna().columns).all()
-        assert (self.btc_signal.signal_rets.columns == self.btc_signal.signals.dropna().columns).all()
+        assert (self.ts_signal.signal_rets.columns == self.ts_signal.signals.columns).all()
+        assert (self.cs_signal.signal_rets.columns == self.cs_signal.signals.columns).all()
+        assert (self.btc_signal.signal_rets.columns == self.btc_signal.signals.columns).all()
+
+    @pytest.mark.parametrize('t_cost', [None, 0.001])
+    def test_compute_net_returns(self, t_cost):
+        """
+        Test compute_net_returns method.
+        """
+        # get actual
+        self.ts_signal.compute_signals()
+        self.cs_signal.compute_signals()
+        self.btc_signal.compute_signals()
+
+        ts_signal_t_cost_df = self.ts_signal.compute_tcosts(t_cost=t_cost)
+        cs_signal_t_cost_df = self.cs_signal.compute_tcosts(t_cost=t_cost)
+        btc_signal_t_cost_df = self.btc_signal.compute_tcosts(t_cost=t_cost)
+
+        ts_signal_gross_rets = self.ts_signal.compute_gross_returns()
+        cs_signal_gross_rets = self.cs_signal.compute_gross_returns()
+        btc_signal_gross_rets = self.btc_signal.compute_gross_returns()
+
+        self.ts_signal.compute_net_returns(ts_signal_t_cost_df).sort_index()
+        self.cs_signal.compute_net_returns(cs_signal_t_cost_df).sort_index()
+        self.btc_signal.compute_net_returns(btc_signal_t_cost_df).sort_index()
+
+        # shape
+        assert self.ts_signal.signal_rets.shape[1] == self.ts_signal.signals.shape[1]
+        assert self.cs_signal.signal_rets.shape[1] == self.cs_signal.signals.shape[1]
+        assert self.btc_signal.signal_rets.shape[1] == self.btc_signal.signals.shape[1]
+
+        # dtypes
+        assert isinstance(self.ts_signal.signal_rets, pd.DataFrame)
+        assert isinstance(self.cs_signal.signal_rets, pd.DataFrame)
+        assert isinstance(self.btc_signal.signal_rets, pd.DataFrame)
+        assert (self.ts_signal.signal_rets.dtypes == np.float64).all()
+        assert (self.cs_signal.signal_rets.dtypes == np.float64).all()
+        assert (self.btc_signal.signal_rets.dtypes == np.float64).all()
+
+        # values
+        assert np.allclose(self.ts_signal.signal_rets.loc[pd.IndexSlice[:, 'BTC'], :].dropna(),
+                           self.btc_signal.signal_rets.dropna())
+        if t_cost is None:
+            assert (self.ts_signal.signal_rets.unstack().dropna().iloc[-300:].
+                    equals(ts_signal_gross_rets.unstack().dropna().iloc[-300:]))
+            assert (self.cs_signal.signal_rets.unstack().dropna().iloc[-300:].
+                    equals(cs_signal_gross_rets.unstack().dropna().iloc[-300:]))
+            assert (self.btc_signal.signal_rets.unstack().dropna().iloc[-300:].
+                    equals(btc_signal_gross_rets.unstack().dropna().iloc[-300:]))
+
+        # index
+        assert (set(self.ts_signal.signal_rets.index.droplevel(0).unique()) ==
+                set(self.ts_signal.signals.index.droplevel(0).unique()))
+        assert (set(self.cs_signal.signal_rets.index.droplevel(0).unique()) ==
+                set(self.cs_signal.signals.index.droplevel(0).unique()))
+
+        # cols
+        assert (self.ts_signal.signal_rets.columns == self.ts_signal.signals.columns).all()
+        assert (self.cs_signal.signal_rets.columns == self.cs_signal.signals.columns).all()
+        assert (self.btc_signal.signal_rets.columns == self.btc_signal.signals.columns).all()
+
+    def test_compute_signal_returns(self):
+        """
+        Test compute_signal_returns method.
+        """
+        # get actual
+        self.ts_signal.compute_signal_returns()
+        self.cs_signal.compute_signal_returns()
+        self.btc_signal.compute_signal_returns()
+
+        # shape
+        assert self.ts_signal.signal_rets.shape[1] == self.ts_signal.signals.shape[1]
+        assert self.cs_signal.signal_rets.shape[1] == self.cs_signal.signals.shape[1]
+        assert self.btc_signal.signal_rets.shape[1] == self.btc_signal.signals.shape[1]
+
+        # dtypes
+        assert isinstance(self.ts_signal.signal_rets, pd.DataFrame)
+        assert isinstance(self.cs_signal.signal_rets, pd.DataFrame)
+        assert isinstance(self.btc_signal.signal_rets, pd.DataFrame)
+        assert (self.ts_signal.signal_rets.dtypes == np.float64).all()
+        assert (self.cs_signal.signal_rets.dtypes == np.float64).all()
+        assert (self.btc_signal.signal_rets.dtypes == np.float64).all()
+
+        # values
+        assert np.allclose(self.ts_signal.signal_rets.loc[pd.IndexSlice[:, 'BTC'], :].dropna(),
+                           self.btc_signal.signal_rets.dropna())
+
+        # index
+        assert (set(self.ts_signal.signal_rets.index.droplevel(0).unique()) ==
+                set(self.ts_signal.signals.index.droplevel(0).unique()))
+        assert (set(self.cs_signal.signal_rets.index.droplevel(0).unique()) ==
+                set(self.cs_signal.signals.index.droplevel(0).unique()))
+
+        # cols
+        assert (self.ts_signal.signal_rets.columns == self.ts_signal.signals.columns).all()
+        assert (self.cs_signal.signal_rets.columns == self.cs_signal.signals.columns).all()
+        assert (self.btc_signal.signal_rets.columns == self.btc_signal.signals.columns).all()
 
     @pytest.mark.parametrize("method", ['sign', 'std', 'skew', 'range'])
     def test_signal_dispersion(self, method):
