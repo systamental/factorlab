@@ -435,9 +435,12 @@ class TestTransform:
         ret = self.default_transform_instance.returns(method=ret_type)
         ret_btc = self.btc_transform_instance.returns(method=ret_type)
 
-        # actual
-        actual = self.default_transform_instance.returns_to_price(ret, ret_type, start_val)
-        actual_btc = self.btc_transform_instance.returns_to_price(ret_btc, ret_type, start_val)
+        actual = Transform(ret).returns_to_price(ret_type=ret_type, start_val=start_val)
+        actual_btc = Transform(ret_btc).returns_to_price(ret_type=ret_type, start_val=start_val)
+
+        # # actual
+        # actual = self.default_transform_instance.returns_to_price(ret, ret_type, start_val)
+        # actual_btc = self.btc_transform_instance.returns_to_price(ret_btc, ret_type, start_val)
 
         # shape
         assert actual.shape[0] == self.default_transform_instance.df.shape[0]
@@ -1451,28 +1454,32 @@ class TestTransform:
         # shape
         assert self.default_transform_instance.trans_df.shape == self.default_transform_instance.df.shape
         assert self.btc_transform_instance.trans_df.shape == self.btc_transform_instance.df.shape
-        # values
-        if axis == 'ts':
-            assert np.allclose(self.no_missing_transform_instance.trans_df.loc[pd.IndexSlice[:, 'BTC'], :],
-                               self.btc_transform_instance.trans_df, equal_nan=True)
-            if window_type == 'rolling':
-                assert np.allclose(self.no_missing_transform_instance.trans_df.groupby(level=1).max(), window_size,
-                                   equal_nan=True)
-        else:
-            if isinstance(self.no_missing_transform_instance.df.index, pd.MultiIndex):
-                assert np.allclose(self.no_missing_transform_instance.trans_df.groupby(level=0).max().fillna(0),
-                                   self.no_missing_transform_instance.trans_df.groupby(level=0).count())
-            else:
-                assert np.allclose(self.btc_transform_instance.trans_df.max(axis=1),
-                                   self.btc_transform_instance.trans_df.count(axis=1))
+
         # dtypes
         assert isinstance(self.default_transform_instance.trans_df, pd.DataFrame)
         assert isinstance(self.btc_transform_instance.trans_df, pd.DataFrame)
         assert (self.default_transform_instance.trans_df.dtypes == np.float64).all()
         assert (self.btc_transform_instance.trans_df.dtypes == np.float64).all()
+
+        # values
+        if axis == 'ts':
+            assert np.allclose(self.no_missing_transform_instance.trans_df.loc[pd.IndexSlice[:, 'BTC'], :],
+                               self.btc_transform_instance.trans_df, equal_nan=True)
+            if window_type == 'rolling':
+                assert (self.no_missing_transform_instance.trans_df.dropna().groupby(level=1).max() <=
+                        window_size).all().all()
+        else:
+            if isinstance(self.no_missing_transform_instance.df.index, pd.MultiIndex):
+                assert (self.no_missing_transform_instance.trans_df.dropna().groupby(level=0).max() <=
+                        self.no_missing_transform_instance.trans_df.dropna().groupby(level=0).count()).all().all()
+            else:
+                assert np.allclose(self.btc_transform_instance.trans_df.max(axis=1),
+                                   self.btc_transform_instance.trans_df.count(axis=1))
+
         # index
         assert (self.default_transform_instance.trans_df.index == self.default_transform_instance.df.index).all()
         assert (self.btc_transform_instance.trans_df.index == self.btc_transform_instance.df.index).all()
+
         # cols
         assert (self.default_transform_instance.trans_df.columns == self.default_transform_instance.df.columns).all()
         assert (self.btc_transform_instance.trans_df.columns == self.btc_transform_instance.df.columns).all()

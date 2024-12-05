@@ -474,8 +474,7 @@ class Transform:
 
         return self.trans_df
 
-    @staticmethod
-    def returns_to_price(returns: Union[pd.Series, pd.DataFrame],
+    def returns_to_price(self,
                          ret_type: str = 'simple',
                          start_val: float = 1.0
                          ) -> Union[pd.Series, pd.DataFrame]:
@@ -484,8 +483,6 @@ class Transform:
 
         Parameters
         ----------
-        returns: pd.Series or pd.DataFrame
-            Series or DataFrame with returns.
         ret_type: str, {'simple', 'log'}, default 'simple'
             Type of returns.
         start_val: float, default 1.0
@@ -498,23 +495,23 @@ class Transform:
         """
         # simple returns
         if ret_type == 'simple':
-            if isinstance(returns.index, pd.MultiIndex):
-                cum_ret = (1 + returns).groupby(level=1).cumprod()
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = (1 + self.df).groupby(level=1).cumprod()
             else:
-                cum_ret = (1 + returns).cumprod()
+                self.trans_df = (1 + self.df).cumprod()
         else:
-            if isinstance(returns.index, pd.MultiIndex):
-                cum_ret = np.exp(returns).groupby(level=1).cumprod()
+            if isinstance(self.df.index, pd.MultiIndex):
+                self.trans_df = np.exp(self.df).groupby(level=1).cumprod()
             else:
-                cum_ret = np.exp(returns.cumsum())
+                self.trans_df = np.exp(self.df.cumsum())
 
         # start val
         if start_val == 0:
-            price = cum_ret - 1
+            self.trans_df = self.trans_df - 1
         else:
-            price = cum_ret * start_val
+            self.trans_df = self.trans_df * start_val
 
-        return price
+        return self.trans_df
 
     def target_vol(self,
                    ann_vol: float = 0.15,
@@ -1313,7 +1310,7 @@ class Transform:
         # axis time series
         if axis == 'ts':
 
-            # ewm
+            # ewm-0
             if window_type == 'ewm':
                 raise ValueError("EWM not supported for percentile.")
 
