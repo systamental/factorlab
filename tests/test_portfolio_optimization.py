@@ -470,7 +470,6 @@ class TestPortfolioOptimization:
         assert weights.shape[1] == po.returns.shape[1]
 
         # values
-        # assert (weights.round(4) >= 0).all().all()
         if po.method != 'target_vol':
             assert (np.isclose(weights.abs().sum(axis=1), 1)).all()
         if isinstance(rebal_freq, int):
