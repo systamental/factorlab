@@ -56,6 +56,8 @@ class Performance:
         self.window_size = window_size
         self.ann_factor = ann_factor
 
+    # TODO: add testing for series vs df
+
     def get_metrics(self) -> pd.DataFrame:
         """
         Computes key performance metrics for asset or strategy returns.
@@ -112,7 +114,7 @@ class Performance:
         }
 
         if metrics == 'key_metrics':
-            metrics = ['Annual return', 'Annual volatility', 'Sharpe ratio', 'Max drawdown', 'Annual alpha', 'Beta']
+            metrics = ['Annual return', 'Annual volatility', 'Max drawdown', 'Sharpe ratio', 'Calmar ratio']
         elif metrics == 'all':
             metrics = self.available_metrics
         elif metrics == 'alpha_beta':
