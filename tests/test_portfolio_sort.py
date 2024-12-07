@@ -57,9 +57,9 @@ def price_mom(spot_prices):
     Fixture for crypto price momentum.
     """
     # compute price mom
-    price_mom_5 = Trend(spot_prices, lookback=5).price_mom()
-    price_mom_20 = Trend(spot_prices, lookback=20).price_mom()
-    price_mom_60 = Trend(spot_prices, lookback=60).price_mom()
+    price_mom_5 = Trend(spot_prices, window_size=5).price_mom()
+    price_mom_20 = Trend(spot_prices, window_size=20).price_mom()
+    price_mom_60 = Trend(spot_prices, window_size=60).price_mom()
     price_mom = pd.concat([price_mom_5, price_mom_20, price_mom_60], axis=1)
 
     return price_mom

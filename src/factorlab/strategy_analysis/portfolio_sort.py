@@ -364,7 +364,7 @@ class PortfolioSort:
                 for quantile in self.metric_df.index:
                     quant_df = df[(factor, quantile)]
                     self.metric_df.loc[quantile, factor] = getattr(Metrics(quant_df, ret_type='log', ann_factor=365),
-                                                             metric)().values.round(decimals=4)
+                                                             metric)().iloc[0].round(decimals=4)
 
         # double sort
         elif self.factors.shape[1] == 2:
@@ -381,7 +381,7 @@ class PortfolioSort:
                 for factor_2, quantile_2 in self.metric_df.columns:
                     quant_df = pd.concat([df[(factor_1, quantile_1)], df[(factor_2, quantile_2)]], axis=1).mean(axis=1)
                     self.metric_df.loc[(factor_1, quantile_1), (factor_2, quantile_2)] = \
-                        getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
+                        getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().iloc[0].round(
                             decimals=4)
 
         # tripple sort
@@ -401,7 +401,7 @@ class PortfolioSort:
                 factor_3 = ('_'.join(row[2].split('_')[:-1]), row[2].split('_')[-1])
                 quant_df = pd.concat([df[factor_1], df[factor_2], df[factor_3]], axis=1).mean(axis=1)
                 self.metric_df.loc['_'.join(factor_1), '_'.join(factor_2), '_'.join(factor_3)] = \
-                    getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().values.round(
+                    getattr(Metrics(quant_df, ret_type='log', ann_factor=365), metric)().iloc[0].round(
                         decimals=4)
 
         else:
