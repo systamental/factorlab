@@ -34,6 +34,7 @@ class PortfolioOptimization:
                  fully_invested: bool = False,
                  gross_exposure: float = 1.0,
                  net_exposure: Optional[float] = None,
+                 round_weights: bool = False,
                  risk_aversion: float = 1.0,
                  exp_ret_method: Optional[str] = 'historical_mean',
                  cov_matrix_method: Optional[str] = 'covariance',
@@ -80,8 +81,12 @@ class PortfolioOptimization:
             Minimum weight of the assets or strategies.
         fully_invested: bool, default True
             Whether the portfolio is fully invested.
-        leverage: float, default 1.0
-            Leverage factor.
+        gross_exposure: float, default 1.0
+            Gross exposure of the portfolio.
+        net_exposure: float, default None
+            Net exposure of the portfolio.
+        round_weights: bool, default False
+            Whether to round the weights.
         risk_aversion: float, default 1.0
             Risk aversion factor.
         exp_ret_method: str, {'historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
@@ -132,6 +137,7 @@ class PortfolioOptimization:
         self.fully_invested = fully_invested
         self.gross_exposure = gross_exposure
         self.net_exposure = net_exposure
+        self.round_weights = round_weights
         self.risk_aversion = risk_aversion
         self.exp_ret_method = exp_ret_method
         self.cov_matrix_method = cov_matrix_method
@@ -390,7 +396,7 @@ class PortfolioOptimization:
 
         return self.weights
 
-    def round_weights(self, threshold: float = 1e-4) -> pd.DataFrame:
+    def compute_rounded_weights(self, threshold: float = 1e-4) -> pd.DataFrame:
         """
         Check and round weights in a rolling weights DataFrame for long/short strategies.
 
@@ -404,17 +410,8 @@ class PortfolioOptimization:
         pd.DataFrame
             DataFrame of rounded weights.
         """
-        # threshold small pos, neg weights
-        self.weights[self.weights.abs() < threshold] = 0
-
-        # large pos weights
-        self.weights[self.weights > 1 - threshold] = 1
-
-        # small neg weights
-        self.weights[self.weights < threshold - 1] = -1
-
         # round down weights to 4 decimal places
-        self.weights = np.floor(self.weights * (1/threshold)) / (1/threshold)
+        self.weights = np.floor(self.weights.abs() * (1/threshold)) / (1/threshold) * np.sign(self.weights)
 
         return self.weights
 
@@ -525,7 +522,8 @@ class PortfolioOptimization:
         self.adjust_exposure()
 
         # round weights
-        self.round_weights()
+        if self.round_weights:
+            self.compute_rounded_weights()
 
         # lag weights
         self.weights = self.weights.shift(self.lags)

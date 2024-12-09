@@ -426,7 +426,8 @@ class TestPortfolioOptimization:
         po = PortfolioOptimization(binance_ret_single, signals=trend_signals_single, as_signal_returns=False,
                                    method=method, window_size=300, target_return=0.75, target_risk=0.35)
         po.compute_weights()
-        po.round_weights(threshold=thresh)
+        po.round_weights = True
+        po.compute_rounded_weights(threshold=thresh)
 
         # dtypes
         assert isinstance(po.weights, pd.DataFrame)
@@ -570,7 +571,7 @@ class TestPortfolioOptimization:
         po.compute_weights()
         po.compute_weighted_signals()
         po.adjust_exposure()
-        po.round_weights()
+        po.compute_rounded_weights()
         po.rebalance_portfolio()
         po.compute_gross_returns()
         po.compute_tcosts()
