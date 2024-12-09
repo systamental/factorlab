@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
+import inspect
 
-from typing import Union, Optional
+from typing import Union, Optional, List
 from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
@@ -50,9 +51,24 @@ class Metrics:
         self.window_size = window_size
         self.ann_factor = ann_factor
         self.freq = None
-        self.preprocess_data()
+        self._preprocess_data()
 
-    def preprocess_data(self):
+    @staticmethod
+    def available_methods() -> List[str]:
+        """
+        Lists all trend computation methods available in this class.
+
+        Returns
+        -------
+        List[str]
+            A list of method names representing available trend computations.
+        """
+        return [
+            name for name, method in inspect.getmembers(Metrics, predicate=inspect.isfunction)
+            if not name.startswith('_') and name not in {''}
+        ]
+
+    def _preprocess_data(self):
         """
         Preprocess the data for the metrics computation.
         """
