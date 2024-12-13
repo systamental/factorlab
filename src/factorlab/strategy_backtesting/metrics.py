@@ -65,7 +65,7 @@ class Metrics:
         """
         return [
             name for name, method in inspect.getmembers(Metrics, predicate=inspect.isfunction)
-            if not name.startswith('_') and name not in {''}
+            if not name.startswith('_') and name not in {'available_methods'}
         ]
 
     def _preprocess_data(self):
@@ -156,12 +156,15 @@ class Metrics:
         dd: float or pd.Series
             Annualized return for each asset or strategy.
         """
-        # cum return
-        cum_ret = self.cumulative_returns(start_val=1).iloc[-1]
-        # number of years of returns
-        num_years = self.returns.count() / self.ann_factor
-        # annualized returns
-        ann_ret = cum_ret ** (1 / num_years) - 1
+        if self.window_type == 'rolling':
+            ann_ret = getattr(self.returns, self.window_type)(window=self.window_size).apply(
+                lambda x: (1 + x).prod() ** (self.ann_factor / len(x)) - 1)
+        elif self.window_type == 'expanding':
+            ann_ret = getattr(self.returns, self.window_type)().apply(
+                lambda x: (1 + x).prod() ** (self.ann_factor / len(x)) - 1)
+        else:
+            cum_ret = self.cumulative_returns(start_val=1).iloc[-1]
+            ann_ret = cum_ret ** (self.ann_factor / self.returns.count()) - 1
 
         return ann_ret
 
@@ -426,7 +429,14 @@ class Metrics:
         calmar: float, pd.Series or pd.DataFrame
             calmar ratio for each asset or strategy.
         """
-        cr = self.annualized_return() / (self.max_drawdown() * -1)
+        if self.window_type == 'rolling':
+            calmar = getattr(self.annualized_return(), self.window_type)(window=self.window_size) / \
+                     getattr(self.max_drawdown(), self.window_type)(window=self.window_size) * -1
+        elif self.window_type == 'expanding':
+            calmar = getattr(self.annualized_return(), self.window_type)() / \
+                     getattr(self.max_drawdown(), self.window_type)() * -1
+        else:
+            cr = self.annualized_return() / (self.max_drawdown() * -1)
 
         return cr
 
