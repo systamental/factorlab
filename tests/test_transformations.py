@@ -389,23 +389,28 @@ class TestTransform:
         # get actual and expected
         actual = self.default_transform_instance.returns(method=method)
         actual_btc = self.btc_transform_instance.returns(method=method)
-        mkt = self.default_transform_instance.returns(market=True)
+        mkt = self.default_transform_instance.returns(method=method, market=True)
 
         if method == 'simple':
             expected = self.default_transform_instance.df.groupby(level=1).pct_change(fill_method=None)
             expected_btc = self.btc_transform_instance.df.pct_change(fill_method=None)
+            expected_mkt = expected.close.groupby(level=0).mean().to_frame()
         else:
             expected = np.log(self.default_transform_instance.df).groupby(level=1).diff()
             expected_btc = np.log(self.btc_transform_instance.df).diff()
+            expected_mkt = expected.close.groupby(level=0).mean().to_frame()
 
         # shape
         assert actual.shape == self.default_transform_instance.df.shape
         assert actual_btc.shape == self.btc_transform_instance.df.shape
         assert mkt.shape[0] == self.btc_transform_instance.df.shape[0]
+
         # values
         assert np.allclose(actual, expected, equal_nan=True)
         assert np.allclose(actual_btc, expected_btc, equal_nan=True)
         assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :].droplevel(1), actual_btc, equal_nan=True)
+        assert np.allclose(mkt, expected_mkt, equal_nan=True)
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
@@ -413,10 +418,12 @@ class TestTransform:
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
         assert (mkt.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
         assert (mkt.index == self.btc_transform_instance.index).all()
+
         # cols
         assert all(actual.columns == self.default_transform_instance.df.columns)
         assert all(actual_btc.columns == self.btc_transform_instance.df.columns)
@@ -437,10 +444,6 @@ class TestTransform:
 
         actual = Transform(ret).returns_to_price(ret_type=ret_type, start_val=start_val)
         actual_btc = Transform(ret_btc).returns_to_price(ret_type=ret_type, start_val=start_val)
-
-        # # actual
-        # actual = self.default_transform_instance.returns_to_price(ret, ret_type, start_val)
-        # actual_btc = self.btc_transform_instance.returns_to_price(ret_btc, ret_type, start_val)
 
         # shape
         assert actual.shape[0] == self.default_transform_instance.df.shape[0]
