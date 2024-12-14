@@ -97,17 +97,6 @@ class NaiveOptimization:
             if not isinstance(self.signals.index, pd.DatetimeIndex):
                 self.signals.index = pd.to_datetime(self.signals.index)
 
-        # remove missing vals
-        last_row = self.returns.iloc[-1]  # select the last row
-        columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
-        self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
-
-        # signals
-        if self.signals is not None:
-            last_row = self.signals.iloc[-1]  # select the last row
-            columns_to_drop = last_row[last_row.isna()].index
-            self.signals = self.signals.drop(columns=columns_to_drop).dropna(how='all')
-
         # method
         if self.method not in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol',
                                'random']:
@@ -164,10 +153,14 @@ class NaiveOptimization:
         """
         # estimators
         self.compute_estimators()
+        print(f"returns: {self.returns.shape}")
+        print(f"exp_ret: {self.exp_ret.shape}")
 
         # weights
         self.weights = np.sign(self.returns).abs().div(np.sign(self.returns).abs().sum(axis=1).values, axis=0)
         self.weights = self.weights * self.leverage
+
+        print(f"weights: {self.weights.iloc[-1].shape}")
 
         # portfolio risk and return
         weights = self.weights.iloc[-1].values
