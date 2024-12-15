@@ -449,6 +449,9 @@ class PortfolioOptimization:
             # reindex and forward fill
             self.weights = rebal_df.reindex(w.index).ffill().dropna(how='all')
 
+            # replace forward filled values with last valid observation
+            self.weights = self.weights * np.sign(w.abs()).astype('Int64')
+
         return self.weights
 
     def compute_tcosts(self) -> pd.DataFrame:
