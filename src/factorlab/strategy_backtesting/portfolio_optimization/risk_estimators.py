@@ -6,8 +6,6 @@ from sklearn.neighbors import KernelDensity
 from sklearn.covariance import MinCovDet, EmpiricalCovariance, ShrunkCovariance, LedoitWolf, OAS, \
     GraphicalLasso, GraphicalLassoCV
 
-from factorlab.signal_generation.time_series_analysis import rolling_window, expanding_window
-
 
 class RiskEstimators:
     """
