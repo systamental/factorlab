@@ -41,6 +41,7 @@ class MVO:
                  target_return: Optional[float] = None,
                  target_risk: Optional[float] = None,
                  ann_factor: Optional[int] = None,
+                 window_size: Optional[int] = 30,
                  solver: Optional[None] = None,
                  **kwargs: Any
                  ):
@@ -80,6 +81,8 @@ class MVO:
             Target risk.
         ann_factor: int, default None
             Annualization factor. Default is 252 for daily data, 52 for weekly data, and 12 for monthly data.
+        window_size: int, default 30
+            Window size for the rolling estimators.
         solver: str, {'ECOS', 'SCS', 'OSQP', 'CLARABEL'}, default None
             Solver to use for optimization.
         **kwargs: dict
@@ -99,6 +102,7 @@ class MVO:
         self.target_return = target_return
         self.target_risk = target_risk
         self.ann_factor = ann_factor
+        self.window_size = window_size
         self.solver = solver
         self.kwargs = kwargs
 
@@ -202,18 +206,21 @@ class MVO:
         if self.method == 'risk_parity':
             self.weights = np.ones(self.n_assets) * 1 / self.n_assets
 
-    def compute_estimators(self, window_size: int = 30) -> None:
+    def compute_estimators(self) -> None:
         """
         Compute estimators.
         """
         # expected returns
         self.exp_ret = ReturnEstimators(
             self.returns, method=self.exp_ret_method, as_excess_returns=self.as_excess_returns,
-            risk_free_rate=self.risk_free_rate, ann_factor=self.ann_factor, window_size=window_size
+            risk_free_rate=self.risk_free_rate, ann_factor=self.ann_factor, window_size=self.window_size
         ).compute_expected_returns().values
 
         # covariance matrix
-        self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method=self.cov_matrix_method)
+        self.cov_matrix = RiskEstimators(
+            self.returns,
+            window_size=self.window_size
+        ).compute_covariance_matrix(method=self.cov_matrix_method)
 
         # correlation matrix
         if self.corr_matrix is None:
