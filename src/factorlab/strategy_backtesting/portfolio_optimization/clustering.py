@@ -77,6 +77,7 @@ class HRP:
         self.weights = None
         self.preprocess_data()
 
+    # TODO: check for symmetry in the distance matrix
     def preprocess_data(self):
         """
         Preprocess the data for the portfolio optimization.
@@ -89,6 +90,7 @@ class HRP:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+
         # remove missing vals
         last_row = self.returns.iloc[-1]  # select the last row
         columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
