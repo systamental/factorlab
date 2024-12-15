@@ -92,7 +92,9 @@ class PortfolioOptimization:
         exp_ret_method: str, {'historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
         'rolling_sharpe', 'rolling_sortino'}, default 'historical_mean'
             Method to compute the expected returns.
-        cov_matrix_method: str, default 'covariance'
+        cov_matrix_method: str, {'covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
+                       'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+                          'exponential_covariance', 'denoised_covariance'}, default 'covariance'
             Method to compute the covariance matrix.
         target_return: float, default 0.15
             Target return for the optimization.
@@ -254,7 +256,7 @@ class PortfolioOptimization:
                                  risk_free_rate=self.risk_free_rate, as_excess_returns=self.as_excess_returns,
                                  exp_ret_method=self.exp_ret_method, cov_matrix_method=self.cov_matrix_method,
                                  target_return=self.target_return, target_risk=self.target_risk, solver=self.solver,
-                                 ann_factor=self.ann_factor, **self.kwargs)
+                                 window_size=self.window_size, ann_factor=self.ann_factor, **self.kwargs)
 
         # hierarchical risk parity
         elif self.method == 'hrp':
