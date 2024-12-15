@@ -153,14 +153,10 @@ class NaiveOptimization:
         """
         # estimators
         self.compute_estimators()
-        print(f"returns: {self.returns.shape}")
-        print(f"exp_ret: {self.exp_ret.shape}")
 
         # weights
         self.weights = np.sign(self.returns).abs().div(np.sign(self.returns).abs().sum(axis=1).values, axis=0)
         self.weights = self.weights * self.leverage
-
-        print(f"weights: {self.weights.iloc[-1].shape}")
 
         # portfolio risk and return
         weights = self.weights.iloc[-1].values
