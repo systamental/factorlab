@@ -695,16 +695,23 @@ class Metrics:
         ar: float, pd.Series or pd.DataFrame
             Appraisal ratio.
         """
-        alpha_ret = self.alpha()
+        alpha_ret = self.alpha_returns()
 
         if self.window_type == 'rolling':
-            ar = (getattr(alpha_ret, self.window_type)(window=self.window_size).mean() /
-                  getattr(alpha_ret, self.window_type)(window=self.window_size).std()) * np.sqrt(self.ann_factor)
-
+            ar = ((getattr(alpha_ret.groupby(level=1), self.window_type)(window=self.window_size).mean().droplevel(0) /
+                  getattr(alpha_ret.groupby(level=1), self.window_type)(window=self.window_size).std().droplevel(0))
+                  * np.sqrt(self.ann_factor))
         elif self.window_type == 'expanding':
-            ar = (getattr(alpha_ret, self.window_type)().mean() /
-                  getattr(alpha_ret, self.window_type)().std()) * np.sqrt(self.ann_factor)
+            ar = ((getattr(alpha_ret.groupby(level=1), self.window_type)().mean().droplevel(0) /
+                  getattr(alpha_ret.groupby(level=1), self.window_type)().std().droplevel(0))
+                  * np.sqrt(self.ann_factor))
         else:
-            ar = (alpha_ret.mean() / alpha_ret.std()) * np.sqrt(self.ann_factor)
+            ar = alpha_ret.div(self.returns.std(), axis=0) * np.sqrt(self.ann_factor)
+
+        # col name
+        if isinstance(ar, pd.Series):
+            ar = ar.to_frame('ar')
+
+
 
         return ar
