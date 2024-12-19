@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "factorlab"
-version = "0.1.26"
+version = "0.1.27"
 description = "Python library which enables the discovery and analysis of alpha and risk factors used in the investment algorithm development process"
 authors = ["Systamental"]
 license = "Apache License 2.0"
