@@ -96,7 +96,7 @@ class Trend:
         return [
             name for name, method in inspect.getmembers(Trend, predicate=inspect.isfunction)
             if not name.startswith('_') and
-               name not in {'compute_price', 'compute_dispersion', 'gen_factor_name', 'available_methods'}
+            name not in {'compute_price', 'compute_dispersion', 'gen_factor_name', 'available_methods'}
         ]
 
     def compute_price(self) -> pd.DataFrame:
@@ -142,14 +142,16 @@ class Trend:
             # compute atr
             self.disp = Transform(self.df).dispersion(method=self.norm_method,
                                                       window_type=self.window_type,
-                                                      window_size=self.window_size)
+                                                      window_size=self.window_size,
+                                                      min_periods=self.window_size)
         else:
             # price chg
             chg = Transform(self.price).diff()
             # dispersion
             self.disp = Transform(chg).dispersion(method=self.norm_method,
                                                   window_type=self.window_type,
-                                                  window_size=self.window_size)
+                                                  window_size=self.window_size,
+                                                  min_periods=self.window_size)
 
         return self.disp
 
@@ -673,10 +675,6 @@ class Trend:
 
         Parameters
         ----------
-        s_k: list of int, default [2, 4, 8]
-            Represents n for short window where halflife is given by log(0.5)/log(1 − 1/n).
-        l_k: list of int, default [6, 12, 24]
-            Represents n for long window where halflife is given by log(0.5)/log(1 − 1/n).
         signal: bool, False
             Converts normalized ewma crossover values to signal between [-1,1].
 
