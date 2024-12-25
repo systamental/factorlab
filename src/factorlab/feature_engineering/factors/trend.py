@@ -22,6 +22,7 @@ class Trend:
                  normalize: bool = True,
                  central_tendency: str = 'mean',
                  norm_method: str = 'std',
+                 winsorize: Optional[int] = None,
                  window_size: int = 30,
                  short_window_size: Optional[int] = None,
                  long_window_size: Optional[int] = None,
@@ -48,6 +49,8 @@ class Trend:
             Central tendency measure for smoothing.
         norm_method : {'std', 'iqr', 'mad', 'atr', 'range'}, optional, default='std'
             Normalization method.
+        winsorize: int, default None
+            Winsorizes/clips values to between positive and negative values of specified integer.
         window_size : int, optional, default=30
             Size of the smoothing window.
         short_window_size : int, optional, default=None
@@ -67,7 +70,7 @@ class Trend:
         self.normalize = normalize
         self.central_tendency = central_tendency
         self.norm_method = norm_method
-        self.price = self.compute_price()
+        self.winsorize = winsorize
         self.window_size = window_size
         self.short_window_size = short_window_size
         self.long_window_size = long_window_size
@@ -198,7 +201,8 @@ class Trend:
         else:
             self.trend = Transform(self.price).normalize(method='z-score',
                                                         window_type='rolling',
-                                                        window_size=self.window_size)
+                                                        window_size=self.window_size,
+                                                        winsorize=self.winsorize)
 
         # convert to signal
         if signal:
@@ -225,6 +229,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp, axis=0)
+            if self.winsorize is not None:
+                self.trend = self.trend.clip(self.winsorize * -1, self.winsorize)
 
         # rename cols
         self.gen_factor_name()
@@ -247,6 +253,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             chg = chg.div(self.disp, axis=0)
+            if self.winsorize is not None:
+                chg = chg.clip(self.winsorize * -1, self.winsorize)
 
         # smoothing
         self.trend = Transform(chg).smooth(self.window_size,
@@ -311,6 +319,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
+            if self.winsorize is not None:
+                self.trend = self.trend.clip(self.winsorize * -1, self.winsorize)
 
         # single index
         if isinstance(self.df.index, pd.MultiIndex) is False:
@@ -349,6 +359,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
+            if self.winsorize is not None:
+                self.trend = self.trend.clip(self.winsorize * -1, self.winsorize)
 
         # single index
         if isinstance(self.df.index, pd.MultiIndex) is False:
@@ -393,6 +405,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp.squeeze(), axis=0)
+            if self.winsorize is not None:
+                self.trend = self.trend.clip(self.winsorize * -1, self.winsorize)
 
         # single index
         if isinstance(self.df.index, pd.MultiIndex) is False:
@@ -439,6 +453,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             alpha_ret = alpha_ret.squeeze() / self.disp.squeeze()
+            if self.winsorize is not None:
+                alpha_ret = alpha_ret.clip(self.winsorize * -1, self.winsorize)
 
         # smoothing
         self.trend = Transform(alpha_ret).smooth(self.window_size,
@@ -634,6 +650,8 @@ class Trend:
         if self.normalize:
             self.compute_dispersion()
             self.trend = self.trend.div(self.disp, axis=0)
+            if self.winsorize is not None:
+                self.trend = self.trend.clip(self.winsorize * -1, self.winsorize)
 
         # rename cols
         self.gen_factor_name()
