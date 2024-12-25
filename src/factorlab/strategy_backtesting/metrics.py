@@ -712,6 +712,4 @@ class Metrics:
         if isinstance(ar, pd.Series):
             ar = ar.to_frame('ar')
 
-
-
         return ar
