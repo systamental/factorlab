@@ -92,9 +92,7 @@ class HRP:
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
 
         # remove missing vals
-        last_row = self.returns.iloc[-1]  # select the last row
-        columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
-        self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
+        self.returns = self.returns.dropna(how='all').dropna(how='any', axis=1)
 
         # method
         if self.linkage_method not in ['single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']:
@@ -365,6 +363,7 @@ class HERC:
         self.distance_metric = distance_metric
         self.leverage = leverage
         self.asset_names = asset_names
+
         self.n_assets = None
         self.cov_matrix = None
         self.corr_matrix = None
@@ -389,10 +388,9 @@ class HERC:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+
         # remove missing vals
-        recent_rows = self.returns.tail(1)
-        columns_to_drop = recent_rows.columns[(recent_rows.isna() | (recent_rows == 0)).all()]
-        self.returns = self.returns.drop(columns=columns_to_drop).dropna()  # drop missing cols and emtpy rows
+        self.returns = self.returns.dropna(how='all').dropna(how='any', axis=1)
 
         # risk measure
         if self.risk_measure not in ['equal_weight', 'variance', 'std', 'expected_shortfall',
