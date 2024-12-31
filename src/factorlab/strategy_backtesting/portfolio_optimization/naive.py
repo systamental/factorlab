@@ -18,6 +18,8 @@ class NaiveOptimization:
                  returns: pd.DataFrame,
                  signals: Optional[pd.DataFrame] = None,
                  method: str = 'equal_weight',
+                 exp_ret_method: str = 'historical_mean',
+                 cov_matrix_method: str = 'covariance',
                  asset_names: Optional[List[str]] = None,
                  leverage: Optional[float] = None,
                  target_vol: Optional[float] = None,
@@ -35,6 +37,13 @@ class NaiveOptimization:
         method: str, {'equal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random'},
         default 'equal_weight'
             Optimization method to compute weights.
+        exp_ret_method: str, {'historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
+        'rolling_sharpe', 'rolling_sortino'}, default 'historical_mean'
+            Method to compute the expected returns.
+        cov_matrix_method: str, {'covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
+                      'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
+                      'exponential_covariance', 'denoised_covariance'}, default None
+            Method to compute covariance matrix.
         asset_names: list, default None
             Names of the assets or strategies.
         leverage: float, default None
@@ -47,6 +56,8 @@ class NaiveOptimization:
         self.returns = returns
         self.signals = signals
         self.method = method
+        self.exp_ret_method = exp_ret_method
+        self.cov_matrix_method = cov_matrix_method
         self.asset_names = asset_names
         self.leverage = leverage
         self.target_vol = target_vol
@@ -142,10 +153,10 @@ class NaiveOptimization:
         Compute estimators.
         """
         # expected returns
-        self.exp_ret = ReturnEstimators(self.returns, method='historical_mean').compute_expected_returns().values
+        self.exp_ret = ReturnEstimators(self.returns, method=self.exp_ret_method).compute_expected_returns().values
 
         # covariance matrix
-        self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method='covariance')
+        self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method=self.cov_matrix_method)
 
     def compute_equal_weight(self):
         """
