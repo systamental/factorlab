@@ -146,8 +146,8 @@ class TestPortfolioOptimization:
         assert self.single_opt_instance.target_return == 0.75
         assert self.multi_opt_instance.target_risk == 0.50
         assert self.single_opt_instance.target_risk == 0.50
-        assert self.multi_opt_instance.risk_measure == 'variance'
-        assert self.single_opt_instance.risk_measure == 'variance'
+        assert self.multi_opt_instance.risk_measure == 'std'
+        assert self.single_opt_instance.risk_measure == 'std'
         assert self.multi_opt_instance.alpha == 0.05
         assert self.single_opt_instance.alpha == 0.05
         assert self.multi_opt_instance.window_type == 'rolling'
@@ -230,7 +230,7 @@ class TestPortfolioOptimization:
                                    method=method, window_size=300, target_return=0.75, target_risk=0.50)
         weights = po._compute_fixed_weights()
 
-        if method in ['equal_weight', 'signal_weight']:
+        if method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
 
             # dtypes
             assert isinstance(weights, pd.DataFrame)
@@ -240,11 +240,14 @@ class TestPortfolioOptimization:
             assert weights.shape[1] == po.returns.shape[1]
 
             # values
-            if method == 'equal_weight':
+            if method == 'target_vol':
+                assert (weights >= 0).all().all()
+                assert (weights.abs() <= 1).all().all()
+            elif method != 'signal_weight':
                 assert (weights >= 0).all().all()
                 assert np.isclose(weights.sum(axis=1), 1).all().all()
             else:
-                assert (weights <= 1).all().all()
+                assert (weights.abs() <= 1).all().all()
                 assert np.isclose(weights.abs().sum(axis=1), 1).all().all()
 
             # cols
@@ -253,7 +256,7 @@ class TestPortfolioOptimization:
             # index
             if method == 'equal_weight':
                 assert (weights.index == po.returns.index).all()
-            else:
+            elif method == 'signal_weight':
                 assert (weights.index == po.signals.index).all()
 
         else:
@@ -263,7 +266,7 @@ class TestPortfolioOptimization:
             assert (weights.dtypes == 'float64').all()
 
             # shape
-            assert weights.shape[1] == po.returns.shape[1]
+            assert weights.shape[1] == po.returns.dropna(how='all').dropna(how='any', axis=1).shape[1]
 
             # values
             assert (weights >= 0).all().all()
@@ -271,7 +274,8 @@ class TestPortfolioOptimization:
                 assert np.isclose(weights.sum(axis=1), 1).all().all()
 
             # cols
-            assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
+            assert (set(weights.columns.to_list()) ==
+                    set(po.returns.dropna(how='all').dropna(how='any', axis=1).columns.to_list()))
 
             # index
             assert (weights.index == po.returns.index[-1]).all()
@@ -294,7 +298,10 @@ class TestPortfolioOptimization:
         assert (weights.dtypes == 'float64').all()
 
         # shape
-        assert weights.shape[1] == po.returns.shape[1]
+        if method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
+            assert weights.shape[1] == po.returns.shape[1]
+        else:
+            assert weights.shape[1] == po.returns.dropna(how='all').dropna(how='any', axis=1).shape[1]
 
         # values
         assert (weights.round(4) >= 0).all().all()
@@ -302,7 +309,11 @@ class TestPortfolioOptimization:
             assert (np.isclose(weights.sum(axis=1), 1)).all()
 
         # cols
-        assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
+        if method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
+            assert set(weights.columns.to_list()) == set(po.returns.columns.to_list())
+        else:
+            assert (set(weights.columns.to_list()) ==
+                    set(po.returns.dropna(how='all').dropna(how='any', axis=1).columns.to_list()))
 
     @pytest.mark.parametrize('method', ['inverse_variance', 'inverse_vol', 'target_vol', 'random',
                                         'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
@@ -439,11 +450,7 @@ class TestPortfolioOptimization:
         # values
         assert ~((po.weights.abs() > 1 - 0.0001) & (po.weights.abs() < 1)).all().all()
         assert ~((po.weights.abs() < 0.0001) & (po.weights.abs() > 0)).all().all()
-        if po.method != 'signal_weight':
-            assert (po.weights.abs().sum(axis=1) <= 1.0).all()
-        else:
-            # TODO: debug test failing in IDE but passing in notebook
-            assert (po.weights.abs().sum(axis=1) <= 1.01).all()
+        assert (po.weights.abs().sum(axis=1) <= 1.0).all()
 
         # cols
         assert set(po.weights.columns.to_list()) == set(po.returns.columns.to_list())
@@ -465,7 +472,10 @@ class TestPortfolioOptimization:
 
         # dtypes
         assert isinstance(weights, pd.DataFrame)
-        assert (weights.dtypes == 'float64').all()
+        if rebal_freq is None:
+            assert (weights.dtypes == 'float64').all()
+        else:
+            assert (weights.dtypes == 'Float64').all()
 
         # shape
         assert weights.shape[1] == po.returns.shape[1]
@@ -502,7 +512,10 @@ class TestPortfolioOptimization:
 
         # dtypes
         assert isinstance(tcosts, pd.DataFrame)
-        assert (tcosts.dtypes == 'float64').all()
+        if t_cost is None:
+            assert (tcosts.dtypes == 'float64').all()
+        else:
+            assert (tcosts.dtypes == 'Float64').all()
 
         # shape
         assert tcosts.shape[1] == po.returns.shape[1]
