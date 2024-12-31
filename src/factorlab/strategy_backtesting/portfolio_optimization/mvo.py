@@ -69,8 +69,9 @@ class MVO:
             Whether to compute excess returns.
         asset_names: list, default None
             List of asset names.
-        exp_ret_method: str, {'mean', 'median', 'ewm'}, default None
-            Method to compute expected returns.
+        exp_ret_method: str, {'historical_mean', 'historical_median', 'rolling_mean', 'rolling_median', 'ewma',
+        'rolling_sharpe', 'rolling_sortino'}, default 'historical_mean'
+            Method to compute the expected returns.
         cov_matrix_method: str, {'covariance', 'empirical_covariance', 'shrunk_covariance', 'ledoit_wolf', 'oas',
                       'graphical_lasso', 'graphical_lasso_cv', 'minimum_covariance_determinant', 'semi_covariance',
                       'exponential_covariance', 'denoised_covariance'}, default None
@@ -134,10 +135,9 @@ class MVO:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+
         # remove missing vals
-        last_row = self.returns.iloc[-1]  # select the last row
-        columns_to_drop = last_row[last_row.isna()].index  # cols with NaN values
-        self.returns = self.returns.drop(columns=columns_to_drop).dropna(how='all')  # drop missing cols and emtpy rows
+        self.returns = self.returns.dropna(how='all').dropna(how='any', axis=1)
 
         # method
         if self.method not in ['max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
