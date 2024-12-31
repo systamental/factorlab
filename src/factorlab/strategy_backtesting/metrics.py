@@ -80,14 +80,14 @@ class Metrics:
         if isinstance(self.returns, pd.Series):  # convert to df
             self.returns = self.returns.to_frame()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        self.returns = self.returns.dropna(how='all')  # drop missing rows
+        self.returns = self.returns.astype(float).dropna(how='all')  # drop missing rows, convert to float
 
         # freq
         self.freq = pd.infer_freq(self.returns.index)
 
         # ann_factor
         if self.ann_factor is None:
-            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
+            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().max()
 
         # risk-free rate
         if self.risk_free_rate is None:
