@@ -40,8 +40,11 @@ class PortfolioOptimization:
                  cov_matrix_method: Optional[str] = 'covariance',
                  target_return: Optional[float] = 0.15,
                  target_risk: Optional[float] = 0.1,
-                 risk_measure: str = 'variance',
+                 risk_measure: str = 'std',
                  alpha: float = 0.05,
+                 linkage_method: Optional[str] = 'ward',
+                 distance_metric: Optional[str] = 'euclidean',
+                 side_weights: Optional[pd.Series] = None,
                  t_cost: Optional[float] = None,
                  rebal_freq: Optional[Union[str, int]] = None,
                  window_type: str = 'rolling',
@@ -50,7 +53,6 @@ class PortfolioOptimization:
                  n_jobs: Optional[int] = -1,
                  asset_names: Optional[List[str]] = None,
                  ann_factor: Optional[int] = None,
-                 side_weights: Optional[pd.Series] = None,
                  solver: Optional[str] = None,
                  **kwargs: Any
                  ):
@@ -100,10 +102,21 @@ class PortfolioOptimization:
             Target return for the optimization.
         target_risk: float, default 0.1
             Target risk for the optimization.
-        risk_measure: str, default 'variance'
-            Risk measure for the optimization.
+        risk_measure : str, {'equal_weight', 'variance', 'std', 'expected_shortfall', 'conditional_drawdown_risk'},
+        default 'std'
+            Risk measure to compute the risk contribution.
         alpha: float, default 0.05
             Significance level for the risk measure.
+        linkage_method : str, {'single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward'},
+        default 'single'
+            Method to compute the distance matrix.
+        distance_metric: str, {‘braycurtis’, ‘canberra’, ‘chebyshev’, ‘cityblock’, ‘correlation’, ‘cosine’, ‘dice’,
+        ‘euclidean’, ‘hamming’, ‘jaccard’, ‘jensenshannon’, ‘kulczynski1’, ‘mahalanobis’, ‘matching’, ‘minkowski’,
+        ‘rogerstanimoto’, ‘russellrao’, ‘seuclidean’, ‘sokalmichener’, ‘sokalsneath’,
+        ‘sqeuclidean’, ‘yule'}, default 'euclidean'
+            Metric to compute the distance matrix.
+        side_weights: pd.Series, default None
+            Side weights for the hierarchical optimization.
         t_cost: float, default None
             Transaction costs.
         rebal_freq: str, int, default None
@@ -120,8 +133,6 @@ class PortfolioOptimization:
             Names of the assets or strategies.
         ann_factor: int, default None
             Annualization factor.
-        side_weights: pd.Series, default None
-            Side weights for the hierarchical optimization.
         solver: str, default None
             Solver for the optimization.
         kwargs: dict
@@ -147,6 +158,9 @@ class PortfolioOptimization:
         self.target_risk = target_risk
         self.risk_measure = risk_measure
         self.alpha = alpha
+        self.linkage_method = linkage_method
+        self.distance_metric = distance_metric
+        self.side_weights = side_weights
         self.t_cost = t_cost
         self.rebal_freq = rebal_freq
         self.window_type = window_type
@@ -155,7 +169,6 @@ class PortfolioOptimization:
         self.n_jobs = n_jobs
         self.asset_names = asset_names
         self.ann_factor = ann_factor
-        self.side_weights = side_weights
         self.solver = solver
         self.kwargs = kwargs
 
@@ -190,8 +203,6 @@ class PortfolioOptimization:
                         f"a multi-index pd.DataFrame with a single column")
                 else:
                     data = data.squeeze().unstack()
-            # elif isinstance(data, pd.DataFrame) and data.shape[1] == 1:
-            #     data = data.squeeze()  # Convert to Series
 
             if not isinstance(data.index, pd.DatetimeIndex):
                 data.index = pd.to_datetime(data.index)
@@ -246,7 +257,10 @@ class PortfolioOptimization:
         # naive optimization
         if self.method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol', 'random']:
             self.optimizer = NaiveOptimization(returns, signals=self.signals, method=self.method,
-                                               leverage=self.gross_exposure, target_vol=self.target_risk, **self.kwargs)
+                                               exp_ret_method=self.exp_ret_method,
+                                               cov_matrix_method=self.cov_matrix_method,
+                                               leverage=self.gross_exposure, target_vol=self.target_risk,
+                                               ann_factor=self.ann_factor)
 
         # mean variance optimization
         elif self.method in ['max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe', 'max_diversification',
@@ -256,17 +270,19 @@ class PortfolioOptimization:
                                  risk_free_rate=self.risk_free_rate, as_excess_returns=self.as_excess_returns,
                                  exp_ret_method=self.exp_ret_method, cov_matrix_method=self.cov_matrix_method,
                                  target_return=self.target_return, target_risk=self.target_risk, solver=self.solver,
-                                 window_size=self.window_size, ann_factor=self.ann_factor, **self.kwargs)
+                                 window_size=self.window_size, ann_factor=self.ann_factor)
 
         # hierarchical risk parity
         elif self.method == 'hrp':
-            self.optimizer = HRP(returns, cov_matrix_method=self.cov_matrix_method, side_weights=self.side_weights,
-                                 leverage=self.gross_exposure, **self.kwargs)
+            self.optimizer = HRP(returns, cov_matrix_method=self.cov_matrix_method, linkage_method=self.linkage_method,
+                                 distance_metric=self.distance_metric, side_weights=self.side_weights,
+                                 leverage=self.gross_exposure)
 
         # hierarchical equal risk contributions
         elif self.method == 'herc':
             self.optimizer = HERC(returns, risk_measure=self.risk_measure, alpha=self.alpha,
-                                  cov_matrix_method=self.cov_matrix_method, leverage=self.gross_exposure, **self.kwargs)
+                                  cov_matrix_method=self.cov_matrix_method, linkage_method=self.linkage_method,
+                                  distance_metric=self.distance_metric, leverage=self.gross_exposure)
 
         else:
             raise ValueError(f"Method is not supported. Valid methods are: {self.available_optimizers}")
@@ -298,6 +314,7 @@ class PortfolioOptimization:
             ret_window = self.opt_returns.loc[:end_date]
             self._get_optimizer(ret_window)
             w = self.optimizer.compute_weights()
+
             return w
 
         # parallelize optimization
