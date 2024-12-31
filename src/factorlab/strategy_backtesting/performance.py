@@ -57,7 +57,6 @@ class Performance:
         self.ann_factor = ann_factor
 
     # TODO: add testing for series vs df
-
     def get_metrics(self) -> pd.DataFrame:
         """
         Computes key performance metrics for asset or strategy returns.
