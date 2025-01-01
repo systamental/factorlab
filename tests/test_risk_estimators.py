@@ -45,7 +45,7 @@ class TestRiskEstimators:
         """
         Test initialization.
         """
-        # types
+        # dtypes
         assert isinstance(self.default_risk_est_instance, RiskEstimators)
         assert isinstance(self.default_risk_est_instance.returns, pd.DataFrame)
         assert isinstance(self.default_risk_est_instance.window_size, np.integer)
@@ -57,11 +57,15 @@ class TestRiskEstimators:
         Test covariance computation.
         """
         self.default_risk_est_instance.covariance()
-        # type
+
+        # dtypes
         assert isinstance(self.default_risk_est_instance.cov_matrix, np.ndarray)
+        assert self.default_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.default_risk_est_instance.cov_matrix.shape == (self.default_risk_est_instance.returns.shape[1],
                                          self.default_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.default_risk_est_instance.cov_matrix).sum() == 0
 
@@ -70,12 +74,15 @@ class TestRiskEstimators:
         Test empirical covariance computation.
         """
         self.nomissing_risk_est_instance.empirical_covariance()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -84,12 +91,15 @@ class TestRiskEstimators:
         Test shrunk covariance computation.
         """
         self.nomissing_risk_est_instance.shrunk_covariance()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -98,12 +108,15 @@ class TestRiskEstimators:
         Test Ledoit-Wolf covariance computation.
         """
         self.nomissing_risk_est_instance.ledoit_wolf()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -112,12 +125,15 @@ class TestRiskEstimators:
         Test OAS covariance computation.
         """
         self.nomissing_risk_est_instance.oas()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -126,12 +142,15 @@ class TestRiskEstimators:
         Test Graphical Lasso covariance computation.
         """
         self.nomissing_risk_est_instance.graphical_lasso()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -140,12 +159,15 @@ class TestRiskEstimators:
         Test Graphical Lasso CV covariance computation.
         """
         self.nomissing_risk_est_instance.graphical_lasso_cv()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -154,12 +176,15 @@ class TestRiskEstimators:
         Test Minimum Covariance Determinant covariance computation.
         """
         self.nomissing_risk_est_instance.minimum_covariance_determinant()
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
         assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -168,8 +193,11 @@ class TestRiskEstimators:
         Test semi-covariance computation.
         """
         self.default_risk_est_instance.semi_covariance()
-        # type
+
+        # dtypes
         assert isinstance(self.default_risk_est_instance.cov_matrix, np.ndarray)
+        assert self.default_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.default_risk_est_instance.cov_matrix.shape == (self.default_risk_est_instance.returns.shape[1],
                                          self.default_risk_est_instance.returns.shape[1])
@@ -181,11 +209,15 @@ class TestRiskEstimators:
         Test exponential covariance computation.
         """
         self.default_risk_est_instance.exponential_covariance()
-        # type
+
+        # dtypes
         assert isinstance(self.default_risk_est_instance.cov_matrix, np.ndarray)
+        assert self.default_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.default_risk_est_instance.cov_matrix.shape == (self.default_risk_est_instance.returns.shape[1],
                                          self.default_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.default_risk_est_instance.cov_matrix).sum() == 0
 
@@ -197,11 +229,15 @@ class TestRiskEstimators:
         Test denoised covariance computation.
         """
         self.default_risk_est_instance.denoised_covariance(method=method, detone=detone)
-        # type
+
+        # dtypes
         assert isinstance(self.default_risk_est_instance.cov_matrix, np.ndarray)
+        assert self.default_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.default_risk_est_instance.cov_matrix.shape == (self.default_risk_est_instance.returns.shape[1],
                                          self.default_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.default_risk_est_instance.cov_matrix).sum() == 0
 
@@ -213,11 +249,15 @@ class TestRiskEstimators:
         Test compute covariance matrix.
         """
         self.nomissing_risk_est_instance.compute_covariance_matrix(method=method)
-        # type
+
+        # dtypes
         assert isinstance(self.nomissing_risk_est_instance.cov_matrix, np.ndarray)
+        assert self.nomissing_risk_est_instance.cov_matrix.dtype == np.float64
+
         # shape
         assert self.nomissing_risk_est_instance.cov_matrix.shape == (self.nomissing_risk_est_instance.returns.shape[1],
                                          self.nomissing_risk_est_instance.returns.shape[1])
+
         # vals
         assert np.isnan(self.nomissing_risk_est_instance.cov_matrix).sum() == 0
 
@@ -243,9 +283,12 @@ class TestRiskEstimators:
         """
         turb = self.nomissing_risk_est_instance.compute_portfolio_risk(method=method, component=component)
 
-        # type
+        # dtypes
         assert isinstance(turb, pd.DataFrame)
+        assert (turb.dtypes == np.float64).all()
+
         # shape
         assert turb.shape[0] == self.nomissing_risk_est_instance.returns.shape[0]
+
         # vals
         assert turb.isna().sum().sum() == 0

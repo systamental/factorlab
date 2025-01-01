@@ -15,7 +15,7 @@ class RiskEstimators:
     using different methods.
     """
     def __init__(self,
-                 returns: pd.DataFrame,
+                 returns: Union[pd.DataFrame, pd.Series],
                  asset_names: Optional[List[str]] = None,
                  window_type: str = 'fixed',
                  window_size: Optional[int] = None,
@@ -52,8 +52,11 @@ class RiskEstimators:
         # returns
         if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):  # check data type
             raise ValueError('rets must be a pd.DataFrame or pd.Series')
+        # convert data type to float64
         if isinstance(self.returns, pd.Series):  # convert to df
-            self.returns = self.returns.to_frame()
+            self.returns = self.returns.to_frame().astype('float64')
+        elif isinstance(self.returns, pd.DataFrame):
+            self.returns = self.returns.astype('float64')
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
@@ -83,7 +86,7 @@ class RiskEstimators:
         pd.DataFrame
             Covariance matrix.
         """
-        self.cov_matrix = self.returns.cov().values
+        self.cov_matrix = self.returns.cov().to_numpy('float64')
 
         return self.cov_matrix
 
