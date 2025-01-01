@@ -405,10 +405,6 @@ class MVO:
             result = minimize(self.objective, self.weights, args=self.cov_matrix, constraints=self.constraints,
                            bounds=self.bounds, method='SLSQP')
             self.weights = result.x
-            print("self.exp_ret type:", type(self.exp_ret))
-            print("self.exp_ret:", self.exp_ret)
-            print("self.weights type:", type(self.weights))
-            print("self.weights:", self.weights)
             self.portfolio_risk = self.weights @ self.cov_matrix @ self.weights.T
             self.portfolio_ret = self.exp_ret.T @ self.weights
 
