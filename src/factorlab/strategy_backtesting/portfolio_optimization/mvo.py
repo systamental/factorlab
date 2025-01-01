@@ -130,12 +130,14 @@ class MVO:
         # returns
         if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):  # check data type
             raise ValueError('rets must be a pd.DataFrame or pd.Series')
+        # data type conversion to float64
         if isinstance(self.returns, pd.Series):  # convert to df
-            self.returns = self.returns.to_frame()
+            self.returns = self.returns.to_frame().astype('float64')
+        elif isinstance(self.returns, pd.DataFrame):  # convert to float
+            self.returns = self.returns.astype('float64')
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
-        # self.returns.astype(float)  # convert to float
 
         # remove missing vals
         self.returns = self.returns.dropna(how='all').dropna(how='any', axis=1)
@@ -215,7 +217,7 @@ class MVO:
         self.exp_ret = ReturnEstimators(
             self.returns, method=self.exp_ret_method, as_excess_returns=self.as_excess_returns,
             risk_free_rate=self.risk_free_rate, ann_factor=self.ann_factor, window_size=self.window_size
-        ).compute_expected_returns().values
+        ).compute_expected_returns().to_numpy('float64')
 
         # covariance matrix
         self.cov_matrix = RiskEstimators(
@@ -225,7 +227,7 @@ class MVO:
 
         # correlation matrix
         if self.corr_matrix is None:
-            self.corr_matrix = self.returns.corr().values
+            self.corr_matrix = self.returns.corr().to_numpy('float64')
 
     def objective_function(self):
         """
