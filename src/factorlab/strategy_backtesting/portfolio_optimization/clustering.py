@@ -703,8 +703,12 @@ class HERC:
         # initialize cluster contribution
         self.clusters_contribution = np.ones(shape=self.n_clusters)
 
+        print(f"n_clusters: {self.n_clusters}")
+        print(f"clusters_contribution shape: {self.clusters_contribution.shape}")
+
         # compute cluster risk contribution
         for cluster_idx in range(self.n_clusters):
+            print(f"cluster_idx: {cluster_idx}")
             cluster_asset_idxs = self.cluster_children[cluster_idx]
 
             if self.risk_measure == 'variance':
