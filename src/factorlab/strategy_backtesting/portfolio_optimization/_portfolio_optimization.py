@@ -40,7 +40,7 @@ class PortfolioOptimization:
                  cov_matrix_method: Optional[str] = 'covariance',
                  target_return: Optional[float] = 0.15,
                  target_risk: Optional[float] = 0.1,
-                 risk_measure: str = 'std',
+                 risk_measure: str = 'variance',
                  alpha: float = 0.05,
                  linkage_method: Optional[str] = 'ward',
                  distance_metric: Optional[str] = 'euclidean',
@@ -195,14 +195,14 @@ class PortfolioOptimization:
                 raise ValueError(f"{name} must be a pd.DataFrame or pd.Series")
 
             if isinstance(data, pd.Series) and isinstance(data.index, pd.MultiIndex):
-                data = data.unstack()
+                data = data.unstack().astype('float64')
             elif isinstance(data, pd.DataFrame) and isinstance(data.index, pd.MultiIndex):
                 if data.shape[1] > 1:
                     raise ValueError(
                         f"{name} must be a single index pd.DataFrame or "
                         f"a multi-index pd.DataFrame with a single column")
                 else:
-                    data = data.squeeze().unstack()
+                    data = data.squeeze().unstack().astype('float64')
 
             if not isinstance(data.index, pd.DatetimeIndex):
                 data.index = pd.to_datetime(data.index)
@@ -296,7 +296,7 @@ class PortfolioOptimization:
         # compute weights
         self.weights = self.optimizer.compute_weights()
 
-        return self.weights.astype(float).fillna(0)
+        return self.weights.astype('float64').fillna(0)
 
     def _compute_expanding_window_weights(self) -> pd.DataFrame:
         """
@@ -324,7 +324,7 @@ class PortfolioOptimization:
             results = (compute_weights_for_date(date) for date in dates)
 
         # weights
-        self.weights = pd.concat(results).astype(float).fillna(0)
+        self.weights = pd.concat(results).astype('float64').fillna(0)
 
         return self.weights
 
@@ -354,7 +354,7 @@ class PortfolioOptimization:
             results = (compute_weights_for_date(date) for date in dates)
 
         # weights
-        self.weights = pd.concat(results).astype(float).fillna(0)
+        self.weights = pd.concat(results).astype('float64').fillna(0)
 
         return self.weights
 
@@ -470,6 +470,9 @@ class PortfolioOptimization:
 
             # replace forward filled values with last valid observation
             self.weights = self.weights * np.sign(w.abs()).astype('Int64')
+
+            # convert to float
+            self.weights = self.weights.astype('float64')
 
         return self.weights
 

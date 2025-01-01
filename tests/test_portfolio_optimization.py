@@ -95,12 +95,14 @@ class TestPortfolioOptimization:
         """
         Test initialization.
         """
-        # types
+        # dtypes
         assert isinstance(self.single_opt_instance, PortfolioOptimization)
         assert (isinstance(self.multi_opt_instance.returns, pd.DataFrame) or
                 isinstance(self.multi_opt_instance.returns, pd.Series))
         assert (isinstance(self.single_opt_instance.returns, pd.DataFrame) or
                 isinstance(self.single_opt_instance.returns, pd.Series))
+        assert (self.single_opt_instance.returns.dtypes == 'float64').all()
+        assert (self.multi_opt_instance.returns.dtypes == 'float64').all()
         assert isinstance(self.multi_opt_instance.method, str)
         assert isinstance(self.single_opt_instance.method, str)
         assert isinstance(self.multi_opt_instance.lags, int)
@@ -117,6 +119,7 @@ class TestPortfolioOptimization:
         assert isinstance(self.single_opt_instance.as_excess_returns, bool)
         assert isinstance(self.multi_opt_instance.n_jobs, int)
         assert isinstance(self.single_opt_instance.n_jobs, int)
+
         # vals
         assert self.multi_opt_instance.method == 'equal_weight'
         assert self.single_opt_instance.method == 'equal_weight'
@@ -146,8 +149,8 @@ class TestPortfolioOptimization:
         assert self.single_opt_instance.target_return == 0.75
         assert self.multi_opt_instance.target_risk == 0.50
         assert self.single_opt_instance.target_risk == 0.50
-        assert self.multi_opt_instance.risk_measure == 'std'
-        assert self.single_opt_instance.risk_measure == 'std'
+        assert self.multi_opt_instance.risk_measure == 'variance'
+        assert self.single_opt_instance.risk_measure == 'variance'
         assert self.multi_opt_instance.alpha == 0.05
         assert self.single_opt_instance.alpha == 0.05
         assert self.multi_opt_instance.window_type == 'rolling'
@@ -170,7 +173,7 @@ class TestPortfolioOptimization:
         self.single_opt_instance._compute_signal_returns()
         self.multi_opt_instance._compute_signal_returns()
 
-        # types
+        # dtypes
         assert isinstance(self.single_opt_instance.signal_returns, pd.DataFrame)
         assert (self.multi_opt_instance.signal_returns.dtypes == 'float64').all()
         assert isinstance(self.single_opt_instance.signal_returns, pd.DataFrame)
@@ -193,7 +196,7 @@ class TestPortfolioOptimization:
         opt = self.single_opt_instance._get_optimizer(self.single_opt_instance.returns)
         multi_opt = self.multi_opt_instance._get_optimizer(self.multi_opt_instance.returns)
 
-        # types
+        # dtypes
         if self.single_opt_instance.method in ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol',
                                                'target_vol', 'random']:
             assert isinstance(opt, NaiveOptimization)
@@ -380,7 +383,7 @@ class TestPortfolioOptimization:
         self.single_opt_instance.compute_weights()
         weighted_signals = self.single_opt_instance.compute_weighted_signals()
 
-        # types
+        # dtypes
         assert isinstance(weighted_signals, pd.DataFrame)
         assert (weighted_signals.dtypes == 'float64').all()
 
@@ -410,7 +413,7 @@ class TestPortfolioOptimization:
         po.compute_weights()
         weights = po.adjust_exposure()
 
-        # types
+        # dtypes
         assert isinstance(weights, pd.DataFrame)
         assert (weights.dtypes == 'float64').all()
 
@@ -472,10 +475,7 @@ class TestPortfolioOptimization:
 
         # dtypes
         assert isinstance(weights, pd.DataFrame)
-        if rebal_freq is None:
-            assert (weights.dtypes == 'float64').all()
-        else:
-            assert (weights.dtypes == 'Float64').all()
+        assert (weights.dtypes == 'float64').all()
 
         # shape
         assert weights.shape[1] == po.returns.shape[1]
@@ -512,10 +512,7 @@ class TestPortfolioOptimization:
 
         # dtypes
         assert isinstance(tcosts, pd.DataFrame)
-        if t_cost is None:
-            assert (tcosts.dtypes == 'float64').all()
-        else:
-            assert (tcosts.dtypes == 'Float64').all()
+        assert (tcosts.dtypes == 'float64').all()
 
         # shape
         assert tcosts.shape[1] == po.returns.shape[1]
@@ -539,7 +536,7 @@ class TestPortfolioOptimization:
         self.single_opt_instance.compute_weights()
         self.single_opt_instance.compute_gross_returns()
 
-        # types
+        # dtypes
         assert isinstance(self.single_opt_instance.gross_returns, pd.DataFrame)
         assert (self.single_opt_instance.gross_returns.dtypes == 'float64').all()
 
@@ -560,7 +557,7 @@ class TestPortfolioOptimization:
         self.single_opt_instance.compute_gross_returns()
         self.single_opt_instance.compute_net_returns()
 
-        # types
+        # dtypes
         assert isinstance(self.single_opt_instance.net_returns, pd.DataFrame)
         assert (self.single_opt_instance.net_returns.dtypes == 'float64').all()
 
@@ -591,7 +588,7 @@ class TestPortfolioOptimization:
         po.compute_net_returns()
         port_ret = po.compute_portfolio_returns()
 
-        # types
+        # dtypes
         assert isinstance(port_ret, pd.DataFrame)
         assert (port_ret.dtypes == 'float64').all()
 
