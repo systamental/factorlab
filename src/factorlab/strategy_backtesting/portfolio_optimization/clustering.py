@@ -85,8 +85,11 @@ class HRP:
         # returns
         if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):  # check data type
             raise ValueError('returns must be a pd.DataFrame or pd.Series')
+        # convert data type to float64
         if isinstance(self.returns, pd.Series):  # convert to df
-            self.returns = self.returns.to_frame()
+            self.returns = self.returns.to_frame().astype('float64')
+        elif isinstance(self.returns, pd.DataFrame):
+            self.returns = self.returns.astype('float64')
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
@@ -121,7 +124,7 @@ class HRP:
 
         # correlation matrix
         if self.corr_matrix is None:
-            self.corr_matrix = self.returns.corr().values
+            self.corr_matrix = self.returns.corr().to_numpy('float64')
 
         # distance matrix
         if self.distance_matrix is None:
@@ -383,8 +386,11 @@ class HERC:
         # returns
         if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):  # check data type
             raise ValueError('returns must be a pd.DataFrame or pd.Series')
+        # convert data type to float64
         if isinstance(self.returns, pd.Series):  # convert to df
-            self.returns = self.returns.to_frame()
+            self.returns = self.returns.to_frame().astype('float64')
+        elif isinstance(self.returns, pd.DataFrame):
+            self.returns = self.returns.astype('float64')
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
@@ -402,6 +408,16 @@ class HERC:
         if self.linkage_method not in ['single', 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']:
             raise ValueError('method must be one of the following: single, complete, average, weighted, centroid, '
                              'median, ward')
+
+        # distance metric
+        if self.distance_metric not in ['braycurtis', 'canberra', 'chebyshev', 'cityblock', 'correlation', 'cosine',
+                                        'dice', 'euclidean', 'hamming', 'jaccard', 'jensenshannon', 'kulczynski1',
+                                        'mahalanobis', 'matching', 'minkowski', 'rogerstanimoto', 'russellrao',
+                                        'seuclidean', 'sokalmichener', 'sokalsneath', 'sqeuclidean', 'yule']:
+            raise ValueError('distance_metric must be one of the following: braycurtis, canberra, chebyshev, cityblock, '
+                             'correlation, cosine, dice, euclidean, hamming, jaccard, jensenshannon, kulczynski1, '
+                             'mahalanobis, matching, minkowski, rogerstanimoto, russellrao, seuclidean, sokalmichener, '
+                             'sokalsneath, sqeuclidean, yule')
 
         # asset names
         if self.asset_names is None:
@@ -421,7 +437,7 @@ class HERC:
 
         # correlation matrix
         if self.corr_matrix is None:
-            self.corr_matrix = self.returns.corr().values
+            self.corr_matrix = self.returns.corr().to_numpy('float64')
 
         # distance matrix
         if self.distance_matrix is None:
