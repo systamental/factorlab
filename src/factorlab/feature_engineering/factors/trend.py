@@ -110,9 +110,9 @@ class Trend:
         """
         # convert dtype to float
         if isinstance(self.df, pd.Series):
-            self.df = self.df.to_frame().astype(float)
+            self.df = self.df.to_frame().astype('float64')
         else:
-            self.df = self.df.astype(float)
+            self.df = self.df.astype('float64')
 
         # compute price
         if self.vwap:
