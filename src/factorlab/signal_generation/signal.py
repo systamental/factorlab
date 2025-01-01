@@ -31,7 +31,7 @@ class Signal:
 
         Parameters
         ----------
-        factors: pd.Series or pd.DataFrame - Single or MultiIndex
+        factors: pd.DataFrame - Single or MultiIndex
             Dataframe with DatetimeIndex (level 0), tickers (level 1) and factors (cols).
         returns: optional, pd.Series or pd.DataFrame - Single or MultiIndex, default None
             Dataframe or series with DatetimeIndex (level 0), tickers (level 1) and returns (cols).
@@ -111,11 +111,15 @@ class Signal:
 
         # factors
         if isinstance(self.factors, pd.Series):
-            self.factors = self.factors.to_frame().astype(float)
+            self.factors = self.factors.to_frame().astype('float64')
+        elif isinstance(self.factors, pd.DataFrame):
+            self.factors = self.factors.astype('float64')
 
         # returns
         if isinstance(self.returns, pd.Series):
-            self.returns = self.returns.to_frame().astype(float)
+            self.returns = self.returns.to_frame().astype('float64')
+        elif isinstance(self.returns, pd.DataFrame):
+            self.returns = self.returns.astype('float64')
 
     def normalize_factors(self,
                           method: str = 'z-score',
