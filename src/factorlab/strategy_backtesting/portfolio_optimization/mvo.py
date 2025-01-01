@@ -135,6 +135,7 @@ class MVO:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+        # self.returns.astype(float)  # convert to float
 
         # remove missing vals
         self.returns = self.returns.dropna(how='all').dropna(how='any', axis=1)
@@ -402,6 +403,10 @@ class MVO:
             result = minimize(self.objective, self.weights, args=self.cov_matrix, constraints=self.constraints,
                            bounds=self.bounds, method='SLSQP')
             self.weights = result.x
+            print("self.exp_ret type:", type(self.exp_ret))
+            print("self.exp_ret:", self.exp_ret)
+            print("self.weights type:", type(self.weights))
+            print("self.weights:", self.weights)
             self.portfolio_risk = self.weights @ self.cov_matrix @ self.weights.T
             self.portfolio_ret = self.exp_ret.T @ self.weights
 
