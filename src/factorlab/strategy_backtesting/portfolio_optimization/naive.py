@@ -79,9 +79,11 @@ class NaiveOptimization:
         # check data type
         if not isinstance(self.returns, pd.DataFrame) and not isinstance(self.returns, pd.Series):
             raise ValueError('Returns must be a pd.DataFrame or pd.Series')
-        # convert to DataFrame
+        # convert data type
         if isinstance(self.returns, pd.Series):
-            self.returns = self.returns.to_frame()
+            self.returns = self.returns.to_frame().astype('float64')
+        elif isinstance(self.returns, pd.DataFrame):
+            self.returns = self.returns.astype('float64')
         # convert to single index
         if isinstance(self.returns.index, pd.MultiIndex):
             if self.returns.shape[1] == 1:
@@ -98,7 +100,9 @@ class NaiveOptimization:
             if not isinstance(self.signals, pd.DataFrame) and not isinstance(self.signals, pd.Series):
                 raise ValueError('Signals must be a pd.DataFrame or pd.Series')
             if isinstance(self.signals, pd.Series):
-                self.signals = self.signals.to_frame()
+                self.signals = self.signals.to_frame().astype('float64')
+            elif isinstance(self.signals, pd.DataFrame):
+                self.signals = self.signals.astype('float64')
             if isinstance(self.signals.index, pd.MultiIndex):
                 if self.signals.shape[1] == 1:
                     self.signals = self.signals.unstack()
@@ -132,7 +136,7 @@ class NaiveOptimization:
 
         # ann_factor
         if self.ann_factor is None:
-            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().mode()[0]
+            self.ann_factor = self.returns.groupby(self.returns.index.year).count().max().max()
 
         # freq
         self.freq = pd.infer_freq(self.returns.index)
@@ -153,7 +157,8 @@ class NaiveOptimization:
         Compute estimators.
         """
         # expected returns
-        self.exp_ret = ReturnEstimators(self.returns, method=self.exp_ret_method).compute_expected_returns().values
+        self.exp_ret = ReturnEstimators(self.returns,
+                                        method=self.exp_ret_method).compute_expected_returns().to_numpy('float64')
 
         # covariance matrix
         self.cov_matrix = RiskEstimators(self.returns).compute_covariance_matrix(method=self.cov_matrix_method)
@@ -170,7 +175,7 @@ class NaiveOptimization:
         self.weights = self.weights * self.leverage
 
         # portfolio risk and return
-        weights = self.weights.iloc[-1].values
+        weights = self.weights.iloc[-1].to_numpy('float64')
         self.portfolio_ret = np.dot(weights, self.exp_ret)
         self.portfolio_risk = np.dot(weights.T, np.dot(self.cov_matrix, weights))
 
@@ -192,7 +197,7 @@ class NaiveOptimization:
         self.weights = self.weights * self.leverage
 
         # portfolio risk and return
-        weights = self.weights.iloc[-1].values
+        weights = self.weights.iloc[-1].to_numpy('float64')
         self.portfolio_ret = np.dot(weights, self.exp_ret)
         self.portfolio_risk = np.dot(weights.T, np.dot(self.cov_matrix, weights))
 

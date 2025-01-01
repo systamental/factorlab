@@ -112,11 +112,15 @@ class TestNaiveOptimization:
         """
         Test initialization.
         """
-        # data type
+        # data types
         assert isinstance(self.naive_instance, NaiveOptimization)
         assert isinstance(self.signal_instance, NaiveOptimization)
         assert isinstance(self.naive_instance.returns, pd.DataFrame)
         assert isinstance(self.signal_instance.returns, pd.DataFrame)
+        assert isinstance(self.signal_instance.signals, pd.DataFrame)
+        assert (self.naive_instance.returns.dtypes == np.float64).all()
+        assert (self.signal_instance.returns.dtypes == np.float64).all()
+        assert (self.signal_instance.signals.dtypes == np.float64).all()
         assert isinstance(self.naive_instance.method, str)
         assert isinstance(self.signal_instance.method, str)
         assert isinstance(self.naive_instance.asset_names, list)
@@ -125,11 +129,13 @@ class TestNaiveOptimization:
         assert isinstance(self.signal_instance.leverage, float)
         assert isinstance(self.naive_instance.target_vol, float)
         assert isinstance(self.signal_instance.target_vol, float)
+
         # data shape
         assert self.naive_instance.returns.shape[1] == self.naive_instance.n_assets
         assert self.signal_instance.returns.shape[1] == self.signal_instance.n_assets
         assert self.naive_instance.returns.shape[0] == self.naive_instance.returns.shape[0]
         assert self.signal_instance.returns.shape[0] == self.signal_instance.returns.shape[0]
+
         # cols
         assert self.naive_instance.returns.columns.to_list() == self.naive_instance.asset_names
         assert self.signal_instance.returns.columns.to_list() == self.signal_instance.asset_names
@@ -161,9 +167,11 @@ class TestNaiveOptimization:
 
         # shape
         assert self.naive_instance.weights.shape[1] == self.naive_instance.n_assets
+
         # values
         assert (self.naive_instance.weights.dropna() >= 0).all().all()
         assert np.isclose(self.naive_instance.weights.sum(axis=1), 1).all()
+
         # dtypes
         assert (self.naive_instance.weights.dtypes == np.float64).all()
         assert isinstance(self.naive_instance.weights, pd.DataFrame)
@@ -177,9 +185,12 @@ class TestNaiveOptimization:
 
         # shape
         assert self.signal_instance.weights.shape[1] == self.signal_instance.n_assets
+
         # values
-        assert (self.signal_instance.weights.dropna() >= 0).all().all()
-        assert np.isclose(self.signal_instance.weights.sum(axis=1), 1).all()
+        assert (self.signal_instance.weights.abs().dropna() >= 0).all().all()
+        assert (self.signal_instance.weights.abs().dropna() <= 1).all().all()
+        assert np.isclose(self.signal_instance.weights.dropna().abs().sum(axis=1), 1).all()
+
         # dtypes
         assert (self.signal_instance.weights.dtypes == np.float64).all()
         assert isinstance(self.signal_instance.weights, pd.DataFrame)
@@ -193,9 +204,11 @@ class TestNaiveOptimization:
 
         # shape
         assert self.naive_instance.weights.shape[0] == self.naive_instance.n_assets
+
         # values
         assert (self.naive_instance.weights >= 0).all()
         assert np.isclose(np.sum(self.naive_instance.weights), 1)
+
         # dtypes
         assert self.naive_instance.weights.dtype == np.float64
         assert isinstance(self.naive_instance.weights, np.ndarray)
@@ -225,8 +238,10 @@ class TestNaiveOptimization:
 
         # shape
         assert self.naive_instance.weights.shape[0] == self.naive_instance.n_assets
+
         # values
         assert (self.naive_instance.weights >= 0).all()
+
         # dtypes
         assert self.naive_instance.weights.dtype == np.float64
         assert isinstance(self.naive_instance.weights, np.ndarray)
@@ -240,9 +255,11 @@ class TestNaiveOptimization:
 
         # shape
         assert self.naive_instance.weights.shape[0] == self.naive_instance.n_assets
+
         # values
         assert (self.naive_instance.weights >= 0).all()
         assert np.isclose(np.sum(self.naive_instance.weights), 1)
+
         # dtypes
         assert self.naive_instance.weights.dtype == np.float64
         assert isinstance(self.naive_instance.weights, np.ndarray)
@@ -291,7 +308,9 @@ class TestNaiveOptimization:
             assert self.signal_instance.weights.shape[1] == self.signal_instance.n_assets
 
             # values
-            assert (self.signal_instance.weights.dropna() >= 0).all().all()
+            assert (self.signal_instance.weights.abs().dropna() >= 0).all().all()
+            assert (self.signal_instance.weights.abs().dropna() <= 1).all().all()
+            assert np.isclose(self.signal_instance.weights.abs().dropna().sum(axis=1), 1).all()
             assert np.allclose(self.signal_instance.portfolio_ret,
                                (self.signal_instance.weights.iloc[-1] * self.signal_instance.exp_ret).sum(),
                                atol=1e-3)
