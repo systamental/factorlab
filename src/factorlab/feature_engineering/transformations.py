@@ -35,8 +35,8 @@ class Transform:
         """
         # df
         if isinstance(self.raw_data, pd.DataFrame) or isinstance(self.raw_data, pd.Series):
-            self.df = self.raw_data.astype('float64').copy()
-            self.arr = self.raw_data.to_numpy(dtype='float64').copy()
+            self.df = self.raw_data.astype('float64').copy()  # convert to float64
+            self.arr = self.raw_data.to_numpy(dtype='float64').copy()  # convert to float64
             self.index = self.raw_data.index
             # series
             if isinstance(self.df, pd.Series):
@@ -47,7 +47,7 @@ class Transform:
                 self.freq = pd.infer_freq(self.index)
         # array
         elif isinstance(self.raw_data, np.ndarray):
-            self.arr = self.raw_data.astype(float).copy()
+            self.arr = self.raw_data.astype('float64').copy()
             self.df = pd.DataFrame(self.arr).copy()
 
         self.trans_df = self.df.copy()

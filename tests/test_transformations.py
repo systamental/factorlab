@@ -147,6 +147,7 @@ class TestTransform:
         assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
         assert actual.shape[1] == self.default_transform_instance.df.shape[1] + 1
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1] + 1
+
         # values
         assert np.allclose(actual.vwap, expected, equal_nan=True)
         assert np.allclose(actual_btc.vwap, expected_btc, equal_nan=True)
@@ -156,14 +157,17 @@ class TestTransform:
         assert (actual_btc.high >= actual_btc.vwap).sum() / actual_btc.shape[0] > 0.99
         assert (actual.low <= actual.vwap).sum() / actual.shape[0] > 0.99
         assert (actual_btc.low <= actual_btc.vwap).sum() / actual_btc.shape[0] > 0.99
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns.tolist() + ['vwap']).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns.tolist() + ['vwap']).all()
@@ -191,19 +195,23 @@ class TestTransform:
         assert actual_btc.shape[0] == expected_btc.shape[0]
         assert actual.shape[1] == expected.shape[1]
         assert actual_btc.shape[1] == expected_btc.shape[1]
+
         # values
         assert np.array_equal(actual, expected, equal_nan=True)
         assert np.array_equal(actual_btc, expected_btc, equal_nan=True)
         assert np.isinf(actual).sum().sum() == 0
         assert np.isinf(actual_btc).sum().sum() == 0
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -223,19 +231,23 @@ class TestTransform:
         assert actual_btc.shape[0] == expected_btc.shape[0]
         assert actual.shape[1] == expected.shape[1]
         assert actual_btc.shape[1] == expected_btc.shape[1]
+
         # values
         assert np.array_equal(actual, expected, equal_nan=True)
         assert np.array_equal(actual_btc, expected_btc, equal_nan=True)
         assert np.isnan(actual).sum().sum() == 0
         assert np.isnan(actual_btc).sum().sum() == 0
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -255,19 +267,23 @@ class TestTransform:
         assert actual_btc.shape[0] == expected_btc.shape[0]
         assert actual.shape[1] == expected.shape[1]
         assert actual_btc.shape[1] == expected_btc.shape[1]
+
         # values
         assert np.array_equal(actual, expected, equal_nan=True)
         assert np.array_equal(actual_btc, expected_btc, equal_nan=True)
         assert np.isnan(actual).sum().sum() == 0
         assert np.isnan(actual_btc).sum().sum() == 0
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -288,19 +304,23 @@ class TestTransform:
         assert actual_btc.shape[0] == expected_btc.shape[0]
         assert actual.shape[1] == expected.shape[1]
         assert actual_btc.shape[1] == expected_btc.shape[1]
+
         # values
         assert np.array_equal(actual, expected, equal_nan=True)
         assert np.array_equal(actual_btc, expected_btc, equal_nan=True)
         assert np.isnan(actual).sum().sum() == 0
         assert np.isnan(actual_btc).sum().sum() == 0
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -341,14 +361,17 @@ class TestTransform:
         else:
             assert (self.no_missing_transform_instance.trans_df.groupby(level=0).mean() < 0.0001).all().all()
             assert (self.btc_transform_instance.trans_df.mean(axis=1) < 0.0001).all().all()
+
         # dtypes
         assert isinstance(self.no_missing_transform_instance.trans_df, pd.DataFrame)
         assert isinstance(self.btc_transform_instance.trans_df, pd.DataFrame)
         assert (self.no_missing_transform_instance.trans_df.dtypes == np.float64).all()
         assert (self.btc_transform_instance.trans_df.dtypes == np.float64).all()
+
         # index
         assert (self.no_missing_transform_instance.trans_df.index == self.no_missing_transform_instance.df.index).all()
         assert (self.btc_transform_instance.trans_df.index == self.btc_transform_instance.df.index).all()
+
         # cols
         assert (self.no_missing_transform_instance.trans_df.columns ==
                 self.no_missing_transform_instance.df.columns).all()
@@ -365,18 +388,22 @@ class TestTransform:
         # shape
         assert actual.shape == self.default_transform_instance.df.shape
         assert actual_btc.shape == self.btc_transform_instance.df.shape
+
         # values
         assert np.allclose(self.btc_transform_instance.df.iloc[1:], (actual_btc.cumsum() +
                            self.btc_transform_instance.df.iloc[0]).dropna())
         assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -450,18 +477,22 @@ class TestTransform:
         assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
         assert actual.shape[1] == self.default_transform_instance.df.shape[1]
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
+
         # values
         if start_val == 16616.75:
             assert np.allclose(actual.unstack().close.BTC.iloc[:],
                            self.default_transform_instance.df.unstack().close.BTC.iloc[:])
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -479,18 +510,22 @@ class TestTransform:
         assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
         assert actual.shape[1] == self.default_transform_instance.df.shape[1]
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
+
         # values
         assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
         assert np.allclose(actual.unstack().describe().loc['std'] * np.sqrt(365), 0.15)
         assert np.allclose((actual_btc.describe().loc['std'] * np.sqrt(365)), 0.15)
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -514,16 +549,20 @@ class TestTransform:
         assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
         assert actual.shape[1] == self.default_transform_instance.df.shape[1]
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
+
         # values
         assert np.allclose(actual.loc[pd.IndexSlice[:, 'BTC'], :], actual_btc, equal_nan=True)
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.index).all()
         assert (actual_btc.index == self.btc_transform_instance.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -1336,6 +1375,7 @@ class TestTransform:
         assert actual_btc.shape[0] == self.btc_transform_instance.df.shape[0]
         assert actual.shape[1] == self.default_transform_instance.df.shape[1]
         assert actual_btc.shape[1] == self.btc_transform_instance.df.shape[1]
+
         # values
         if axis == 'ts':
             fixed_expected_close = self.default_transform_instance.quantize(bins, 'ts', 'fixed')
@@ -1360,14 +1400,17 @@ class TestTransform:
             assert (actual.groupby(level=0).nunique().iloc[-2000:].mean() == bins).all()  # number of unique values
             assert np.allclose(actual.groupby(level=0).close.value_counts(bins=bins).groupby(level=0).mean() /
                    actual.groupby(level=0).close.count(), 1/bins)
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         assert (actual.index == self.default_transform_instance.df.index).all()
         assert (actual_btc.index == self.btc_transform_instance.df.index).all()
+
         # cols
         assert (actual.columns == self.default_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_transform_instance.df.columns).all()
@@ -1400,6 +1443,7 @@ class TestTransform:
             assert actual_btc.shape[0] == self.btc_no_missing_transform_instance.df.shape[0]
         assert actual.shape[1] == self.no_missing_transform_instance.df.shape[1]
         assert actual_btc.shape[1] == self.btc_no_missing_transform_instance.df.shape[1]
+
         # values
         if axis == 'ts':
             fixed_expected_close = self.no_missing_transform_instance.discretize(bins, 'ts', method, 'fixed')
@@ -1424,15 +1468,18 @@ class TestTransform:
             assert (actual.groupby(level=0).nunique().iloc[-2000:].mean() == bins).all()  # number of unique values
             assert np.allclose(actual.groupby(level=0).close.value_counts(bins=bins).groupby(level=0).mean() /
                    actual.groupby(level=0).close.count(), 1/bins)
+
         # dtypes
         assert isinstance(actual, pd.DataFrame)
         assert isinstance(actual_btc, pd.DataFrame)
         assert (actual.dtypes == np.float64).all()
         assert (actual_btc.dtypes == np.float64).all()
+
         # index
         if window_type == 'fixed':
             assert (actual.index == self.no_missing_transform_instance.df.index).all()
             assert (actual_btc.index == self.btc_no_missing_transform_instance.df.index).all()
+
         # cols
         assert (actual.columns == self.no_missing_transform_instance.df.columns).all()
         assert (actual_btc.columns == self.btc_no_missing_transform_instance.df.columns).all()
@@ -1508,19 +1555,23 @@ class TestTransform:
         # shape
         assert self.default_transform_instance.trans_df.shape == self.default_transform_instance.df.shape
         assert self.btc_transform_instance.trans_df.shape == self.btc_transform_instance.df.shape
+
         # values
         assert ((self.default_transform_instance.trans_df.dropna().abs() >= 0) &
                 (self.default_transform_instance.trans_df.dropna().abs() <= 1)).all().all()
         assert ((self.btc_transform_instance.trans_df.dropna().abs() >= 0) &
                 (self.btc_transform_instance.trans_df.dropna().abs() <= 1)).all().all()
+
         # dtypes
         assert isinstance(self.default_transform_instance.trans_df, pd.DataFrame)
         assert isinstance(self.btc_transform_instance.trans_df, pd.DataFrame)
         assert (self.default_transform_instance.trans_df.dtypes == np.float64).all()
         assert (self.btc_transform_instance.trans_df.dtypes == np.float64).all()
+
         # index
         assert (self.default_transform_instance.trans_df.index == self.default_transform_instance.df.index).all()
         assert (self.btc_transform_instance.trans_df.index == self.btc_transform_instance.df.index).all()
+
         # cols
         assert (self.default_transform_instance.trans_df.columns == self.default_transform_instance.df.columns).all()
         assert (self.btc_transform_instance.trans_df.columns == self.btc_transform_instance.df.columns).all()
@@ -1555,17 +1606,21 @@ class TestTransform:
         # shape
         if axis == 'ts':
             assert self.default_transform_instance.trans_df.shape == self.default_transform_instance.df.shape
+
         # values
         assert ((self.default_transform_instance.trans_df.dropna().abs() >= 0) &
                 (self.default_transform_instance.trans_df.dropna().abs() <= 1)).all().all()
         if bins is not None:
             assert (self.default_transform_instance.trans_df.nunique() == bins).all()
+
         # dtypes
         assert isinstance(self.default_transform_instance.trans_df, pd.DataFrame)
         assert (self.default_transform_instance.trans_df.dtypes == np.float64).all()
+
         # index
         if axis == 'ts':
             assert (self.default_transform_instance.trans_df.index == self.default_transform_instance.index).all()
+
         # cols
         assert (self.default_transform_instance.trans_df.columns == self.default_transform_instance.df.columns).all()
 
@@ -1586,15 +1641,19 @@ class TestTransform:
 
         # shape
         assert self.btc_transform_instance.trans_df.shape == self.btc_transform_instance.df.shape
+
         # values
         assert ((self.btc_transform_instance.trans_df.dropna().abs() >= 0) &
                 (self.btc_transform_instance.trans_df.dropna().abs() <= 1)).all().all()
         if axis == 'ts' and bins is not None:
             assert (self.btc_transform_instance.trans_df.nunique() == bins).all()
+
         # dtypes
         assert isinstance(self.btc_transform_instance.trans_df, pd.DataFrame)
         assert (self.btc_transform_instance.trans_df.dtypes == np.float64).all()
+
         # index
         assert (self.btc_transform_instance.trans_df.index == self.btc_transform_instance.df.index).all()
+
         # cols
         assert (self.btc_transform_instance.trans_df.columns == self.btc_transform_instance.df.columns).all()
