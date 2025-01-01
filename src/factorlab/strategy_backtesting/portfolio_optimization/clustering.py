@@ -825,18 +825,23 @@ class HERC:
 
         # get clusters
         self.get_clusters()
+        print(f"clusters: {self.clusters}")
 
         # compute optimal number of clusters
         self.compute_optimal_n_clusters()
+        print(f"n_clusters: {self.n_clusters}")
 
         # get cluster children
         self.get_cluster_children()
+        print(f"cluster_children: {self.cluster_children}")
 
         # quasi diagonalization
         self.idxs = self.quasi_diagonalization(self.n_assets * 2 - 2)
+        print(f"idxs: {self.idxs}")
 
         # recursive bisection
         self.recursive_bisection()
+        print(f"weights: {self.weights}")
 
         # weights
         self.weights = pd.DataFrame(self.weights * self.leverage, index=self.asset_names,
