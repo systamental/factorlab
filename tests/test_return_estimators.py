@@ -60,21 +60,31 @@ class TestReturnEstimators:
         Test deannualize risk-free rate.
         """
         rf_rate = self.default_ret_est_instance.risk_free_rate.copy()
+
         # de-annualize
         self.default_ret_est_instance.deannualize_rf_rate()
 
+        # values
         assert rf_rate.dropna().abs().ge(self.default_ret_est_instance.risk_free_rate.dropna().abs()).all()
+
+        # dtypes
+        assert self.default_ret_est_instance.risk_free_rate.dtypes == np.float64
 
     def test_compute_excess_returns(self) -> None:
         """
         Test compute expected returns.
         """
         rets = self.default_ret_est_instance.returns.copy()
+
         # excess returns
         self.default_ret_est_instance.compute_excess_returns()
 
+        # values
         assert ((rets > self.default_ret_est_instance.returns).sum() /
                 self.default_ret_est_instance.returns.shape[0] > 0.9).all()
+
+        # dtypes
+        assert (rets.dtypes == np.float64).all()
 
     def test_historical_mean(self) -> None:
         """
@@ -82,8 +92,12 @@ class TestReturnEstimators:
         """
         self.default_ret_est_instance.historical_mean()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.mean()).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
 
     def test_historical_median(self) -> None:
         """
@@ -91,8 +105,12 @@ class TestReturnEstimators:
         """
         self.default_ret_est_instance.historical_median()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.median()).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
 
     def test_rolling_means(self) -> None:
         """
@@ -100,9 +118,13 @@ class TestReturnEstimators:
         """
         self.default_ret_est_instance.rolling_mean()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.rolling(
             window=self.default_ret_est_instance.window_size).mean().iloc[-1]).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
 
     def test_rolling_median(self) -> None:
         """
@@ -110,9 +132,14 @@ class TestReturnEstimators:
         """
         self.default_ret_est_instance.rolling_median()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.rolling(
             window=self.default_ret_est_instance.window_size).median().iloc[-1]).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
+
 
     def test_ewma(self) -> None:
         """
@@ -120,9 +147,13 @@ class TestReturnEstimators:
         """
         self.default_ret_est_instance.ewma()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == self.default_ret_est_instance.returns.ewm(
             span=self.default_ret_est_instance.window_size).mean().iloc[-1]).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
 
     def test_rolling_sharpe(self) -> None:
         """
@@ -130,10 +161,14 @@ class TestReturnEstimators:
         """
         self.default_ret_est_instance.rolling_sharpe()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == (self.default_ret_est_instance.returns.rolling(
             window=self.default_ret_est_instance.window_size).mean() / self.default_ret_est_instance.returns.rolling(
             window=self.default_ret_est_instance.window_size).std()).iloc[-1]).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
 
     def test_rolling_sortino(self) -> None:
         """
@@ -142,11 +177,15 @@ class TestReturnEstimators:
         self.default_ret_est_instance.window_size = 10
         self.default_ret_est_instance.rolling_sortino()
 
-        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        # values
         assert (self.default_ret_est_instance.exp_returns == (self.default_ret_est_instance.returns.rolling(
             window=self.default_ret_est_instance.window_size).mean() / self.default_ret_est_instance.returns[
             self.default_ret_est_instance.returns < 0].rolling(
             window=self.default_ret_est_instance.window_size, min_periods=2).std()).iloc[-1]).all()
+
+        # dtypes
+        assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
 
     @pytest.mark.parametrize("method", ['historical_mean', 'historical_median', 'rolling_mean', 'rolling_median',
                                         'ewma', 'rolling_sharpe', 'rolling_sortino'])
@@ -157,4 +196,6 @@ class TestReturnEstimators:
         self.default_ret_est_instance.method = method
         self.default_ret_est_instance.compute_expected_returns()
 
+        # dtypes
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
+        assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
