@@ -16,7 +16,7 @@ class PortfolioOptimization:
 
     This class computes the optimized portfolio weights or returns based on the signals returns of assets or strategies.
     """
-    # List of available optimizer names
+    # list of available optimizer names
     available_optimizers = ['equal_weight', 'signal_weight', 'inverse_variance', 'inverse_vol', 'target_vol',
                             'random', 'max_return', 'min_vol', 'max_return_min_vol', 'max_sharpe',
                             'max_diversification', 'efficient_return', 'efficient_risk', 'risk_parity', 'hrp', 'herc']
@@ -328,7 +328,7 @@ class PortfolioOptimization:
 
         return self.weights
 
-    def _compute_rolling_window_weights(self) -> pd.DataFrame:
+    def _compute_rolling_window_weights(self, progress_callback=None) -> pd.DataFrame:
         """
         Compute rolling window weights.
 
@@ -344,8 +344,7 @@ class PortfolioOptimization:
             loc_end = self.opt_returns.index.get_loc(end_date)
             ret_window = self.opt_returns.iloc[loc_end + 1 - self.window_size: loc_end + 1]
             self._get_optimizer(ret_window)
-            w = self.optimizer.compute_weights()
-            return w
+            return self.optimizer.compute_weights()
 
         # parallelize optimization
         if self.parallelize:
