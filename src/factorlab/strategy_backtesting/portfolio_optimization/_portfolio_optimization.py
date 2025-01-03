@@ -343,13 +343,13 @@ class PortfolioOptimization:
             results = ProgressParallel(n_jobs=self.n_jobs,
                                      use_tqdm=True,
                                      total=total_tasks,
-                                     desc="Computing optimal weights")(
+                                     desc="Computing expanding window weights")(
                 delayed(compute_weights_for_date)(date) for date in dates
             )
         else:
             results = []
             for date in tqdm(dates,
-                           desc="Computing optimal weights",
+                           desc="Computing expanding window weights",
                            total=total_tasks):
                 results.append(compute_weights_for_date(date))
 
@@ -382,13 +382,13 @@ class PortfolioOptimization:
             results = ProgressParallel(n_jobs=self.n_jobs,
                                      use_tqdm=True,
                                      total=total_tasks,
-                                     desc="Computing optimal weights")(
+                                     desc="Computing rolling window weights")(
                 delayed(compute_weights_for_date)(date) for date in dates
             )
         else:
             results = []
             for date in tqdm(dates,
-                           desc="Computing optimal weights",
+                           desc="Computing rolling window weights",
                            total=total_tasks):
                 results.append(compute_weights_for_date(date))
 
