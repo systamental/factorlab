@@ -8,6 +8,26 @@ from factorlab.strategy_backtesting.portfolio_optimization.clustering import HRP
 from factorlab.data_viz.plot import plot_bar, plot_series
 
 from joblib import Parallel, delayed
+from tqdm import tqdm
+
+
+class ProgressParallel(Parallel):
+    """Custom Parallel backend that includes a progress bar"""
+    def __init__(self, use_tqdm=True, total=None, desc=None, *args, **kwargs):
+        self._use_tqdm = use_tqdm
+        self._total = total
+        self._desc = desc
+        super().__init__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        with tqdm(disable=not self._use_tqdm, total=self._total, desc=self._desc) as self._pbar:
+            return Parallel.__call__(self, *args, **kwargs)
+
+    def print_progress(self):
+        if self._total is None:
+            self._pbar.total = self.n_dispatched_tasks
+        self._pbar.n = self.n_completed_tasks
+        self._pbar.refresh()
 
 
 class PortfolioOptimization:
@@ -309,6 +329,7 @@ class PortfolioOptimization:
         """
         # dates
         dates = self.optimizer.returns.index[self.window_size - 1:]
+        total_tasks = len(dates)
 
         def compute_weights_for_date(end_date):
             ret_window = self.opt_returns.loc[:end_date]
@@ -317,20 +338,29 @@ class PortfolioOptimization:
 
             return w
 
-        # parallelize optimization
+        # parallelize optimization with progress tracking
         if self.parallelize:
-            results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
+            results = ProgressParallel(n_jobs=self.n_jobs,
+                                     use_tqdm=True,
+                                     total=total_tasks,
+                                     desc="Computing optimal weights")(
+                delayed(compute_weights_for_date)(date) for date in dates
+            )
         else:
-            results = (compute_weights_for_date(date) for date in dates)
+            results = []
+            for date in tqdm(dates,
+                           desc="Computing optimal weights",
+                           total=total_tasks):
+                results.append(compute_weights_for_date(date))
 
         # weights
         self.weights = pd.concat(results).astype('float64').fillna(0)
 
         return self.weights
 
-    def _compute_rolling_window_weights(self, progress_callback=None) -> pd.DataFrame:
+    def _compute_rolling_window_weights(self) -> pd.DataFrame:
         """
-        Compute rolling window weights.
+        Compute rolling window weights with progress tracking.
 
         Returns
         -------
@@ -339,6 +369,7 @@ class PortfolioOptimization:
         """
         # dates
         dates = self.optimizer.returns.index[self.window_size - 1:]
+        total_tasks = len(dates)
 
         def compute_weights_for_date(end_date):
             loc_end = self.opt_returns.index.get_loc(end_date)
@@ -346,11 +377,20 @@ class PortfolioOptimization:
             self._get_optimizer(ret_window)
             return self.optimizer.compute_weights()
 
-        # parallelize optimization
+        # parallelize optimization with progress tracking
         if self.parallelize:
-            results = Parallel(n_jobs=self.n_jobs)(delayed(compute_weights_for_date)(date) for date in dates)
+            results = ProgressParallel(n_jobs=self.n_jobs,
+                                     use_tqdm=True,
+                                     total=total_tasks,
+                                     desc="Computing optimal weights")(
+                delayed(compute_weights_for_date)(date) for date in dates
+            )
         else:
-            results = (compute_weights_for_date(date) for date in dates)
+            results = []
+            for date in tqdm(dates,
+                           desc="Computing optimal weights",
+                           total=total_tasks):
+                results.append(compute_weights_for_date(date))
 
         # weights
         self.weights = pd.concat(results).astype('float64').fillna(0)
