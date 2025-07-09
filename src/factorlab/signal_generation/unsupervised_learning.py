@@ -338,6 +338,7 @@ class R2PCA:
     """
     R2-PCA principal component analysis class.
     """
+
     def __init__(self,
                  data: Union[np.array, pd.DataFrame],
                  n_components: Optional[int] = None,
@@ -514,6 +515,61 @@ class R2PCA:
 
         return eigenvectors
 
+    def get_rolling_eigenvectors(self, window_size: int) -> pd.DataFrame:
+        """
+        Compute rolling eigenvectors with consistent ordering and sign correction.
+
+        Parameters
+        ----------
+        window_size : int
+            Size of the rolling window.
+
+        Returns
+        -------
+        pd.DataFrame
+            Stacked DataFrame of rolling eigenvectors.
+            Index = [date, tickers], Columns = ['EV1', 'EV2', ...]
+        """
+        if window_size is None:
+            raise ValueError("Window size must be specified.")
+        if window_size >= self.data.shape[0]:
+            raise ValueError(f"Window size {window_size} is too large for data length.")
+        if window_size < self.n_components:
+            self.n_components = window_size
+            self.create_pca_instance()
+
+        rolling_eigenvecs = []
+
+        # Initial reference eigenvectors
+        self.data_window = self.data[:window_size, :]
+        ref_eigenvectors = self.get_eigenvectors()
+        rolling_eigenvecs.append(ref_eigenvectors)
+
+        # Rolling loop
+        for row in range(1, self.data.shape[0] - window_size + 1):
+            self.data_window = self.data[row: row + window_size, :]
+            eigvec = self.get_eigenvectors()
+            eigvec = self.correct_eigenvectors(eigvec, ref_eigenvectors)
+            ref_eigenvectors = eigvec
+            rolling_eigenvecs.append(eigvec)
+
+        # Build stacked tidy DataFrame
+        dates = self.index[window_size - 1:]
+        assets = self.raw_data.columns
+        component_names = [f"EV{i + 1}" for i in range(self.n_components)]
+        records = []
+
+        for eigvec, date in zip(rolling_eigenvecs, dates):
+            df = pd.DataFrame(eigvec, index=assets, columns=component_names)
+            df['date'] = date
+            df['ticker'] = df.index
+            records.append(df.reset_index(drop=True))
+
+        df_long = pd.concat(records)
+        df_long = df_long.set_index(['date', 'ticker']).sort_index()
+
+        return df_long
+
     def get_rolling_pcs(self, window_size: int) -> Union[np.array, pd.DataFrame]:
         """
         Get rolling principal components using R2-PCA.
@@ -553,7 +609,6 @@ class R2PCA:
 
         # apply rolling pca with consistent ordering and signs
         for row in range(1, self.data.shape[0] - window_size + 1):
-
             # set rolling window
             self.data_window = self.data[row: row + window_size, :]
             # get eigenvectors
@@ -579,7 +634,7 @@ class R2PCA:
 
         return self.pcs
 
-    def get_rolling_expl_var_ratio(self, window_size: int, **kwargs: Any) -> Union[np.array, pd.DataFrame]:
+    def get_rolling_expl_var_ratio(self, window_size: int) -> Union[np.array, pd.DataFrame]:
         """
         Get rolling explained variance ratio.
 
@@ -587,7 +642,6 @@ class R2PCA:
         ----------
         window_size: int
             Size of rolling window (number of observations).
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
 
         Returns
         -------
@@ -634,6 +688,60 @@ class R2PCA:
 
         return self.expl_var_ratio
 
+    def get_expanding_eigenvectors(self, min_obs: int) -> pd.DataFrame:
+        """
+        Compute expanding eigenvectors with consistent ordering and sign correction.
+
+        Parameters
+        ----------
+        min_obs : int
+            Minimum number of observations to start computing eigenvectors.
+
+        Returns
+        -------
+        pd.DataFrame
+            Stacked DataFrame of expanding eigenvectors.
+            Index = [date, asset], Columns = ['EV1', 'EV2', ...]
+        """
+        if min_obs is None:
+            raise ValueError("Minimum observations must be specified.")
+        if min_obs >= self.data.shape[0]:
+            raise ValueError(f"Minimum observations {min_obs} is too large for data length.")
+        if min_obs < self.n_components:
+            self.n_components = min_obs
+            self.create_pca_instance()
+
+        expanding_eigenvecs = []
+
+        # Initial expanding window
+        self.data_window = self.data[:min_obs, :]
+        ref_eigenvectors = self.get_eigenvectors()
+        expanding_eigenvecs.append(ref_eigenvectors)
+
+        for row in range(min_obs + 1, self.data.shape[0] + 1):
+            self.data_window = self.data[:row, :]
+            eigvec = self.get_eigenvectors()
+            eigvec = self.correct_eigenvectors(eigvec, ref_eigenvectors)
+            ref_eigenvectors = eigvec
+            expanding_eigenvecs.append(eigvec)
+
+        # Build stacked tidy DataFrame
+        dates = self.index[min_obs - 1:]  # align to end of each window
+        assets = self.raw_data.columns
+        component_names = [f"EV{i + 1}" for i in range(self.n_components)]
+        records = []
+
+        for eigvec, date in zip(expanding_eigenvecs, dates):
+            df = pd.DataFrame(eigvec, index=assets, columns=component_names)
+            df['date'] = date
+            df['asset'] = df.index
+            records.append(df.reset_index(drop=True))
+
+        df_long = pd.concat(records)
+        df_long = df_long.set_index(['date', 'asset']).sort_index()
+
+        return df_long
+
     def get_expanding_pcs(self, min_obs: int) -> Union[np.array, pd.DataFrame]:
         """
         Get rolling principal components.
@@ -671,7 +779,6 @@ class R2PCA:
 
         # apply expanding pca with consistent ordering and signs
         for row in range(min_obs + 1, self.data.shape[0] + 1):
-
             # set expanding window
             self.data_window = self.data[: row]
             # get eigenvectors
