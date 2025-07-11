@@ -360,7 +360,6 @@ class R2PCA:
 
     def __init__(self,
                  data: Union[np.array, pd.DataFrame],
-                 missing_values: str = 'drop_rows',
                  n_components: Optional[int] = None,
                  svd_solver: str = 'auto',
                  **kwargs: Any
@@ -375,11 +374,6 @@ class R2PCA:
         ----------
         data: np.array or pd.DataFrame
             Data matrix for principal component analysis
-        missing_values: str, {'drop_rows', 'drop_all_rows_any_cols'}, default 'drop_rows'
-            How to handle missing values in the data.
-            'drop_rows' - drop rows with any missing values,
-            'drop_all_rows_any_cols' - drop rows where all columns have missing values and
-            columns with any missing values.
         n_components: int or float, default None
             Number of principal components, or percentage of variance explained.
         svd_solver: str, {'auto', 'full', 'arpack', 'randomized'}, default='auto'
@@ -389,7 +383,6 @@ class R2PCA:
         **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
         """
         self.raw_data = data
-        self.missing_values = missing_values
         self.data = self.remove_missing()
         self.n_components = min(self.data.shape) if n_components is None else n_components
         self.svd_solver = svd_solver
@@ -410,20 +403,10 @@ class R2PCA:
             Data matrix with missing values removed.
         """
         if isinstance(self.raw_data, pd.DataFrame):
-            if self.missing_values == 'drop_rows':
-                self.data = self.raw_data.dropna().to_numpy(dtype=np.float64)
-            elif self.missing_values == 'drop_all_rows_any_cols':
-                self.data = self.raw_data.dropna(how='all').dropna(axis=1).to_numpy(dtype=np.float64)
+            self.data = self.raw_data.dropna().to_numpy(dtype=np.float64)
 
         elif isinstance(self.raw_data, np.ndarray):
-            if self.missing_values == 'drop_rows':
-                self.data = self.raw_data[~np.isnan(self.raw_data).any(axis=1)].astype(np.float64)
-
-            elif self.missing_values == 'drop_all_rows_any_cols':
-                not_all_nan_rows = ~np.isnan(self.raw_data).all(axis=1)
-                temp = self.raw_data[not_all_nan_rows]
-                not_any_nan_cols = ~np.isnan(temp).any(axis=0)
-                self.data = temp[:, not_any_nan_cols].astype(np.float64)
+            self.data = self.raw_data[~np.isnan(self.raw_data).any(axis=1)].astype(np.float64)
 
         else:
             raise ValueError(f"Data must be pd.DataFrame or np.array.")
