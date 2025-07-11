@@ -393,7 +393,7 @@ class R2PCA:
         self.data = self.remove_missing()
         self.n_components = min(self.data.shape) if n_components is None else n_components
         self.svd_solver = svd_solver
-        self.index = data.dropna().index if isinstance(data, pd.DataFrame) else None
+        self.index = data.index if isinstance(data, pd.DataFrame) else None
         self.data_window = self.data.copy()
         self.pca = self.create_pca_instance(**kwargs)
         self.eigenvecs = None
