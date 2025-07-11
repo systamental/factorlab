@@ -34,6 +34,9 @@ class RiskEstimators:
             Type of window for risk estimation.
         window_size: int, default 252
             Window size for risk estimation.
+        min_obs: int, default 30
+            Minimum number of observations for risk estimation. If the number of observations is less than this value,
+            the risk estimation will not be performed and an error will be raised.
         """
         self.returns = returns
         self.asset_names = asset_names
@@ -60,6 +63,8 @@ class RiskEstimators:
         if isinstance(self.returns.index, pd.MultiIndex):  # convert to single index
             self.returns = self.returns.unstack()
         self.returns.index = pd.to_datetime(self.returns.index)  # convert to index to datetime
+
+        # missing values
         self.returns = self.returns.dropna(how='all')  # drop missing rows
 
         # asset names
@@ -851,8 +856,11 @@ class RiskEstimators:
                 # loop through rows of returns
                 for row in range(self.returns.shape[0] - self.window_size + 1):
 
+                    # data window
+                    data_window = self.returns.iloc[row:row + self.window_size].dropna(how='all').dropna(axis=1)
+
                     # compute risk estimator
-                    risk = getattr(RiskEstimators(self.returns.iloc[row:row + self.window_size]), method)(**kwargs)
+                    risk = getattr(RiskEstimators(data_window), method)(**kwargs)
                     if row == 0:
                         self.portfolio_risk = pd.DataFrame(risk.iloc[-1]).T
                     else:
