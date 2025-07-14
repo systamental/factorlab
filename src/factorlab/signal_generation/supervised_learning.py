@@ -177,7 +177,6 @@ class Regression(SuperviseLearning):
 
         """
         #TODO: review and refactor
-
         # out of sample oos
         if self.oos:
             self.predictors = self.predictors.iloc[:-1]
@@ -570,17 +569,12 @@ class SPCA:
         # feature selection
         self.get_selected_features()
 
-        print(f"Number of features: {self.n_feat}")
-        print(f"Selected {self.selected_features.shape[1]} features.")
-
         # n components
         if self.n_components is None or self.n_components > self.selected_features.shape[1]:
             self.n_components = self.selected_features.shape[1]
-        print(f"Number of components: {self.n_components}")
 
         # PCA
         self.pcs = PCAWrapper(self.selected_features, n_components=self.n_components).get_pcs()
-        print(f"Number of pcs: {self.pcs.shape[1]}")
 
         # add index and cols if available
         if self.index is not None:
@@ -712,17 +706,13 @@ class SPCA:
 
             # set expanding window
             self.expanding_window_data(row)
-            print(f"row: {row}")
-            print(f"features window date: {self.features_window.index[-1]}")
+
             # predict
             self.predict(method=method, **kwargs)
-            print(f"selected features: {self.selected_features}")
-            print(f"pcs: {self.pcs.iloc[-1]}")
 
             # add to df if not np.array
             if self.index is not None:
                 yhat_df = pd.concat([yhat_df, pd.DataFrame(self.yhat.iloc[-1]).T])
-                print(f"prediction: {self.yhat.iloc[-1]}")
             else:
                 yhat_df = pd.concat([yhat_df, pd.DataFrame(self.yhat[-1])])
 
