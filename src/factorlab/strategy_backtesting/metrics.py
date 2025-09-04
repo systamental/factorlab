@@ -147,24 +147,49 @@ class Metrics:
 
         return cum_ret
 
-    def annualized_return(self) -> Union[pd.Series, float]:
+    def annualized_return(self) -> Union[pd.DataFrame, pd.Series, float]:
         """
-        Computes the compound annual growth rate of returns, equivalent to CAGR.
+        Computes the compound annual growth rate (CAGR) of returns.
 
         Returns
         -------
-        dd: float or pd.Series
-            Annualized return for each asset or strategy.
+        ann_ret : float or pd.Series
+            Annualized return (CAGR) for each asset or strategy.
         """
         if self.window_type == 'rolling':
-            ann_ret = getattr(self.returns, self.window_type)(window=self.window_size).apply(
-                lambda x: (1 + x).prod() ** (self.ann_factor / len(x)) - 1)
+            if self.ret_type == 'log':
+                # Convert log returns to CAGR
+                ann_ret = (
+                    getattr(self.returns, self.window_type)(window=self.window_size)
+                    .mean()
+                    .apply(lambda x: np.expm1(x * self.ann_factor))
+                )
+            else:
+                # Simple returns CAGR
+                ann_ret = (
+                    getattr(self.returns, self.window_type)(window=self.window_size)
+                    .apply(lambda x: (1 + x).prod() ** (self.ann_factor / len(x)) - 1)
+                )
+
         elif self.window_type == 'expanding':
-            ann_ret = getattr(self.returns, self.window_type)().apply(
-                lambda x: (1 + x).prod() ** (self.ann_factor / len(x)) - 1)
-        else:
-            cum_ret = self.cumulative_returns(start_val=1).iloc[-1]
-            ann_ret = cum_ret ** (self.ann_factor / self.returns.count()) - 1
+            if self.ret_type == 'log':
+                ann_ret = (
+                    getattr(self.returns, self.window_type)()
+                    .mean()
+                    .apply(lambda x: np.expm1(x * self.ann_factor))
+                )
+            else:
+                ann_ret = (
+                    getattr(self.returns, self.window_type)()
+                    .apply(lambda x: (1 + x).prod() ** (self.ann_factor / len(x)) - 1)
+                )
+
+        else:  # Fixed / full sample
+            if self.ret_type == 'log':
+                ann_ret = np.expm1(self.returns.mean() * self.ann_factor)
+            else:
+                cum_ret = self.cumulative_returns(start_val=1).iloc[-1]
+                ann_ret = cum_ret ** (self.ann_factor / self.returns.count()) - 1
 
         return ann_ret
 
@@ -436,9 +461,9 @@ class Metrics:
             calmar = getattr(self.annualized_return(), self.window_type)() / \
                      getattr(self.max_drawdown(), self.window_type)() * -1
         else:
-            cr = self.annualized_return() / (self.max_drawdown() * -1)
+            calmar = self.annualized_return() / (self.max_drawdown() * -1)
 
-        return cr
+        return calmar
 
     def omega_ratio(self) -> Union[float, pd.Series, pd.DataFrame]:
         """
