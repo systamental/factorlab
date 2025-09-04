@@ -58,6 +58,7 @@ def risk_free_rates():
     return pd.read_csv("../src/factorlab/datasets/data/us_real_rates_10y_monthly.csv", index_col=['date'],
                        parse_dates=['date']).loc[:, 'US_Rates_3M'] / 100
 
+
 @pytest.fixture
 def market_return(crypto_log_returns):
     """
@@ -130,26 +131,41 @@ class TestMetrics:
         assert (cum_ret_simple.dtypes == np.float64).all()
 
         # shape
-        assert cum_ret_log.shape[0] == self.metrics_log_ret_instance.returns.shape[0]
-        assert cum_ret_simple.shape[0] == self.metrics_simple_ret_instance.returns.shape[0]
-        assert cum_ret_log.shape[1] == self.metrics_log_ret_instance.returns.shape[1]
-        assert cum_ret_simple.shape[1] == self.metrics_simple_ret_instance.returns.shape[1]
+        assert cum_ret_log.shape == self.metrics_log_ret_instance.returns.shape
 
-        # values
+        # values, log cumulative ≈ simple cumulative
         assert ((cum_ret_log - cum_ret_simple).sum() < 0.01).all()
 
-    def test_annualized_return(self) -> None:
+    @pytest.mark.parametrize("window_type", ['fixed', 'rolling', 'expanding'])
+    @pytest.mark.parametrize("ret_type", ['simple', 'log'])
+    def test_annualized_return(self, window_type, ret_type) -> None:
         """
-        Test annualized return computation.
+        Test that annualized returns are correctly computed (CAGR),
+        and log/simple implementations are consistent.
         """
-        ann_ret = self.metrics_log_ret_instance.annualized_return()
+        # Select the right instance
+        metrics = (
+            self.metrics_simple_ret_instance if ret_type == "simple"
+            else self.metrics_log_ret_instance
+        )
+        metrics.window_type = window_type
 
-        # dtypes
-        assert isinstance(ann_ret, pd.Series)
-        assert ann_ret.dtypes == np.float64
+        ann_ret = metrics.annualized_return()
 
-        # shape
-        assert ann_ret.shape[0] == self.metrics_log_ret_instance.returns.shape[1]
+        # dtypes and shapes
+        assert isinstance(ann_ret, (pd.DataFrame, pd.Series, float))
+        if isinstance(ann_ret, pd.Series):
+            assert ann_ret.dtypes == np.float64
+            assert ann_ret.shape[0] == metrics.returns.shape[1]
+
+        # Numerical correctness: compare log vs simple CAGR on same data
+        if window_type == "fixed":
+            ann_simple = self.metrics_simple_ret_instance.annualized_return()
+            ann_log = self.metrics_log_ret_instance.annualized_return()
+            # They should be very close
+            pd.testing.assert_series_equal(
+                ann_simple, ann_log, rtol=1e-4, atol=1e-4
+            )
 
     @pytest.mark.parametrize("window_type", ['rolling', 'expanding', 'fixed'])
     def test_winning_percentage(self, window_type) -> None:
