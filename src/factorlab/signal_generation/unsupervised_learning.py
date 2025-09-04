@@ -383,10 +383,10 @@ class R2PCA:
         **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
         """
         self.raw_data = data
+        self.index = None
         self.data = self.remove_missing()
         self.n_components = min(self.data.shape) if n_components is None else n_components
         self.svd_solver = svd_solver
-        self.index = data.index if isinstance(data, pd.DataFrame) else None
         self.data_window = self.data.copy()
         self.pca = self.create_pca_instance(**kwargs)
         self.eigenvecs = None
@@ -403,9 +403,11 @@ class R2PCA:
             Data matrix with missing values removed.
         """
         if isinstance(self.raw_data, pd.DataFrame):
+            self.index = self.raw_data.dropna().index
             self.data = self.raw_data.dropna().to_numpy(dtype=np.float64)
 
         elif isinstance(self.raw_data, np.ndarray):
+            self.index = None
             self.data = self.raw_data[~np.isnan(self.raw_data).any(axis=1)].astype(np.float64)
 
         else:
