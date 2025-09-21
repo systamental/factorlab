@@ -11,8 +11,8 @@ def onchain_data():
     Fixture for daily cryptoasset on-chain data.
     """
     # read csv from datasets/data
-    mktcap_df = pd.read_csv('../src/factorlab/datasets/data/crypto_mkt_cap.csv', index_col=[0, 1], parse_dates=True)
-    onchain_df = pd.read_csv('../src/factorlab/datasets/data/crypto_onchain_data.csv', index_col=[0, 1],
+    mktcap_df = pd.read_csv('datasets/data/crypto_mkt_cap.csv', index_col=[0, 1], parse_dates=True)
+    onchain_df = pd.read_csv('datasets/data/crypto_onchain_data.csv', index_col=[0, 1],
                              parse_dates=True)
 
     # concat dfs

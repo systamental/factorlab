@@ -10,7 +10,7 @@ def asset_returns():
     """
     Fixture for asset returns.
     """
-    df = pd.read_csv("../src/factorlab/datasets/data/asset_excess_returns_daily.csv", index_col=0)
+    df = pd.read_csv("datasets/data/asset_excess_returns_daily.csv", index_col=0)
     df.index = pd.to_datetime(df.index)
     df.index.name = 'date'
 

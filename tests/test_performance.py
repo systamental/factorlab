@@ -13,7 +13,7 @@ def binance_spot_prices():
     Fixture for crypto OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=['date']).loc[:, : 'close']
 
     # drop tickers with nobs < ts_obs
@@ -50,7 +50,7 @@ def risk_free_rates():
     Fixture for US real rates data.
     """
     # read csv from datasets/data
-    return pd.read_csv("../src/factorlab/datasets/data/us_real_rates_10y_monthly.csv", index_col=['date'],
+    return pd.read_csv("datasets/data/us_real_rates_10y_monthly.csv", index_col=['date'],
                        parse_dates=['date']).loc[:, 'US_Rates_3M'] / 100
 
 

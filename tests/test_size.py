@@ -11,7 +11,7 @@ def mkt_cap():
     Fixture for daily cryptoasset returns.
     """
     # read csv from datasets/data
-    df = pd.read_csv('../src/factorlab/datasets/data/crypto_mkt_cap.csv', index_col=['date', 'ticker'],
+    df = pd.read_csv('datasets/data/crypto_mkt_cap.csv', index_col=['date', 'ticker'],
                      parse_dates=True)
 
     return df

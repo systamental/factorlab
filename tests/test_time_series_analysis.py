@@ -16,7 +16,7 @@ def fx_returns_monthly():
     Fixture for monthly FX returns.
     """
     # read csv from datasets/data
-    return pd.read_csv("../src/factorlab/datasets/data/fx_returns_monthly.csv", index_col='date')
+    return pd.read_csv("datasets/data/fx_returns_monthly.csv", index_col='date')
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def spot_prices():
     Fixture for crypto spot prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=True).loc[:, : 'close']
 
     # drop tickers with nobs < ts_obs

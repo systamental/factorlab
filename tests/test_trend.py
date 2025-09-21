@@ -12,7 +12,7 @@ def ohlcv():
     Fixture for daily OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv('../src/factorlab/datasets/data/binance_spot_prices.csv', index_col=['date', 'ticker'],
+    df = pd.read_csv('datasets/data/binance_spot_prices.csv', index_col=['date', 'ticker'],
                      parse_dates=True)
 
     # drop tickers with nobs < ts_obs

@@ -10,7 +10,7 @@ def asset_returns():
     """
     Fixture for asset returns.
     """
-    df = pd.read_csv("../src/factorlab/datasets/data/asset_excess_returns_daily.csv", index_col=0)
+    df = pd.read_csv("datasets/data/asset_excess_returns_daily.csv", index_col=0)
     df.index = pd.to_datetime(df.index)
     df.index.name = 'date'
 
@@ -31,7 +31,7 @@ def asset_returns():
 
 class TestHRP:
     """
-    Test class for Hierarchical Risk Parity.
+    Test class for Hierarchical Risk Parity
     """
     @pytest.fixture(autouse=True)
     def hrp_default_instance(self, asset_returns):

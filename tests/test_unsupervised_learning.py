@@ -13,7 +13,7 @@ def fx_returns_z_monthly():
     Fixture for standardized (z-score) monthly FX returns.
     """
     # read csv from datasets/data
-    df = pd.read_csv("../src/factorlab/datasets/data/fx_returns_monthly.csv", index_col='date', parse_dates=True)
+    df = pd.read_csv("datasets/data/fx_returns_monthly.csv", index_col='date', parse_dates=True)
     # compute standardized returns and return dataframe with single index
     return Transform(df).normalize(axis='ts', window_type='expanding').dropna()
 
@@ -24,7 +24,7 @@ def crypto_returns_z_daily():
     Fixture for daily cryptoasset returns.
     """
     # read csv from datasets/data
-    df = pd.read_csv('../src/factorlab/datasets/data/binance_spot_prices.csv', index_col=['date', 'ticker'],
+    df = pd.read_csv('datasets/data/binance_spot_prices.csv', index_col=['date', 'ticker'],
                      parse_dates=True)
     ret = Transform(df).returns()
     # compute standardized returns and return dataframe with single index
@@ -37,9 +37,9 @@ def macro_z_monthly():
     Fixture for global growth (PMI) and inflation data.
     """
     # read csv from datasets/data
-    pmi_df = pd.read_csv('../src/factorlab/datasets/data/wld_pmi_monthly.csv', index_col=['date', 'ticker'],
-                     parse_dates=True)
-    infl_df = pd.read_csv('../src/factorlab/datasets/data/wld_infl_cpi_yoy_monthly.csv', index_col=['date'],
+    pmi_df = pd.read_csv('datasets/data/wld_pmi_monthly.csv', index_col=['date', 'ticker'],
+                         parse_dates=True)
+    infl_df = pd.read_csv('datasets/data/wld_infl_cpi_yoy_monthly.csv', index_col=['date'],
                           parse_dates=True)
     # macro df
     macro_df = pd.concat([pmi_df.unstack().actual.WL_Manuf_PMI, infl_df.actual], axis=1)
