@@ -1,7 +1,8 @@
-# Byte-compiled / optimized / DLL files
+# Python cache / compiled files
 __pycache__/
 *.py[cod]
 *$py.class
+
 
 # C extensions
 *.so
@@ -132,12 +133,6 @@ dmypy.json
 
 # PyCharm
 .idea/
-
-# RStudio project files
-**.Rproj.user/
-**.Rproj.user*
-**.Rproj
-**.Rhistory
 
 # MacOS
 .DS_Store
