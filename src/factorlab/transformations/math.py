@@ -6,9 +6,6 @@ from factorlab.core.base_transform import BaseTransform
 from factorlab.utils import to_dataframe
 
 
-# Assuming factorlab.utils.to_dataframe and factorlab.core.base_transform are available
-
-
 class Log(BaseTransform):
     """
     Computes the natural logarithm of the input values.
