@@ -12,8 +12,7 @@ class VWAP(BaseTransform):
     VWAP_t = (Close + Typical Price) / 2
     Typical Price = (Open + High + Low) / 3
 
-    This is a stateless transform (no parameters learned) and is fully compatible
-    with the fit/transform/fir_transform API for pipeline chaining.
+    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
 
     Parameters
     ----------
@@ -56,8 +55,38 @@ class VWAP(BaseTransform):
         self._is_fitted = True
         return self
 
+    def _transform(self, df_slice: pd.DataFrame) -> pd.Series:
+        """
+        Private method containing the core VWAP calculation logic.
+
+        Parameters
+        ----------
+        df_slice : pd.DataFrame
+            The input data slice containing only the columns required for computation.
+
+        Returns
+        -------
+        pd.Series
+            The computed VWAP series.
+        """
+        # typical price: (O + H + L) / 3
+        typical_price = (
+            df_slice[self.open_col] +
+            df_slice[self.high_col] +
+            df_slice[self.low_col]
+        ) / 3
+
+        # vwap: (Close + Typical Price) / 2
+        vwap = (df_slice[self.close_col] + typical_price) / 2
+        return vwap
+
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Compute the VWAP and return a new DataFrame with the output column."""
+        """
+        Public method to compute the VWAP.
+
+        It handles input validation, state checks, and delegates the core
+        calculation to the private `_transform` method.
+        """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
@@ -67,11 +96,8 @@ class VWAP(BaseTransform):
         # Slice and copy the required columns (ensuring immutability)
         df_slice = df_input[self.inputs].copy(deep=True)
 
-        # typical price
-        typical_price = (df_slice[self.open_col] + df_slice[self.high_col] + df_slice[self.low_col]) / 3
-
-        # vwap
-        vwap = (df_input[self.close_col] + typical_price) / 2
+        # Delegate computation
+        vwap = self._transform(df_slice)
 
         vwap_df = to_dataframe(vwap, 'vwap')
 
@@ -83,9 +109,9 @@ class NotionalValue(BaseTransform):
     Computes a notional value using OHLCV data.
 
     NotionalValue_t = price_t * volume_t
+    The result is then aggregated over a rolling window.
 
-    This is a stateless transform (no parameters learned) and is fully compatible
-    with the fit/transform/fir_transform API for pipeline chaining.
+    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
 
     Parameters
     ----------
@@ -94,7 +120,7 @@ class NotionalValue(BaseTransform):
     volume_col: str, default 'volume'
         Column name of the volume series.
     window_size: int, default 30
-        The rolling window size for aggregation.'=
+        The rolling window size for aggregation.
     agg_method: str, default 'mean'
         Aggregation method: 'mean' or 'sum'.
     """
@@ -129,8 +155,42 @@ class NotionalValue(BaseTransform):
         self._is_fitted = True
         return self
 
+    def _transform(self, df_slice: pd.DataFrame) -> pd.Series:
+        """
+        Private method containing the core Notional Value calculation logic.
+
+        Parameters
+        ----------
+        df_slice : pd.DataFrame
+            The input data slice containing only the price and volume columns.
+
+        Returns
+        -------
+        pd.Series
+            The computed and aggregated notional value series.
+        """
+        # 1. Calculate daily notional value: P * V
+        nv = df_slice[self.price_col] * df_slice[self.volume_col]
+
+        # 2. Aggregate
+        g = grouped(nv)
+        if self.agg_method == "mean":
+            nv_agg = g.rolling(window=self.window_size, min_periods=1).mean()
+        elif self.agg_method == "sum":
+            nv_agg = g.rolling(window=self.window_size, min_periods=1).sum()
+        else:
+            raise ValueError(f"Unsupported aggregation method: {self.agg_method}")
+
+        # Ensure index is consistent (dropping level 0 if single index)
+        return maybe_droplevel(nv_agg)
+
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Compute the VWAP and return a new DataFrame with the output column."""
+        """
+        Public method to compute the aggregated Notional Value.
+
+        It handles input validation, state checks, and delegates the core
+        calculation to the private `_transform` method.
+        """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
@@ -140,18 +200,8 @@ class NotionalValue(BaseTransform):
         # Slice and copy the required columns (ensuring immutability)
         df_slice = df_input[[self.price_col, self.volume_col]].copy(deep=True)
 
-        # notional value
-        nv = df_slice[self.price_col] * df_slice[self.volume_col]
-
-        # aggregate
-        g = grouped(nv)
-        if self.agg_method == "mean":
-            nv_agg = g.rolling(window=self.window_size, min_periods=1).mean()
-        elif self.agg_method == "sum":
-            nv_agg = g.rolling(window=self.window_size, min_periods=1).sum()
-        else:
-            raise ValueError(f"Unsupported aggregation method: {self.agg_method}")
-        nv_agg = maybe_droplevel(nv_agg)
+        # Delegate computation
+        nv_agg = self._transform(df_slice)
 
         notional_df = to_dataframe(nv_agg, 'notional_value')
 
