@@ -10,8 +10,7 @@ class Log(BaseTransform):
     """
     Computes the natural logarithm of the input values.
 
-    This is a stateless transform (no parameters learned) and is fully compatible
-    with the fit/transform/fit_transform API for pipeline chaining.
+    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
 
     Parameters
     ----------
@@ -38,7 +37,12 @@ class Log(BaseTransform):
         return self
 
     def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
-        """Apply the natural logarithm transformation, returning only the new columns."""
+        """
+        Public method to apply the natural logarithm transformation.
+
+        It handles input validation, state checks, and delegates the core
+        calculation to the private `_transform` method.
+        """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
@@ -48,6 +52,22 @@ class Log(BaseTransform):
         # Slice and copy the required columns (ensuring immutability)
         df_slice = df_input[self.input_cols].copy(deep=True)
 
+        return self._transform(df_slice)
+
+    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+        """
+        Private method containing the core natural logarithm calculation logic.
+
+        Parameters
+        ----------
+        df_slice : pd.DataFrame
+            The input data slice containing only the columns to be transformed.
+
+        Returns
+        -------
+        pd.DataFrame
+            The transformed data with new column names.
+        """
         # Replace non-positive values (<= 0) with NaN before taking the log
         df_slice = df_slice.mask(df_slice <= 0)
         log_df = np.log(df_slice)
@@ -66,8 +86,7 @@ class SquareRoot(BaseTransform):
     """
     Computes the square root of the input values.
 
-    This is a stateless transform (no parameters learned) and is fully compatible
-    with the fit/transform/fit_transform API for pipeline chaining.
+    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
 
     Parameters
     ----------
@@ -86,8 +105,9 @@ class SquareRoot(BaseTransform):
         """Required input columns for this transform."""
         return self.input_cols
 
-    def fit(self, X: Union[pd.Series, pd.DataFrame], y: Optional[Union[pd.Series, pd.DataFrame]] = None) \
-            -> 'SquareRoot':
+    def fit(self,
+            X: Union[pd.Series, pd.DataFrame],
+            y: Optional[Union[pd.Series, pd.DataFrame]] = None) -> 'SquareRoot':
         """Stateless fit: validates input and marks the transform as fitted."""
         df_input = to_dataframe(X)
         self.validate_inputs(df_input)
@@ -95,7 +115,12 @@ class SquareRoot(BaseTransform):
         return self
 
     def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
-        """Apply the square root transformation, returning only the new columns."""
+        """
+        Public method to apply the square root transformation.
+
+        It handles input validation, state checks, and delegates the core
+        calculation to the private `_transform` method.
+        """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
@@ -105,6 +130,22 @@ class SquareRoot(BaseTransform):
         # Slice and copy the required columns (ensuring immutability)
         df_slice = df_input[self.input_cols].copy(deep=True)
 
+        return self._transform(df_slice)
+
+    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+        """
+        Private method containing the core square root calculation logic.
+
+        Parameters
+        ----------
+        df_slice : pd.DataFrame
+            The input data slice containing only the columns to be transformed.
+
+        Returns
+        -------
+        pd.DataFrame
+            The transformed data with new column names.
+        """
         # Replace negative values with NaN as square root is undefined for real numbers
         df_slice = df_slice.mask(df_slice < 0)
         sqrt_df = np.sqrt(df_slice)
@@ -123,8 +164,7 @@ class Square(BaseTransform):
     """
     Computes the square of the input values.
 
-    This is a stateless transform (no parameters learned) and is fully compatible
-    with the fit/transform/fit_transform API for pipeline chaining.
+    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
 
     Parameters
     ----------
@@ -151,7 +191,12 @@ class Square(BaseTransform):
         return self
 
     def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
-        """Apply the square transformation, returning only the new columns."""
+        """
+        Public method to apply the square transformation.
+
+        It handles input validation, state checks, and delegates the core
+        calculation to the private `_transform` method.
+        """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
@@ -161,6 +206,22 @@ class Square(BaseTransform):
         # Slice and copy the required columns (ensuring immutability)
         df_slice = df_input[self.input_cols].copy(deep=True)
 
+        return self._transform(df_slice)
+
+    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+        """
+        Private method containing the core square calculation logic.
+
+        Parameters
+        ----------
+        df_slice : pd.DataFrame
+            The input data slice containing only the columns to be transformed.
+
+        Returns
+        -------
+        pd.DataFrame
+            The transformed data with new column names.
+        """
         # Apply square transformation using numpy
         sq_df = np.square(df_slice)
 
@@ -175,8 +236,7 @@ class Power(BaseTransform):
     """
     Computes the power of the input values raised to a specified exponent.
 
-    This is a stateless transform (no parameters learned) and is fully compatible
-    with the fit/transform/fit_transform API for pipeline chaining.
+    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
 
     Parameters
     ----------
@@ -211,7 +271,12 @@ class Power(BaseTransform):
         return self
 
     def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
-        """Apply the power transformation using the configured exponent, returning only the new columns."""
+        """
+        Public method to apply the power transformation.
+
+        It handles input validation, state checks, and delegates the core
+        calculation to the private `_transform` method.
+        """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
@@ -221,6 +286,22 @@ class Power(BaseTransform):
         # Slice and copy the required columns (ensuring immutability)
         df_slice = df_input[self.input_cols].copy(deep=True)
 
+        return self._transform(df_slice)
+
+    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+        """
+        Private method containing the core power calculation logic.
+
+        Parameters
+        ----------
+        df_slice : pd.DataFrame
+            The input data slice containing only the columns to be transformed.
+
+        Returns
+        -------
+        pd.DataFrame
+            The transformed data with new column names.
+        """
         # Apply power transformation using numpy
         power_df = np.power(df_slice, self.exponent)
 
