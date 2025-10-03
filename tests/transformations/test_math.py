@@ -14,7 +14,7 @@ from factorlab.transformations.math import (
 @pytest.fixture
 def binance_spot():
     """
-    Fixture for crypto OHLCV prices.
+    Fixture for crypto OHLCV prices (MultiIndex).
     """
     # read csv from datasets/data
     df = pd.read_csv("../datasets/data/binance_spot_prices.csv",
@@ -37,135 +37,171 @@ def binance_spot():
 @pytest.fixture
 def btc_spot_prices(binance_spot):
     """
-    Fixture for BTC OHLCV prices.
+    Fixture for BTC OHLCV prices (Single-ticker DataFrame).
     """
-    # read csv from datasets/data
+    # extract BTC data
     return binance_spot.loc[:, 'BTC', :]
 
 
-def check_assertions(actual: pd.DataFrame, expected_data: pd.DataFrame, expected_cols: List[str]):
-    """Helper to check common assertions."""
-    # The actual shape should match the expected number of rows and columns
-    assert actual.shape == (expected_data.shape[0], len(expected_cols))
-
-    # The actual values must be close (due to floating point math)
-    assert np.allclose(actual.values, expected_data.values, equal_nan=True)
-    assert np.isinf(actual.values).sum() == 0
-
-    # dtypes
-    assert isinstance(actual, pd.DataFrame)
-    assert all(actual.dtypes == np.float64)
-
-    # index
-    assert actual.index.equals(expected_data.index)
-
-    # cols (must match the new, prefixed names)
-    assert actual.columns.tolist() == expected_cols
-
-
-def test_log(binance_spot, btc_spot_prices) -> None:
+def check_accumulation_contract(
+        actual: pd.DataFrame,
+        original_data: pd.DataFrame,
+        expected_feature_data: pd.DataFrame,
+        expected_feature_cols: List[str]
+) -> None:
     """
-    Test Log transformation across multiple columns.
+    Helper to check the Phase 1: Accumulation Contract assertions:
+    1. All original columns are retained and unchanged.
+    2. New feature columns are correctly calculated and named.
+    """
+    # 1. Check final shape (Accumulation: Original Cols + New Feature Cols)
+    expected_num_cols = original_data.shape[1] + len(expected_feature_cols)
+    assert actual.shape == (original_data.shape[0], expected_num_cols), "Final DataFrame shape mismatch."
+
+    # 2. Check original columns (Context Retention)
+    # Ensure all original columns are still present and equal to the input data
+    original_cols = original_data.columns.tolist()
+    assert original_cols == actual[original_cols].columns.tolist(), "Original columns were modified or lost."
+    assert original_data.equals(actual[original_cols]), "Values in original columns were changed."
+
+    # 3. Check new columns (Feature Correctness)
+    actual_features = actual[expected_feature_cols]
+
+    # The actual feature values must be close to the expected values
+    assert np.allclose(actual_features.values, expected_feature_data.values,
+                       equal_nan=True), "Calculated feature values do not match expected values."
+
+    # No infinities allowed
+    assert np.isinf(actual_features.values).sum() == 0, "Feature contains infinite values."
+
+    # Check indices and types
+    assert actual.index.equals(original_data.index), "Index was modified."
+    assert isinstance(actual, pd.DataFrame), "Output is not a DataFrame."
+
+
+def test_log(binance_spot: pd.DataFrame, btc_spot_prices: pd.DataFrame) -> None:
+    """
+    Test Log transformation across multiple columns, ensuring accumulation.
     """
     INPUT_COLS = ['open', 'close']
     EXPECTED_COLS = [f'log_{col}' for col in INPUT_COLS]
 
+    # Define a helper to calculate expected features only
+    def calculate_expected(df: pd.DataFrame) -> pd.DataFrame:
+        expected_data = np.log(df[INPUT_COLS].mask(df[INPUT_COLS] <= 0)).replace([np.inf, -np.inf], np.nan)
+        expected_data.columns = EXPECTED_COLS
+        return expected_data
+
     # --- Multi-ticker (binance_spot) ---
     actual = Log(input_cols=INPUT_COLS).compute(binance_spot)
-    expected_data = np.log(binance_spot[INPUT_COLS]).replace([np.inf, -np.inf], np.nan)
-    expected_data.columns = EXPECTED_COLS  # Match the output column names
-    check_assertions(actual, expected_data, EXPECTED_COLS)
+    expected_features = calculate_expected(binance_spot)
+    check_accumulation_contract(actual, binance_spot, expected_features, EXPECTED_COLS)
 
     # --- Single-ticker (btc_spot_prices) ---
     actual_btc = Log(input_cols=INPUT_COLS).compute(btc_spot_prices)
-    expected_data_btc = np.log(btc_spot_prices[INPUT_COLS]).replace([np.inf, -np.inf], np.nan)
-    expected_data_btc.columns = EXPECTED_COLS  # Match the output column names
-    check_assertions(actual_btc, expected_data_btc, EXPECTED_COLS)
+    expected_features_btc = calculate_expected(btc_spot_prices)
+    check_accumulation_contract(actual_btc, btc_spot_prices, expected_features_btc, EXPECTED_COLS)
 
 
-def test_square_root(binance_spot, btc_spot_prices) -> None:
+def test_square_root(binance_spot: pd.DataFrame, btc_spot_prices: pd.DataFrame) -> None:
     """
-    Test square root transformation on a single column.
+    Test square root transformation on a single column, ensuring accumulation.
     """
     INPUT_COL = ['close']
     EXPECTED_COL = [f'sqrt_{INPUT_COL[0]}']
 
+    # Define a helper to calculate expected features only
+    def calculate_expected(df: pd.DataFrame) -> pd.DataFrame:
+        # Expected: clip to handle non-negative values, then sqrt
+        expected_data = np.sqrt(df[INPUT_COL].mask(df[INPUT_COL] < 0)).replace([np.inf, -np.inf], np.nan)
+        expected_data.columns = EXPECTED_COL
+        return expected_data
+
     # --- Multi-ticker (binance_spot) ---
     actual = SquareRoot(input_cols=INPUT_COL).compute(binance_spot)
-    # Expected: clip to handle non-negative values, then sqrt
-    expected_data = np.sqrt(binance_spot[INPUT_COL].clip(lower=0)).replace([np.inf, -np.inf], np.nan)
-    expected_data.columns = EXPECTED_COL
-    check_assertions(actual, expected_data, EXPECTED_COL)
+    expected_features = calculate_expected(binance_spot)
+    check_accumulation_contract(actual, binance_spot, expected_features, EXPECTED_COL)
 
     # --- Single-ticker (btc_spot_prices) ---
     actual_btc = SquareRoot(input_cols=INPUT_COL).compute(btc_spot_prices)
-    expected_data_btc = np.sqrt(btc_spot_prices[INPUT_COL].clip(lower=0)).replace([np.inf, -np.inf], np.nan)
-    expected_data_btc.columns = EXPECTED_COL
-    check_assertions(actual_btc, expected_data_btc, EXPECTED_COL)
+    expected_features_btc = calculate_expected(btc_spot_prices)
+    check_accumulation_contract(actual_btc, btc_spot_prices, expected_features_btc, EXPECTED_COL)
 
 
-def test_square(binance_spot, btc_spot_prices) -> None:
+def test_square(binance_spot: pd.DataFrame, btc_spot_prices: pd.DataFrame) -> None:
     """
-    Test square transformation across multiple columns.
+    Test square transformation across multiple columns, ensuring accumulation.
     """
     INPUT_COLS = ['high', 'low']
     EXPECTED_COLS = [f'sq_{col}' for col in INPUT_COLS]
 
+    # Define a helper to calculate expected features only
+    def calculate_expected(df: pd.DataFrame) -> pd.DataFrame:
+        expected_data = df[INPUT_COLS] ** 2
+        expected_data.columns = EXPECTED_COLS
+        return expected_data
+
     # --- Multi-ticker (binance_spot) ---
     actual = Square(input_cols=INPUT_COLS).compute(binance_spot)
-    expected_data = binance_spot[INPUT_COLS] ** 2
-    expected_data.columns = EXPECTED_COLS
-    check_assertions(actual, expected_data, EXPECTED_COLS)
+    expected_features = calculate_expected(binance_spot)
+    check_accumulation_contract(actual, binance_spot, expected_features, EXPECTED_COLS)
 
     # --- Single-ticker (btc_spot_prices) ---
     actual_btc = Square(input_cols=INPUT_COLS).compute(btc_spot_prices)
-    expected_data_btc = btc_spot_prices[INPUT_COLS] ** 2
-    expected_data_btc.columns = EXPECTED_COLS
-    check_assertions(actual_btc, expected_data_btc, EXPECTED_COLS)
+    expected_features_btc = calculate_expected(btc_spot_prices)
+    check_accumulation_contract(actual_btc, btc_spot_prices, expected_features_btc, EXPECTED_COLS)
 
 
-def test_power(binance_spot, btc_spot_prices) -> None:
+def test_power(binance_spot: pd.DataFrame, btc_spot_prices: pd.DataFrame) -> None:
     """
-    Test power transformation.
+    Test power transformation, ensuring accumulation.
     """
     EXPONENT = 3
     INPUT_COL = ['close']
     # The refactored Power class creates a name like 'power3_close'
     EXPECTED_COL = [f'power{EXPONENT}_{INPUT_COL[0]}']
 
+    # Define a helper to calculate expected features only
+    def calculate_expected(df: pd.DataFrame) -> pd.DataFrame:
+        expected_data = df[INPUT_COL] ** EXPONENT
+        expected_data.columns = EXPECTED_COL
+        return expected_data
+
     # --- Multi-ticker (binance_spot) ---
     actual = Power(exponent=EXPONENT, input_cols=INPUT_COL).compute(binance_spot)
-    expected_data = binance_spot[INPUT_COL] ** EXPONENT
-    expected_data.columns = EXPECTED_COL
-    check_assertions(actual, expected_data, EXPECTED_COL)
+    expected_features = calculate_expected(binance_spot)
+    check_accumulation_contract(actual, binance_spot, expected_features, EXPECTED_COL)
 
     # --- Single-ticker (btc_spot_prices) ---
     actual_btc = Power(exponent=EXPONENT, input_cols=INPUT_COL).compute(btc_spot_prices)
-    expected_data_btc = btc_spot_prices[INPUT_COL] ** EXPONENT
-    expected_data_btc.columns = EXPECTED_COL
-    check_assertions(actual_btc, expected_data_btc, EXPECTED_COL)
+    expected_features_btc = calculate_expected(btc_spot_prices)
+    check_accumulation_contract(actual_btc, btc_spot_prices, expected_features_btc, EXPECTED_COL)
 
 
-def test_power_with_float_exponent(binance_spot) -> None:
+def test_power_with_float_exponent(binance_spot: pd.DataFrame) -> None:
     """
-    Test Power transformation with a float exponent, ensuring proper column naming.
+    Test Power transformation with a float exponent, ensuring proper column naming and accumulation.
     """
     EXPONENT = 1.5
     INPUT_COL = ['open']
     # Exponent '1.5' is sanitized to '1_5' in the column name
     EXPECTED_COL = [f'power1_5_{INPUT_COL[0]}']
 
+    # Define a helper to calculate expected features only
+    def calculate_expected(df: pd.DataFrame) -> pd.DataFrame:
+        expected_data = df[INPUT_COL] ** EXPONENT
+        expected_data.columns = EXPECTED_COL
+        return expected_data
+
     actual = Power(exponent=EXPONENT, input_cols=INPUT_COL).compute(binance_spot)
-    expected_data = binance_spot[INPUT_COL] ** EXPONENT
-    expected_data.columns = EXPECTED_COL
-    check_assertions(actual, expected_data, EXPECTED_COL)
+    expected_features = calculate_expected(binance_spot)
+    check_accumulation_contract(actual, binance_spot, expected_features, EXPECTED_COL)
 
 
 def test_power_invalid_exponent_type() -> None:
     """
-    Test Power transformation with a non-numeric exponent.
-    (Testing the validation in the refactored class)
+    Test Power transformation with a non-numeric exponent (testing the validation).
     """
-    # This now checks for non-numeric type, not positive integer, per the refactored logic
+    # This checks for non-numeric type, as defined in the refactored class
     with pytest.raises(ValueError, match="Exponent must be an integer or float."):
         Power(exponent="two").compute(pd.DataFrame([1, 2, 3]))

@@ -10,7 +10,8 @@ class Log(BaseTransform):
     """
     Computes the natural logarithm of the input values.
 
-    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
+    Implements the Phase 1: Accumulation Contract: returns the full input DataFrame
+    with new 'log_' columns appended.
 
     Parameters
     ----------
@@ -40,53 +41,53 @@ class Log(BaseTransform):
         """
         Public method to apply the natural logarithm transformation.
 
-        It handles input validation, state checks, and delegates the core
-        calculation to the private `_transform` method.
+        It handles input validation, state checks, and implements the Accumulation Contract.
         """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        df_input = to_dataframe(X)
+        # CRITICAL: Create a deep copy of the full input DataFrame
+        df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Slice and copy the required columns (ensuring immutability)
-        df_slice = df_input[self.input_cols].copy(deep=True)
+        # Delegate computation and accumulation
+        return self._transform(df_input)
 
-        return self._transform(df_slice)
-
-    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+    def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
         """
-        Private method containing the core natural logarithm calculation logic.
+        Private method containing the core natural logarithm calculation logic and accumulation.
 
         Parameters
         ----------
-        df_slice : pd.DataFrame
-            The input data slice containing only the columns to be transformed.
+        df_input : pd.DataFrame
+            The input data containing all columns (context).
 
         Returns
         -------
         pd.DataFrame
-            The transformed data with new column names.
+            The input data with the new log column(s) appended.
         """
-        # Replace non-positive values (<= 0) with NaN before taking the log
-        df_slice = df_slice.mask(df_slice <= 0)
-        log_df = np.log(df_slice)
+        # 1. Compute the log on the selected columns
+        df_slice = df_input[self.input_cols].mask(df_input <= 0)
+        log_df = np.log(df_slice).replace([np.inf, -np.inf], np.nan)
 
-        # Clean up infinities that might result from edge cases
-        log_df = log_df.replace([np.inf, -np.inf], np.nan)
-
-        # Rename columns to indicate log transformation
+        # 2. Define the new column names
         rename_map = {col: f'log_{col}' for col in self.input_cols}
-        log_df = log_df.rename(columns=rename_map)
 
-        return log_df
+        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
+        for original_col, new_col in rename_map.items():
+            df_input[new_col] = log_df[original_col]
+
+        # 4. Return the full, expanded DataFrame
+        return df_input
 
 
 class SquareRoot(BaseTransform):
     """
     Computes the square root of the input values.
 
-    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
+    Implements the Phase 1: Accumulation Contract: returns the full input DataFrame
+    with new 'sqrt_' columns appended.
 
     Parameters
     ----------
@@ -118,53 +119,43 @@ class SquareRoot(BaseTransform):
         """
         Public method to apply the square root transformation.
 
-        It handles input validation, state checks, and delegates the core
-        calculation to the private `_transform` method.
+        It handles input validation, state checks, and implements the Accumulation Contract.
         """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        df_input = to_dataframe(X)
+        # CRITICAL: Create a deep copy of the full input DataFrame
+        df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Slice and copy the required columns (ensuring immutability)
-        df_slice = df_input[self.input_cols].copy(deep=True)
+        # Delegate computation and accumulation
+        return self._transform(df_input)
 
-        return self._transform(df_slice)
-
-    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+    def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
         """
-        Private method containing the core square root calculation logic.
-
-        Parameters
-        ----------
-        df_slice : pd.DataFrame
-            The input data slice containing only the columns to be transformed.
-
-        Returns
-        -------
-        pd.DataFrame
-            The transformed data with new column names.
+        Private method containing the core square root calculation logic and accumulation.
         """
-        # Replace negative values with NaN as square root is undefined for real numbers
-        df_slice = df_slice.mask(df_slice < 0)
-        sqrt_df = np.sqrt(df_slice)
+        # 1. Compute the square root on the selected columns
+        df_slice = df_input[self.input_cols].mask(df_input < 0)
+        sqrt_df = np.sqrt(df_slice).replace([np.inf, -np.inf], np.nan)
 
-        # Clean up infinities
-        sqrt_df = sqrt_df.replace([np.inf, -np.inf], np.nan)
-
-        # Rename columns to indicate square root transformation
+        # 2. Define the new column names
         rename_map = {col: f'sqrt_{col}' for col in self.input_cols}
-        sqrt_df = sqrt_df.rename(columns=rename_map)
 
-        return sqrt_df
+        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
+        for original_col, new_col in rename_map.items():
+            df_input[new_col] = sqrt_df[original_col]
+
+        # 4. Return the full, expanded DataFrame
+        return df_input
 
 
 class Square(BaseTransform):
     """
     Computes the square of the input values.
 
-    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
+    Implements the Phase 1: Accumulation Contract: returns the full input DataFrame
+    with new 'sq_' columns appended.
 
     Parameters
     ----------
@@ -194,49 +185,42 @@ class Square(BaseTransform):
         """
         Public method to apply the square transformation.
 
-        It handles input validation, state checks, and delegates the core
-        calculation to the private `_transform` method.
+        It handles input validation, state checks, and implements the Accumulation Contract.
         """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        df_input = to_dataframe(X)
+        # CRITICAL: Create a deep copy of the full input DataFrame
+        df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Slice and copy the required columns (ensuring immutability)
-        df_slice = df_input[self.input_cols].copy(deep=True)
+        # Delegate computation and accumulation
+        return self._transform(df_input)
 
-        return self._transform(df_slice)
-
-    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+    def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
         """
-        Private method containing the core square calculation logic.
-
-        Parameters
-        ----------
-        df_slice : pd.DataFrame
-            The input data slice containing only the columns to be transformed.
-
-        Returns
-        -------
-        pd.DataFrame
-            The transformed data with new column names.
+        Private method containing the core square calculation logic and accumulation.
         """
-        # Apply square transformation using numpy
-        sq_df = np.square(df_slice)
+        # 1. Compute the square on the selected columns
+        sq_df = np.square(df_input[self.input_cols])
 
-        # Rename columns to indicate square transformation
+        # 2. Define the new column names
         rename_map = {col: f'sq_{col}' for col in self.input_cols}
-        sq_df = sq_df.rename(columns=rename_map)
 
-        return sq_df
+        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
+        for original_col, new_col in rename_map.items():
+            df_input[new_col] = sq_df[original_col]
+
+        # 4. Return the full, expanded DataFrame
+        return df_input
 
 
 class Power(BaseTransform):
     """
     Computes the power of the input values raised to a specified exponent.
 
-    This is a stateless transform and is fully compatible with the fit/transform/fit_transform API.
+    Implements the Phase 1: Accumulation Contract: returns the full input DataFrame
+    with new 'power_' columns appended.
 
     Parameters
     ----------
@@ -274,44 +258,33 @@ class Power(BaseTransform):
         """
         Public method to apply the power transformation.
 
-        It handles input validation, state checks, and delegates the core
-        calculation to the private `_transform` method.
+        It handles input validation, state checks, and implements the Accumulation Contract.
         """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        df_input = to_dataframe(X)
+        # CRITICAL: Create a deep copy of the full input DataFrame
+        df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Slice and copy the required columns (ensuring immutability)
-        df_slice = df_input[self.input_cols].copy(deep=True)
+        # Delegate computation and accumulation
+        return self._transform(df_input)
 
-        return self._transform(df_slice)
-
-    def _transform(self, df_slice: pd.DataFrame) -> pd.DataFrame:
+    def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
         """
-        Private method containing the core power calculation logic.
-
-        Parameters
-        ----------
-        df_slice : pd.DataFrame
-            The input data slice containing only the columns to be transformed.
-
-        Returns
-        -------
-        pd.DataFrame
-            The transformed data with new column names.
+        Private method containing the core power calculation logic and accumulation.
         """
-        # Apply power transformation using numpy
-        power_df = np.power(df_slice, self.exponent)
-
-        # Clean up infinities that might result from edge cases
+        # 1. Compute the power on the selected columns
+        power_df = np.power(df_input[self.input_cols], self.exponent)
         power_df = power_df.replace([np.inf, -np.inf], np.nan)
 
-        # Rename columns to indicate power transformation
-        # Use a sanitized exponent name for the column prefix
+        # 2. Define the new column names
         exp_name = str(self.exponent).replace('.', '_')
         rename_map = {col: f'power{exp_name}_{col}' for col in self.input_cols}
-        power_df = power_df.rename(columns=rename_map)
 
-        return power_df
+        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
+        for original_col, new_col in rename_map.items():
+            df_input[new_col] = power_df[original_col]
+
+        # 4. Return the full, expanded DataFrame
+        return df_input
