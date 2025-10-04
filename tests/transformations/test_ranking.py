@@ -2,7 +2,6 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.transformations.returns import Returns
 from factorlab.transformations.ranking import Rank
 
 @pytest.fixture
@@ -57,9 +56,9 @@ def btc_spot_returns(btc_spot_prices):
 
 @pytest.mark.parametrize("axis, window_type",
                          [('ts', 'fixed'), ('ts', 'expanding'), ('ts', 'rolling'), ('cs', 'fixed')])
-def test_standard_deviation(binance_spot, btc_spot_prices, axis, window_type) -> None:
+def test_rank(binance_spot, btc_spot_prices, axis, window_type) -> None:
     """
-    Test standard deviation computation.
+    Test Rank transformation.
     """
     # get actual and expected
     actual = Rank(target_col='close', axis=axis, window_type=window_type).compute(binance_spot)

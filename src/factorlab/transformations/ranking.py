@@ -28,13 +28,16 @@ class Rank(BaseTransform):
 
     def __init__(self,
                  target_col: str = 'close',
+                 output_col: str = 'rank',
                  axis: str = 'ts',
                  percentile: bool = False,
                  window_type: str = 'expanding',
                  window_size: int = 30,
                  min_periods: int = 2):
         super().__init__(name="Rank", description="Ranks values along time or cross-section.")
+
         self.target_col = target_col
+        self.output_col = output_col
         self.axis = axis
         self.percentile = percentile
         self.window_type = window_type
@@ -102,6 +105,7 @@ class Rank(BaseTransform):
 
         # Cross-sectional ranking
         elif self.axis == 'cs':
+
             g = grouped(df, axis='cs')  # Group by first level if MultiIndex
             if multiindex:
                 rank = g.rank(pct=self.percentile)
@@ -111,6 +115,6 @@ class Rank(BaseTransform):
         else:
             raise ValueError(f"Unsupported axis: {self.axis}")
 
-        df['rank'] = rank[self.target_col]
+        df[self.output_col] = rank[self.target_col]
 
         return df
