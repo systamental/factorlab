@@ -25,7 +25,7 @@ MOMENT_PARAMS = [
 
 @pytest.fixture(params=MOMENT_PARAMS)
 def moment_params(request):
-    """Fixture returning (ret_col, axis, window_type, window_size, min_periods) for parametrization."""
+    """Fixture returning (target_col, axis, window_type, window_size, min_periods) for parametrization."""
     return request.param
 
 
@@ -68,9 +68,9 @@ def btc_spot_prices(binance_spot):
 @pytest.fixture
 def skewness_instance(moment_params):
     """Creates a Skewness instance based on parameterized inputs."""
-    ret_col, axis, window_type, window_size, min_periods = moment_params
+    target_col, axis, window_type, window_size, min_periods = moment_params
     return Skewness(
-        ret_col=ret_col,
+        target_col=target_col,
         axis=axis,
         window_type=window_type,
         window_size=window_size,
@@ -106,7 +106,7 @@ class TestSkewness:
         assert actual.index.equals(binance_spot.index)
 
         # Check new column is correctly named and present
-        expected_col = f'{skewness_instance.ret_col}_skew'
+        expected_col = 'skew'
         assert expected_col in actual.columns
         # Check original columns are preserved
         assert all(c in actual.columns for c in binance_spot.columns)
@@ -114,7 +114,7 @@ class TestSkewness:
     def test_dtypes(self, skewness_instance, binance_spot):
         """Tests that the new skewness column is float64."""
         actual = skewness_instance.fit(binance_spot).transform(binance_spot)
-        expected_col = f'{skewness_instance.ret_col}_skew'
+        expected_col = 'skew'
         assert isinstance(actual, pd.DataFrame)
         assert actual[expected_col].dtype == np.float64
 
@@ -136,7 +136,7 @@ class TestSkewness:
         # Extract the 'BTC' subset from the MultiIndex result
         multi_subset = actual_multi.loc[pd.IndexSlice[:, 'BTC'], :]
 
-        expected_col = f'{skewness_instance.ret_col}_skew'
+        expected_col = 'skew'
 
         # Check that the two derived series are almost identical (handling NaNs)
         np.allclose(multi_subset[expected_col], actual_single[expected_col], equal_nan=True)
@@ -147,7 +147,7 @@ class TestSkewness:
         given ticker share the same calculated skewness value.
         """
         # Create a specific instance for fixed TS calculation
-        skew_fixed = Skewness(ret_col='close', axis='ts', window_type='fixed')
+        skew_fixed = Skewness(target_col='close', axis='ts', window_type='fixed')
         actual = skew_fixed.fit(binance_spot).transform(binance_spot)
         output_col = skew_fixed.output_col
 
@@ -164,7 +164,7 @@ class TestSkewness:
         """Tests that cross-sectional (cs) axis raises an error on a Single Index DataFrame."""
         # Use a dummy data frame for the error test
         dummy_df = pd.DataFrame({'close': [1, 2, 3]})
-        skew_cs = Skewness(ret_col='close', axis='cs', window_type='fixed')  # window type doesn't matter here
+        skew_cs = Skewness(target_col='close', axis='cs', window_type='fixed')  # window type doesn't matter here
 
         with pytest.raises(ValueError) as excinfo:
             skew_cs.fit(dummy_df).transform(dummy_df)
@@ -172,7 +172,7 @@ class TestSkewness:
 
     def test_unsupported_window_type_error(self, binance_spot):
         """Tests that an unsupported window type raises an error."""
-        skew_bad = Skewness(ret_col='close', axis='ts', window_type='bad_window')
+        skew_bad = Skewness(target_col='close', axis='ts', window_type='bad_window')
         with pytest.raises(ValueError) as excinfo:
             skew_bad.fit(binance_spot).transform(binance_spot)
         assert "Unsupported window type: bad_window for axis 'ts'." in str(excinfo.value)
@@ -183,9 +183,9 @@ class TestSkewness:
 @pytest.fixture
 def kurtosis_instance(moment_params):
     """Creates a Kurtosis instance based on parameterized inputs."""
-    ret_col, axis, window_type, window_size, min_periods = moment_params
+    target_col, axis, window_type, window_size, min_periods = moment_params
     return Kurtosis(
-        ret_col=ret_col,
+        target_col=target_col,
         axis=axis,
         window_type=window_type,
         window_size=window_size,
@@ -220,14 +220,14 @@ class TestKurtosis:
 
         assert actual.index.equals(binance_spot.index)
 
-        expected_col = f'{kurtosis_instance.ret_col}_kurt'
+        expected_col = 'kurt'
         assert expected_col in actual.columns
         assert all(c in actual.columns for c in binance_spot.columns)
 
     def test_dtypes(self, kurtosis_instance, binance_spot):
         """Tests that the new kurtosis column is float64."""
         actual = kurtosis_instance.fit(binance_spot).transform(binance_spot)
-        expected_col = f'{kurtosis_instance.ret_col}_kurt'
+        expected_col = 'kurt'
         assert isinstance(actual, pd.DataFrame)
         assert actual[expected_col].dtype == np.float64
 
@@ -246,7 +246,7 @@ class TestKurtosis:
 
         multi_subset = actual_multi.loc[pd.IndexSlice[:, 'BTC'], :]
 
-        expected_col = f'{kurtosis_instance.ret_col}_kurt'
+        expected_col = 'kurt'
 
         np.allclose(multi_subset[expected_col], actual_single[expected_col], equal_nan=True)
 
@@ -256,7 +256,7 @@ class TestKurtosis:
         given ticker share the same calculated kurtosis value.
         """
         # Create a specific instance for fixed TS calculation
-        kurt_fixed = Kurtosis(ret_col='close', axis='ts', window_type='fixed')
+        kurt_fixed = Kurtosis(target_col='close', axis='ts', window_type='fixed')
         actual = kurt_fixed.fit(binance_spot).transform(binance_spot)
         output_col = kurt_fixed.output_col
 
@@ -273,7 +273,7 @@ class TestKurtosis:
         """Tests that cross-sectional (cs) axis raises an error on a Single Index DataFrame."""
         # Use a dummy data frame for the error test
         dummy_df = pd.DataFrame({'close': [1, 2, 3]})
-        kurt_cs = Kurtosis(ret_col='close', axis='cs', window_type='fixed')
+        kurt_cs = Kurtosis(target_col='close', axis='cs', window_type='fixed')
 
         with pytest.raises(ValueError) as excinfo:
             kurt_cs.fit(dummy_df).transform(dummy_df)
@@ -281,7 +281,7 @@ class TestKurtosis:
 
     def test_unsupported_window_type_error(self, binance_spot):
         """Tests that an unsupported window type raises an error."""
-        kurt_bad = Kurtosis(ret_col='close', axis='ts', window_type='bad_window')
+        kurt_bad = Kurtosis(target_col='close', axis='ts', window_type='bad_window')
         with pytest.raises(ValueError) as excinfo:
             kurt_bad.fit(binance_spot).transform(binance_spot)
         assert "Unsupported window type: bad_window for axis 'ts'." in str(excinfo.value)

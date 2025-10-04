@@ -13,7 +13,7 @@ class Skewness(BaseTransform):
 
     Parameters
     ----------
-    ret_col: str, default 'ret'
+    target_col: str, default 'ret'
         Returns column to use when computing skewness.
     axis: str, {'ts', 'cs'}, default 'ts'
         Axis over which to compute the skewness:
@@ -29,7 +29,8 @@ class Skewness(BaseTransform):
     """
 
     def __init__(self,
-                 ret_col: str = 'ret',
+                 target_col: str = 'ret',
+                 output_col: str = 'skew',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
                  window_size: int = 30,
@@ -37,16 +38,17 @@ class Skewness(BaseTransform):
         super().__init__(name="Skewness",
                          description="Computes the skewness of a return series.")
 
-        self.ret_col = ret_col
+        self.target_col = target_col
         self.axis = axis
         self.window_type = window_type
         self.window_size = window_size
         self.min_periods = min_periods
-        self.output_col = f'{self.ret_col}_skew'
+        self.output_col = output_col
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y: Optional[Union[pd.Series, pd.DataFrame]] = None) -> 'Skewness':
         """Stateless fit: validates input and marks the transform as fitted."""
-        self.validate_inputs(to_dataframe(X))
+        df_input = to_dataframe(X)
+        self.validate_inputs(df_input)
         self._is_fitted = True
         return self
 
@@ -68,12 +70,9 @@ class Skewness(BaseTransform):
         """
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
-
-        # 1. Validation and preparation: convert to DataFrame and create a deep copy for modification
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # 2. Call the internal logic
         return self._transform(df_input)
 
     def _transform(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -83,38 +82,30 @@ class Skewness(BaseTransform):
 
         if self.axis == 'ts':
             if self.window_type == 'fixed':
-                # Fixed time series skewness (calculates skew over all periods per asset)
 
                 if multiindex:
-                    # Calculate fixed skew for each group (ticker)
-                    fixed_skew_series = df.groupby(level=1)[self.ret_col].skew()
-                    # Map the single skew value back to every row of its corresponding group
+                    fixed_skew_series = df.groupby(level=1)[self.target_col].skew()
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_skew_series)
                 else:
-                    # Calculate fixed skew for the whole series and replicate it
-                    df[self.output_col] = df[self.ret_col].skew()
+                    df[self.output_col] = df[self.target_col].skew()
 
                 return df
 
-            # Rolling or Expanding Time Series Skewness
+            # rolling or expanding time series skewness
             g = grouped(df)
             window_op = self._get_ts_window_op(g)
 
-            # Apply skewness function to the window
             skew_df = window_op.skew()
 
-            # Align the result by dropping level 0 if MultiIndex
-            df[self.output_col] = maybe_droplevel(skew_df[self.ret_col], level=0)
+            # drop level 0 if MultiIndex to align results
+            df[self.output_col] = maybe_droplevel(skew_df[self.target_col], level=0)
             return df
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Skewness at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional skewness ('cs') requires a MultiIndex DataFrame.")
-
-            # Use transform('skew') to calculate skewness across assets at each date,
-            # ensuring the result maintains the original index structure.
-            df[self.output_col] = df.groupby(level=0)[self.ret_col].transform('skew')
+            df[self.output_col] = df.groupby(level=0)[self.target_col].transform('skew')
             return df
 
         else:
@@ -130,7 +121,7 @@ class Kurtosis(BaseTransform):
 
     Parameters
     ----------
-    ret_col: str, default 'ret'
+    target_col: str, default 'ret'
         Returns column to use when computing kurtosis.
     axis: str, {'ts', 'cs'}, default 'ts'
         Axis over which to compute the kurtosis:
@@ -146,7 +137,8 @@ class Kurtosis(BaseTransform):
     """
 
     def __init__(self,
-                 ret_col: str = 'ret',
+                 target_col: str = 'ret',
+                 output_col: str = 'kurt',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
                  window_size: int = 30,
@@ -154,16 +146,17 @@ class Kurtosis(BaseTransform):
         super().__init__(name="Kurtosis",
                          description="Computes the kurtosis of a time series.")
 
-        self.ret_col = ret_col
+        self.target_col = target_col
         self.axis = axis
         self.window_type = window_type
         self.window_size = window_size
         self.min_periods = min_periods
-        self.output_col = f'{self.ret_col}_kurt'
+        self.output_col = output_col
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y: Optional[Union[pd.Series, pd.DataFrame]] = None) -> 'Kurtosis':
         """Stateless fit: validates input and marks the transform as fitted."""
-        self.validate_inputs(to_dataframe(X))
+        df_input = to_dataframe(X)
+        self.validate_inputs(df_input)
         self._is_fitted = True
         return self
 
@@ -186,11 +179,11 @@ class Kurtosis(BaseTransform):
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        # 1. Validation and preparation: convert to DataFrame and create a deep copy for modification
+        # validation
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # 2. Call the internal logic
+        # transform
         return self._transform(df_input)
 
     def _transform(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -204,12 +197,12 @@ class Kurtosis(BaseTransform):
 
                 if multiindex:
                     # Calculate fixed kurtosis for each group (ticker)
-                    fixed_kurt_series = df.groupby(level=1).apply(pd.DataFrame.kurt)[self.ret_col]
+                    fixed_kurt_series = df.groupby(level=1).apply(pd.DataFrame.kurt)[self.target_col]
                     # Map the single kurtosis value back to every row of its corresponding group
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_kurt_series)
                 else:
                     # Calculate fixed kurtosis for the whole series and replicate it
-                    df[self.output_col] = df[self.ret_col].kurt()
+                    df[self.output_col] = df[self.target_col].kurt()
 
                 return df
 
@@ -217,21 +210,17 @@ class Kurtosis(BaseTransform):
             g = grouped(df)
             window_op = self._get_ts_window_op(g)
 
-            # Apply kurtosis function to the window
             kurt_df = window_op.kurt()
 
             # Align the result by dropping level 0 if MultiIndex
-            df[self.output_col] = maybe_droplevel(kurt_df[self.ret_col], level=0)
+            df[self.output_col] = maybe_droplevel(kurt_df[self.target_col], level=0)
             return df
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Kurtosis at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional kurtosis ('cs') requires a MultiIndex DataFrame.")
-
-            # ensuring the result maintains the original index structure.
-            df[self.output_col] = df.groupby(level=0)[self.ret_col].transform(lambda x: x.kurt())
-
+            df[self.output_col] = df.groupby(level=0)[self.target_col].transform(lambda x: x.kurt())
             return df
 
         else:
