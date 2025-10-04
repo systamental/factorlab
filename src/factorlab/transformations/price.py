@@ -72,17 +72,16 @@ class VWAP(BaseTransform):
         pd.DataFrame
             The input data with the new 'vwap' column appended.
         """
-        # typical price: (O + H + L) / 3
+        # typical price
         typical_price = (
             df_input[self.open_col] +
             df_input[self.high_col] +
             df_input[self.low_col]
         ) / 3
 
-        # vwap: (Close + Typical Price) / 2
+        # vwap
         vwap = (df_input[self.close_col] + typical_price) / 2
 
-        # Accumulation: Assign new column directly to the input DataFrame copy
         df_input[self.output_col] = vwap
 
         return df_input
@@ -99,7 +98,6 @@ class VWAP(BaseTransform):
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Delegate computation and accumulation
         return self._transform(df_input)
 
 
@@ -137,6 +135,7 @@ class NotionalValue(BaseTransform):
             name="NotionalValue",
             description="Computes notional value from OHLCV data."
         )
+
         self.price_col = price_col
         self.volume_col = volume_col
         self.output_col = output_col
@@ -171,10 +170,10 @@ class NotionalValue(BaseTransform):
         pd.DataFrame
             The input data with the new 'notional_value' column appended.
         """
-        # 1. Calculate daily notional value: P * V
+        # compute notional value
         nv = df_input[self.price_col] * df_input[self.volume_col]
 
-        # 2. Aggregate
+        # aggregate over rolling window
         g = grouped(nv)
         if self.agg_method == "mean":
             nv_agg = g.rolling(window=self.window_size, min_periods=1).mean()
@@ -183,10 +182,8 @@ class NotionalValue(BaseTransform):
         else:
             raise ValueError(f"Unsupported aggregation method: {self.agg_method}")
 
-        # Ensure index is consistent (dropping level 0 if single index)
         nv_agg = maybe_droplevel(nv_agg)
 
-        # Accumulation: Assign new column directly to the input DataFrame copy
         df_input[self.output_col] = nv_agg
 
         return df_input
