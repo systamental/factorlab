@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from typing import List, Union
+from typing import List
 
 from factorlab.transformations.price import (
     VWAP,
