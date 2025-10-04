@@ -23,6 +23,7 @@ class Returns(BaseTransform):
 
     def __init__(self, method: str = "pct", **kwargs):
         super().__init__(name="Returns", description="Factory for various return transformations.")
+
         self.method = method
         self.kwargs = kwargs
 
@@ -76,6 +77,7 @@ class Difference(BaseTransform):
     """
     def __init__(self, price_col: str = 'close', output_col: str = 'diff', lags: int = 1):
         super().__init__(name="Difference")
+
         self.price_col = price_col
         self.output_col = output_col
         self.lags = lags
@@ -142,6 +144,7 @@ class LogReturn(BaseTransform):
     """
     def __init__(self, price_col: str = 'close', output_col: str = 'ret', lags: int = 1):
         super().__init__(name="LogReturn")
+
         self.price_col = price_col
         self.output_col = output_col
         self.lags = lags
@@ -216,6 +219,7 @@ class PctChange(BaseTransform):
     """
     def __init__(self, price_col: str = 'close', output_col: str = 'ret', lags: int = 1):
         super().__init__(name="PctChange")
+
         self.price_col = price_col
         self.output_col = output_col
         self.lags = lags
@@ -283,6 +287,7 @@ class CumulativeReturn(BaseTransform):
     """
     def __init__(self, price_col: str = 'close', output_col: str = 'cum_ret', base_index: int = 0):
         super().__init__(name="CumulativeReturn")
+
         self.price_col = price_col
         self.output_col = output_col
         self.base_index = base_index
@@ -371,9 +376,9 @@ class TotalReturn(BaseTransform):
                  financing_col: str = 'funding_rate',
                  dividend_col: Optional[str] = None,
                  output_col: str = 'total_ret'):
-
         super().__init__(name="TotalReturn",
                          description="Computes total return by combining existing return components.")
+
         self.ret_col = ret_col
         self.financing_col = financing_col
         self.dividend_col = dividend_col

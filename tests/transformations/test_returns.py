@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from typing import List, Union
+from typing import List
 
 from factorlab.transformations.returns import (
     Returns,
@@ -82,10 +82,12 @@ def check_accumulation_contract(
     actual_features = actual[expected_feature_cols]
 
     # Crucial: Ensure the indexes match before comparing values
-    assert expected_feature_data.index.equals(actual_features.index), "Index of calculated feature does not match index of actual result."
+    assert expected_feature_data.index.equals(actual_features.index), \
+        "Index of calculated feature does not match index of actual result."
 
     # The actual feature values must be close to the expected values
-    assert np.allclose(actual_features.values, expected_feature_data.values, equal_nan=True), "Calculated feature values do not match expected values."
+    assert np.allclose(actual_features.values, expected_feature_data.values, equal_nan=True), \
+        "Calculated feature values do not match expected values."
 
     # No infinities allowed
     assert np.isinf(actual_features.values).sum() == 0, "Feature contains infinite values."
@@ -249,7 +251,7 @@ def test_total_return(binance_spot: pd.DataFrame) -> None:
     # Expected Feature calculation for all components: ret - funding_rate + dividend
     expected_feature_all = (
         df_with_ret['ret'] - df_with_ret['funding_rate'] + df_with_ret['dividend']
-    ).to_frame(EXPECTED_COL[0]).sort_index() # Ensure index is sorted
+    ).to_frame(EXPECTED_COL[0]).sort_index()  # Ensure index is sorted
     check_accumulation_contract(actual_all, df_with_ret, expected_feature_all, EXPECTED_COL)
 
     # 3. Test TotalReturn without dividend component
@@ -259,5 +261,5 @@ def test_total_return(binance_spot: pd.DataFrame) -> None:
     # Expected Feature calculation without dividend: ret - funding_rate
     expected_feature_no_div = (
         df_with_ret['ret'] - df_with_ret['funding_rate']
-    ).to_frame(EXPECTED_COL[0]).sort_index() # Ensure index is sorted
+    ).to_frame(EXPECTED_COL[0]).sort_index()  # Ensure index is sorted
     check_accumulation_contract(actual_no_div, df_with_ret, expected_feature_no_div, EXPECTED_COL)
