@@ -2,13 +2,11 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.transformations.returns import Returns
 from factorlab.transformations.dispersion import (
     StandardDeviation,
     Quantile,
     InterquartileRange as IQR,
     MedianAbsoluteDeviation,
-    MinMax,
     Variance,
     AverageTrueRange
 )

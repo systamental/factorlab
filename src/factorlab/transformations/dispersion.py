@@ -1,7 +1,6 @@
 import pandas as pd
+from pandas.core.groupby import DataFrameGroupBy
 from typing import Union, Optional, Any
-
-from tornado.gen import multi
 
 from factorlab.utils import to_dataframe, grouped, maybe_droplevel
 from factorlab.core.base_transform import BaseTransform
@@ -92,6 +91,7 @@ class StandardDeviation(BaseTransform):
 
     def __init__(self,
                  target_col: str = 'ret',
+                 output_col: str = 'std',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
                  window_size: int = 30,
@@ -100,12 +100,12 @@ class StandardDeviation(BaseTransform):
                          description="Computes standard deviation (volatility) over time series or cross-section.")
 
         self.target_col = target_col
+        self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
         self.window_size = window_size
         self.min_periods = min_periods
-        # Output column name is dynamically generated to match the structure in moments.py
-        self.output_col = f'{self.target_col}_std'
+        self.output_col = output_col
 
     def fit(self,
             X: Union[pd.Series, pd.DataFrame],
@@ -116,7 +116,7 @@ class StandardDeviation(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -156,7 +156,6 @@ class StandardDeviation(BaseTransform):
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_std_series)
                 else:
                     df[self.output_col] = df[self.target_col].std()
-
                 return df
 
             # moving window
@@ -174,9 +173,6 @@ class StandardDeviation(BaseTransform):
             # Cross-Sectional (cs) logic: Standard Deviation across assets at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional standard deviation ('cs') requires a MultiIndex DataFrame.")
-
-            # Use transform('std') to calculate standard deviation across assets at each date,
-            # ensuring the result maintains the original index structure.
             df[self.output_col] = df.groupby(level=0)[self.target_col].transform('std')
             return df
 
@@ -200,8 +196,8 @@ class Quantile(BaseTransform):
                  window_type: str = 'expanding',
                  window_size: int = 30,
                  min_periods: int = 1):
-
         super().__init__(name="Quantile", description="Computes quantiles over time series or cross-section.")
+
         self.target_col = target_col
         self.output_col = output_col
         self.q = q
@@ -217,7 +213,7 @@ class Quantile(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -275,9 +271,6 @@ class Quantile(BaseTransform):
             # Cross-Sectional (cs) logic: Standard Deviation across assets at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional standard deviation ('cs') requires a MultiIndex DataFrame.")
-
-            # Use transform('std') to calculate standard deviation across assets at each date,
-            # ensuring the result maintains the original index structure.
             df[self.output_col] = df.groupby(level=0)[self.target_col].transform('quantile', q=self.q)
             return df
 
@@ -304,6 +297,7 @@ class InterquartileRange(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="IQR",
                          description="Computes interquartile range (IQR) over time series or cross-section.")
+
         self.target_col = target_col
         self.output_col = output_col
         self.axis = axis
@@ -320,7 +314,7 @@ class InterquartileRange(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -424,6 +418,7 @@ class MedianAbsoluteDeviation(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="MedianAbsoluteDeviation",
                          description="Computes median absolute deviation (MAD) over time series or cross-section.")
+
         self.target_col = target_col
         self.output_col = output_col
         self.axis = axis
@@ -441,7 +436,7 @@ class MedianAbsoluteDeviation(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -493,7 +488,7 @@ class MedianAbsoluteDeviation(BaseTransform):
             # abs deviation from the moving median
             abs_dev_df = (df[self.target_col] - median_realigned).abs().to_frame(self.target_col)
 
-            # Step 3: Calculate the moving window median of the Absolute Deviations
+            # calculate the moving window median of the abs dev
             g_abs_dev = grouped(abs_dev_df)
 
             if self.window_type == 'rolling':
@@ -511,19 +506,14 @@ class MedianAbsoluteDeviation(BaseTransform):
             if not multiindex:
                 raise ValueError("Cross-sectional MAD ('cs') requires a MultiIndex DataFrame.")
 
-            # MultiIndex CS logic (across level 1, grouped by level 0)
-            # Step 1: Calculate the median across assets (level 1) at each timestamp (level 0)
+            # median per timestamp
             median_series = df.groupby(level=0)[self.target_col].transform('median')
-
-            # Step 2: Calculate Absolute Deviation
+            # abs dev
             abs_dev_series = (df[self.target_col] - median_series).abs()
-
-            # Step 3: Calculate the median of the absolute deviations across assets at each timestamp
+            # median of abs dev
             mad_series = abs_dev_series.groupby(level=0).transform('median')
-
             # Normalize and assign
             df[self.output_col] = mad_series / self._norm_factor
-
             return df
 
         else:
@@ -578,7 +568,7 @@ class Variance(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -677,7 +667,7 @@ class MinMax(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -775,6 +765,7 @@ class AverageTrueRange(BaseTransform):
                  window_size: int = 30,
                  min_periods: int = 1):
         super().__init__(name="AverageTrueRange", description="Computes Average True Range (ATR) from OHLC data.")
+
         self.open_col = open_col
         self.high_col = high_col
         self.low_col = low_col
@@ -796,7 +787,7 @@ class AverageTrueRange(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
