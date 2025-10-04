@@ -22,7 +22,6 @@ class Log(BaseTransform):
     def __init__(self, input_cols: Union[str, List[str]] = 'close'):
         super().__init__(name="Log", description="Computes the natural logarithm of input values.")
 
-        # Ensure input_cols is always a list for consistent processing
         self.input_cols: List[str] = [input_cols] if isinstance(input_cols, str) else input_cols
 
     @property
@@ -46,11 +45,9 @@ class Log(BaseTransform):
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        # CRITICAL: Create a deep copy of the full input DataFrame
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Delegate computation and accumulation
         return self._transform(df_input)
 
     def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
@@ -67,18 +64,15 @@ class Log(BaseTransform):
         pd.DataFrame
             The input data with the new log column(s) appended.
         """
-        # 1. Compute the log on the selected columns
+        # log transformation logic
         df_slice = df_input[self.input_cols].mask(df_input <= 0)
         log_df = np.log(df_slice).replace([np.inf, -np.inf], np.nan)
 
-        # 2. Define the new column names
+        # rename cols
         rename_map = {col: f'log_{col}' for col in self.input_cols}
-
-        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
         for original_col, new_col in rename_map.items():
             df_input[new_col] = log_df[original_col]
 
-        # 4. Return the full, expanded DataFrame
         return df_input
 
 
@@ -98,7 +92,6 @@ class SquareRoot(BaseTransform):
     def __init__(self, input_cols: Union[str, List[str]] = 'close'):
         super().__init__(name="SquareRoot", description="Computes the square root of the input values.")
 
-        # Ensure input_cols is always a list for consistent processing
         self.input_cols: List[str] = [input_cols] if isinstance(input_cols, str) else input_cols
 
     @property
@@ -124,29 +117,24 @@ class SquareRoot(BaseTransform):
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        # CRITICAL: Create a deep copy of the full input DataFrame
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Delegate computation and accumulation
         return self._transform(df_input)
 
     def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
         """
         Private method containing the core square root calculation logic and accumulation.
         """
-        # 1. Compute the square root on the selected columns
+        # sqrt transformation logic
         df_slice = df_input[self.input_cols].mask(df_input < 0)
         sqrt_df = np.sqrt(df_slice).replace([np.inf, -np.inf], np.nan)
 
-        # 2. Define the new column names
+        # rename cols
         rename_map = {col: f'sqrt_{col}' for col in self.input_cols}
-
-        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
         for original_col, new_col in rename_map.items():
             df_input[new_col] = sqrt_df[original_col]
 
-        # 4. Return the full, expanded DataFrame
         return df_input
 
 
@@ -166,7 +154,6 @@ class Square(BaseTransform):
     def __init__(self, input_cols: Union[str, List[str]] = 'close'):
         super().__init__(name="Square", description="Computes the square of the input values.")
 
-        # Ensure input_cols is always a list for consistent processing
         self.input_cols: List[str] = [input_cols] if isinstance(input_cols, str) else input_cols
 
     @property
@@ -190,28 +177,23 @@ class Square(BaseTransform):
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        # CRITICAL: Create a deep copy of the full input DataFrame
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
-        # Delegate computation and accumulation
         return self._transform(df_input)
 
     def _transform(self, df_input: pd.DataFrame) -> pd.DataFrame:
         """
         Private method containing the core square calculation logic and accumulation.
         """
-        # 1. Compute the square on the selected columns
+        # square transformation logic
         sq_df = np.square(df_input[self.input_cols])
 
-        # 2. Define the new column names
+        # rename cols
         rename_map = {col: f'sq_{col}' for col in self.input_cols}
-
-        # 3. Accumulate: Assign new columns directly to the input DataFrame copy
         for original_col, new_col in rename_map.items():
             df_input[new_col] = sq_df[original_col]
 
-        # 4. Return the full, expanded DataFrame
         return df_input
 
 
@@ -231,15 +213,11 @@ class Power(BaseTransform):
     """
 
     def __init__(self, exponent: Union[int, float] = 2, input_cols: Union[str, List[str]] = 'close'):
-        # Allow exponent to be an integer or float for flexibility
         if not isinstance(exponent, (int, float)):
             raise ValueError("Exponent must be an integer or float.")
-
         super().__init__(name="Power", description=f"Computes the power of the input values raised to {exponent}.")
 
         self.exponent = exponent
-
-        # Ensure input_cols is always a list for consistent processing
         self.input_cols: List[str] = [input_cols] if isinstance(input_cols, str) else input_cols
 
     @property
@@ -263,7 +241,6 @@ class Power(BaseTransform):
         if not self._is_fitted:
             raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform()")
 
-        # CRITICAL: Create a deep copy of the full input DataFrame
         df_input = to_dataframe(X).copy(deep=True)
         self.validate_inputs(df_input)
 
