@@ -76,7 +76,7 @@ class StandardDeviation(BaseTransform):
         Axis over which to compute the standard deviation:
         'ts' (time series): Rolling, expanding, or fixed standard deviation per asset.
         'cs' (cross-section): Standard deviation across assets at each point in time.
-    window_type: str, {'rolling', 'expanding', 'fixed'}, default 'rolling'
+    window_type: str, {'ewm', 'rolling', 'expanding', 'fixed'}, default 'rolling'
         Type of window to apply the standard deviation calculation over for 'ts' axis.
         'fixed' computes standard deviation over the entire time series.
     window_size: int, default 30
@@ -114,7 +114,10 @@ class StandardDeviation(BaseTransform):
 
     def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
-        if self.window_type == 'rolling':
+        if self.window_type == 'ewm':
+            # Returns Rolling GroupBy object
+            return g.ewm(span=self.window_size, min_periods=self.min_periods)
+        elif self.window_type == 'rolling':
             # Returns Rolling GroupBy object
             return g.rolling(window=self.window_size, min_periods=self.min_periods)
         elif self.window_type == 'expanding':
@@ -537,6 +540,25 @@ class Variance(BaseTransform):
 
     This is a stateless transform and is fully compatible with the
     fit/transform/fit_transform API for pipeline chaining.
+
+    Parameters
+    ----------
+    input_col: str, default 'ret'
+        Returns column to use when computing variance.
+    output_col: str, default 'var'
+        Name of the output column to store the computed variance.
+    axis: str, {'ts', 'cs'}, default 'ts'
+        Axis over which to compute the variance:
+        'ts' (time series): Rolling, expanding, or fixed variance per asset.
+        'cs' (cross-section): Variance across assets at each point in time.
+    window_type: str, {'ewm', 'rolling', 'expanding', 'fixed'}, default 'rolling'
+        Type of window to apply the variance calculation over for 'ts' axis.
+        'fixed' computes variance over the entire time series.
+    window_size: int, default 30
+        Size of the window for rolling computations. Ignored if window_type is 'expanding' or 'fixed'.
+    min_periods: int, default 1
+        Minimum number of observations in the window required to have a value.
+
     """
 
     def __init__(self,
@@ -566,6 +588,9 @@ class Variance(BaseTransform):
 
     def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
+        if self.window_type == 'ewm':
+            # Returns EWM GroupBy object
+            return g.ewm(span=self.window_size, min_periods=self.min_periods)
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
             return g.rolling(window=self.window_size, min_periods=self.min_periods)
@@ -749,6 +774,28 @@ class AverageTrueRange(BaseTransform):
 
     This is a stateless transform and is fully compatible with the
     fit/transform/fit_transform API for pipeline chaining.
+
+    Parameters
+    ----------
+    open_col: str, default 'open'
+        Column name for the opening price.
+    high_col: str, default 'high'
+        Column name for the high price.
+    low_col: str, default 'low'
+        Column name for the low price.
+    close_col: str, default 'close'
+        Column name for the closing price.
+    output_col: str, default 'atr'
+        Name of the output column to store the computed ATR.
+    window_type: str, {'ewm', 'rolling', 'expanding', 'fixed'}, default 'expanding'
+        Type of window to apply the ATR calculation over.
+        'fixed' computes ATR over the entire time series.
+        'ewm' computes exponentially weighted moving average ATR.
+    window_size: int, default 30
+        Size of the window for rolling computations. Ignored if window_type is 'expanding' or 'fixed'.
+    min_periods: int, default 1
+        Minimum number of observations in the window required to have a value.
+
     """
 
     def __init__(self,
@@ -839,7 +886,9 @@ class AverageTrueRange(BaseTransform):
         # Compute ATR using selected window
         g = grouped(tr.to_frame('tr'))
 
-        if self.window_type == 'rolling':
+        if self.window_type == 'ewm':
+            res = g.ewm(span=self.window_size, min_periods=self.min_periods).mean()
+        elif self.window_type == 'rolling':
             res = g.rolling(window=self.window_size, min_periods=self.min_periods).mean()
         elif self.window_type == 'expanding':
             res = g.expanding(min_periods=self.min_periods).mean()
