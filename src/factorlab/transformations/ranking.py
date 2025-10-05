@@ -1,5 +1,6 @@
 import typing
 import pandas as pd
+from pandas.core.groupby import DataFrameGroupBy
 from typing import Any, Optional, Union
 
 from factorlab.core.base_transform import BaseTransform
@@ -12,7 +13,7 @@ class Rank(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'close'
+    input_col : str, default 'close'
         The column containing the values to be ranked.
     axis : {'ts', 'cs'}, default 'ts'
         Direction of ranking, either time-series ('ts') or cross-section ('cs').
@@ -27,7 +28,7 @@ class Rank(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'rank',
                  axis: str = 'ts',
                  percentile: bool = False,
@@ -36,7 +37,7 @@ class Rank(BaseTransform):
                  min_periods: int = 2):
         super().__init__(name="Rank", description="Ranks values along time or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.percentile = percentile
@@ -53,7 +54,7 @@ class Rank(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_ts_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation for time series."""
         if self.window_type == 'rolling':
             # Returns Rolling GroupBy object
@@ -115,6 +116,6 @@ class Rank(BaseTransform):
         else:
             raise ValueError(f"Unsupported axis: {self.axis}")
 
-        df[self.output_col] = rank[self.target_col]
+        df[self.output_col] = rank[self.input_col]
 
         return df
