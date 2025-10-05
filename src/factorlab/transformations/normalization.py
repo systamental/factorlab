@@ -86,7 +86,7 @@ class Center(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'close'
+    input_col : str, default 'close'
         The column to be centered.
     output_col : str, default 'center'
         The name for the computed centered column.
@@ -103,7 +103,7 @@ class Center(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'center',
                  method: str = 'mean',
                  axis: str = 'ts',
@@ -112,7 +112,7 @@ class Center(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="Center", description="Centers the data by subtracting a central tendency measure.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.method = method
         self.axis = axis
@@ -173,7 +173,7 @@ class Center(BaseTransform):
             center = maybe_droplevel(center, level=0)
             # Center the data by subtracting the computed center
             centered = df - center
-            df[self.output_col] = centered[self.target_col]
+            df[self.output_col] = centered[self.input_col]
             return df
 
         elif self.axis == 'cs':
@@ -187,7 +187,7 @@ class Center(BaseTransform):
             center = maybe_droplevel(center, level=0)
             # center
             centered = df.sub(center, axis=0)
-            centered[self.output_col] = centered[self.target_col]
+            centered[self.output_col] = centered[self.input_col]
             return centered
 
         else:
@@ -202,7 +202,7 @@ class ZScore(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'close'
+    input_col : str, default 'close'
         The column to be normalized.
     output_col : str, default 'zscore'
         The name for the computed z-score column.
@@ -223,7 +223,7 @@ class ZScore(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'zscore',
                  axis: str = 'ts',
                  centering: bool = True,
@@ -234,7 +234,7 @@ class ZScore(BaseTransform):
         super().__init__(name="ZScore",
                          description="Normalizes the data by computing the z-score.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.centering = centering
@@ -242,14 +242,14 @@ class ZScore(BaseTransform):
         self.window_size = window_size
         self.min_periods = min_periods
         self.winsorize = winsorize
-        self.center_transformer = Center(target_col=self.target_col,
+        self.center_transformer = Center(input_col=self.input_col,
                                          output_col='center',
                                          axis=self.axis,
                                          method='mean',
                                          window_type=self.window_type,
                                          window_size=self.window_size,
                                          min_periods=self.min_periods)
-        self.std_transformer = StandardDeviation(target_col=self.target_col,
+        self.std_transformer = StandardDeviation(input_col=self.input_col,
                                                  output_col='std',
                                                  axis=self.axis,
                                                  window_type=self.window_type,
@@ -292,7 +292,7 @@ class ZScore(BaseTransform):
         if self.centering:
             df = self.center_transformer.transform(df)
         else:
-            df['center'] = df[self.target_col]
+            df['center'] = df[self.input_col]
 
         # Compute standard deviation
         df = self.std_transformer.transform(df)
@@ -331,7 +331,7 @@ class RobustZScore(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'zscore',
                  axis: str = 'ts',
                  centering: bool = True,
@@ -342,7 +342,7 @@ class RobustZScore(BaseTransform):
         super().__init__(name="RobustZScore",
                          description="Computes a robust z-score using median and MAD.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.centering = centering
@@ -350,7 +350,7 @@ class RobustZScore(BaseTransform):
         self.window_size = window_size
         self.min_periods = min_periods
         self.winsorize = winsorize
-        self.center_transformer = Center(target_col=self.target_col,
+        self.center_transformer = Center(input_col=self.input_col,
                                          output_col='center',
                                          axis=self.axis,
                                          method='median',
@@ -358,7 +358,7 @@ class RobustZScore(BaseTransform):
                                          window_size=self.window_size,
                                          min_periods=self.min_periods)
 
-        self.iqr_transformer = InterquartileRange(target_col=self.target_col,
+        self.iqr_transformer = InterquartileRange(input_col=self.input_col,
                                                   output_col='iqr',
                                                   axis=self.axis,
                                                   window_type=self.window_type,
@@ -401,7 +401,7 @@ class RobustZScore(BaseTransform):
         if self.centering:
             df = self.center_transformer.transform(df)
         else:
-            df['center'] = df[self.target_col]
+            df['center'] = df[self.input_col]
 
         # Compute standard deviation
         df = self.iqr_transformer.transform(df)
@@ -424,7 +424,7 @@ class ModZScore(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'close'
+    input_col : str, default 'close'
         The column to be normalized.
     output_col : str, default 'zscore'
         The name for the computed modified z-score column.
@@ -444,7 +444,7 @@ class ModZScore(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'zscore',
                  axis: str = 'ts',
                  centering: bool = True,
@@ -455,7 +455,7 @@ class ModZScore(BaseTransform):
         super().__init__(name="ModZScore",
                          description="Computes the modified z-score using median and MAD.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.centering = centering
@@ -463,14 +463,14 @@ class ModZScore(BaseTransform):
         self.window_size = window_size
         self.min_periods = min_periods
         self.winsorize = winsorize
-        self.center_transformer = Center(target_col=self.target_col,
+        self.center_transformer = Center(input_col=self.input_col,
                                          output_col='center',
                                          axis=self.axis,
                                          method='median',
                                          window_type=self.window_type,
                                          window_size=self.window_size,
                                          min_periods=self.min_periods)
-        self.mad_transformer = MedianAbsoluteDeviation(target_col=self.target_col,
+        self.mad_transformer = MedianAbsoluteDeviation(input_col=self.input_col,
                                                        output_col='mad',
                                                        axis=self.axis,
                                                        window_type=self.window_type,
@@ -513,7 +513,7 @@ class ModZScore(BaseTransform):
         if self.centering:
             df = self.center_transformer.transform(df)
         else:
-            df['center'] = df[self.target_col]
+            df['center'] = df[self.input_col]
 
         # Compute standard deviation
         df = self.mad_transformer.transform(df)
@@ -534,7 +534,7 @@ class Percentile(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'close'
+    input_col : str, default 'close'
         The column to compute percentiles on.
     output_col : str, default 'percentile'
         The name for the computed percentile column.
@@ -549,7 +549,7 @@ class Percentile(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'percentile',
                  axis: str = 'ts',
                  window_type: str = 'expanding',
@@ -558,7 +558,7 @@ class Percentile(BaseTransform):
         super().__init__(name="Percentile",
                          description="Computes percentile rank over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
@@ -615,7 +615,7 @@ class Percentile(BaseTransform):
             if self.window_type != 'fixed':
                 res = maybe_droplevel(res, level=0)
 
-            df[self.output_col] = res[self.target_col]
+            df[self.output_col] = res[self.input_col]
             return df
 
         elif self.axis == 'cs':
@@ -625,7 +625,7 @@ class Percentile(BaseTransform):
             else:
                 percentile = df.groupby(level=0).rank(pct=True)
 
-            df[self.output_col] = percentile[self.target_col]
+            df[self.output_col] = percentile[self.input_col]
 
             return df
 
@@ -638,7 +638,7 @@ class MinMaxScaler(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'close'
+    input_col : str, default 'close'
         The column to be scaled.
     output_col : str, default 'range'
         The name for the computed scaled column.
@@ -655,7 +655,7 @@ class MinMaxScaler(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'min_max_scaled',
                  axis: str = 'ts',
                  centering: bool = True,
@@ -664,21 +664,21 @@ class MinMaxScaler(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="MinMaxScaler", description="Scales the data to a specified range.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.centering = centering
         self.window_type = window_type
         self.window_size = window_size
         self.min_periods = min_periods
-        self.center_transformer = Center(target_col=self.target_col,
+        self.center_transformer = Center(input_col=self.input_col,
                                          output_col='center',
                                          axis=self.axis,
                                          method='min',
                                          window_type=self.window_type,
                                          window_size=self.window_size,
                                          min_periods=self.min_periods)
-        self.range_transformer = MinMax(target_col=self.target_col,
+        self.range_transformer = MinMax(input_col=self.input_col,
                                         output_col='range',
                                         axis=self.axis,
                                         window_type=self.window_type,
@@ -721,7 +721,7 @@ class MinMaxScaler(BaseTransform):
         if self.centering:
             df = self.center_transformer.transform(df)
         else:
-            df['center'] = df[self.target_col]
+            df['center'] = df[self.input_col]
 
         # Compute standard deviation
         df = self.range_transformer.transform(df)
@@ -751,7 +751,7 @@ class ATRScaler(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'close',
+                 input_col: str = 'close',
                  output_col: str = 'atr_scaled',
                  centering: bool = True,
                  window_type: str = 'expanding',
@@ -759,15 +759,15 @@ class ATRScaler(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="ATRScaler", description="Scales the data using the Average True Range (ATR).")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.centering = centering
         self.window_type = window_type
         self.window_size = window_size
         self.min_periods = min_periods
-        self._diff_transformer = Difference(input_col=self.target_col,
+        self._diff_transformer = Difference(input_col=self.input_col,
                                             output_col='diff')
-        self.center_transformer = Center(target_col='diff',
+        self.center_transformer = Center(input_col='diff',
                                          output_col='center',
                                          method='median',
                                          window_type=self.window_type,
@@ -818,7 +818,7 @@ class ATRScaler(BaseTransform):
         if self.centering:
             df = self.center_transformer.transform(df)
         else:
-            df['center'] = df[self.target_col]
+            df['center'] = df[self.input_col]
 
         # Compute ATR
         df = self.atr_transformer.transform(df)
