@@ -17,6 +17,8 @@ class Residuals(Feature):
         The name of the column to be used as the target (dependent variable).
     feature_col : str
         The name of the column to be used as the feature (independent variable).
+    output_col : str, default 'idio_ret'
+        The name of the output column to store the computed idiosyncratic returns.
     model: str, default 'linear'
         The regression model to use.
     window_type : str, {'rolling', 'ewm'}, default "rolling"
@@ -35,6 +37,7 @@ class Residuals(Feature):
     def __init__(self,
                  target_col: str,
                  feature_col: str,
+                 output_col: str = 'residual',
                  model: str = 'linear',
                  window_type: str = 'rolling',
                  window_size: int = 60,
@@ -44,6 +47,7 @@ class Residuals(Feature):
         self.description = 'Computes the residual from regressing target_col on feature_col.',
         self.target_col = target_col
         self.feature_col = feature_col
+        self.output_col = output_col
         self.model = model
         self.window_type = window_type
         self.window_size = window_size
@@ -99,7 +103,7 @@ class Residuals(Feature):
             raise NotImplementedError(f"Model {self.model} not implemented.")
 
         # Convert to df
-        X[f'{self.target_col}_resid'] = resid
+        X[self.output_col] = resid
 
         return X
 
@@ -118,6 +122,8 @@ class IdiosyncraticReturns(Feature):
         The name of the column to be used as the asset returns.
     factor_cols: str or list, default 'market'
         Column name(s) of the systematic factor returns (e.g., 'MKT-RF').
+    output_col : str, default 'idio_ret'
+        The name of the output column to store the computed idiosyncratic returns.
     model: str, default 'linear'
         The regression model to use.
     incl_alpha : bool, default True
@@ -139,6 +145,7 @@ class IdiosyncraticReturns(Feature):
     def __init__(self,
                  return_col: str,
                  factor_cols: Union[str, List[str]],
+                 output_col: str = 'idio_ret',
                  model: str = 'linear',
                  incl_alpha: bool = True,
                  window_type: str = 'rolling',
@@ -149,6 +156,7 @@ class IdiosyncraticReturns(Feature):
         self.description = 'Computes the idiosyncratic returns from regressing asset returns on the market returns.',
         self.return_col = return_col
         self.factor_cols = factor_cols if isinstance(factor_cols, list) else [factor_cols]
+        self.output_col = output_col
         self.model = model
         self.incl_alpha = incl_alpha
         self.window_type = window_type
@@ -216,6 +224,6 @@ class IdiosyncraticReturns(Feature):
             raise NotImplementedError(f"Model {self.model} not implemented.")
 
         # add to df
-        X['idio_ret'] = idio_ret
+        X[self.output_col] = idio_ret
 
         return X
