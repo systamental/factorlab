@@ -68,24 +68,24 @@ class Difference(BaseTransform):
 
     Parameters
     ----------
-    price_col : str, default 'close'
+    input_col : str, default 'close'
         Column name of the price series to compute returns on.
     output_col: str, default 'diff'
         Column name for the computed output.
     lags : int, default 1
         Number of periods to lag.
     """
-    def __init__(self, price_col: str = 'close', output_col: str = 'diff', lags: int = 1):
+    def __init__(self, input_col: str = 'close', output_col: str = 'diff', lags: int = 1):
         super().__init__(name="Difference")
 
-        self.price_col = price_col
+        self.input_col = input_col
         self.output_col = output_col
         self.lags = lags
 
     @property
     def inputs(self) -> List[str]:
         """Required input columns for this transform."""
-        return [self.price_col]
+        return [self.input_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'Difference':
         """Stateless fit: validates input and marks the transform as fitted."""
@@ -109,7 +109,7 @@ class Difference(BaseTransform):
             The input data with the new 'diff' column appended.
         """
         # Calculate the difference
-        result = grouped(df_input[self.price_col].to_frame()).diff(self.lags).squeeze()
+        result = grouped(df_input[self.input_col].to_frame()).diff(self.lags).squeeze()
 
         df_input[self.output_col] = result
         return df_input
@@ -135,24 +135,24 @@ class LogReturn(BaseTransform):
 
     Parameters
     ----------
-    price_col : str, default 'close'
+    input_col : str, default 'close'
         Column name of the price series to compute returns on.
     output_col: str, default 'ret'
         Column name for the computed output.
     lags : int, default 1
         Number of periods to lag.
     """
-    def __init__(self, price_col: str = 'close', output_col: str = 'ret', lags: int = 1):
+    def __init__(self, input_col: str = 'close', output_col: str = 'ret', lags: int = 1):
         super().__init__(name="LogReturn")
 
-        self.price_col = price_col
+        self.input_col = input_col
         self.output_col = output_col
         self.lags = lags
 
     @property
     def inputs(self) -> List[str]:
         """Required input columns for this transform."""
-        return [self.price_col]
+        return [self.input_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'LogReturn':
         """Stateless fit: validates input and marks the transform as fitted."""
@@ -175,7 +175,7 @@ class LogReturn(BaseTransform):
         pd.DataFrame
             The input data with the new 'ret' column appended.
         """
-        series = df_input[self.price_col]
+        series = df_input[self.input_col]
 
         # Handle non-positive prices by converting to NaN, then taking log
         series = series.where(series > 0, np.nan)
@@ -210,24 +210,24 @@ class PctChange(BaseTransform):
 
     Parameters
     ----------
-    price_col : str, default 'close'
+    input_col : str, default 'close'
         Column name of the price series to compute returns on.
     output_col: str, default 'ret'
         Column name for the computed output.
     lags : int, default 1
         Number of periods to lag.
     """
-    def __init__(self, price_col: str = 'close', output_col: str = 'ret', lags: int = 1):
+    def __init__(self, input_col: str = 'close', output_col: str = 'ret', lags: int = 1):
         super().__init__(name="PctChange")
 
-        self.price_col = price_col
+        self.input_col = input_col
         self.output_col = output_col
         self.lags = lags
 
     @property
     def inputs(self) -> List[str]:
         """Required input columns for this transform."""
-        return [self.price_col]
+        return [self.input_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'PctChange':
         """Stateless fit: validates input and marks the transform as fitted."""
@@ -250,7 +250,7 @@ class PctChange(BaseTransform):
         pd.DataFrame
             The input data with the new 'ret' column appended.
         """
-        result = grouped(df_input[self.price_col].to_frame()).pct_change(
+        result = grouped(df_input[self.input_col].to_frame()).pct_change(
             periods=self.lags, fill_method=None
         ).squeeze()
 
@@ -278,24 +278,24 @@ class CumulativeReturn(BaseTransform):
 
     Parameters
     ----------
-    price_col : str, default 'close'
+    input_col : str, default 'close'
         Column name of the price series to compute returns on.
     output_col: str, default 'cum_ret'
         Column name for the computed output.
     base_index : int, default 0
         Index to use as the base price for computing cumulative returns.
     """
-    def __init__(self, price_col: str = 'close', output_col: str = 'cum_ret', base_index: int = 0):
+    def __init__(self, input_col: str = 'close', output_col: str = 'cum_ret', base_index: int = 0):
         super().__init__(name="CumulativeReturn")
 
-        self.price_col = price_col
+        self.input_col = input_col
         self.output_col = output_col
         self.base_index = base_index
 
     @property
     def inputs(self) -> List[str]:
         """Required input columns for this transform."""
-        return [self.price_col]
+        return [self.input_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'CumulativeReturn':
         """Stateless fit: validates input and marks the transform as fitted."""
@@ -318,7 +318,7 @@ class CumulativeReturn(BaseTransform):
         pd.DataFrame
             The input data with the new 'cum_ret' column appended.
         """
-        price_series = df_input[self.price_col]
+        price_series = df_input[self.input_col]
 
         # Check bounds
         if not (0 <= self.base_index < len(price_series)):
