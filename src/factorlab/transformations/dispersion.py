@@ -72,6 +72,8 @@ class StandardDeviation(BaseTransform):
     ----------
     input_col: str, default 'ret'
         Returns column to use when computing standard deviation.
+    output_col: str, default 'std'
+        Name of the output column to store the computed standard deviation.
     axis: str, {'ts', 'cs'}, default 'ts'
         Axis over which to compute the standard deviation:
         'ts' (time series): Rolling, expanding, or fixed standard deviation per asset.
@@ -101,7 +103,6 @@ class StandardDeviation(BaseTransform):
         self.window_type = window_type
         self.window_size = window_size
         self.min_periods = min_periods
-        self.output_col = output_col
 
     def fit(self,
             X: Union[pd.Series, pd.DataFrame],
@@ -165,15 +166,15 @@ class StandardDeviation(BaseTransform):
             std_df = window_op.std()
 
             # drop multiindex level if present
-            df[self.output_col] = maybe_droplevel(std_df[self.input_col], level=0)
-            return df
+            X[self.output_col] = maybe_droplevel(std_df[self.input_col], level=0)
+            return X
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Standard Deviation across assets at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional standard deviation ('cs') requires a MultiIndex DataFrame.")
-            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('std')
-            return df
+            X[self.output_col] = df.groupby(level=0)[self.input_col].transform('std')
+            return X
 
         else:
             raise ValueError(f"Unsupported axis: {self.axis}. Must be 'ts' (time series) or 'cs' (cross-section).")
@@ -263,15 +264,15 @@ class Quantile(BaseTransform):
             quant_df = window_op.quantile(self.q)
 
             # drop multiindex level if present
-            df[self.output_col] = maybe_droplevel(quant_df[self.input_col], level=0)
-            return df
+            X[self.output_col] = maybe_droplevel(quant_df[self.input_col], level=0)
+            return X
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Standard Deviation across assets at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional standard deviation ('cs') requires a MultiIndex DataFrame.")
-            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('quantile', q=self.q)
-            return df
+            X[self.output_col] = df.groupby(level=0)[self.input_col].transform('quantile', q=self.q)
+            return X
 
         else:
             raise ValueError(f"Unsupported axis: {self.axis}. Must be 'ts' (time series) or 'cs' (cross-section).")
@@ -377,8 +378,8 @@ class InterquartileRange(BaseTransform):
             iqr_df /= 1.349
 
             # Drop multiindex level if present (for single asset group) and assign
-            df[self.output_col] = maybe_droplevel(iqr_df, level=0)
-            return df
+            X[self.output_col] = maybe_droplevel(iqr_df, level=0)
+            return X
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: IQR across assets at each timestamp (group by level 0)
@@ -392,8 +393,8 @@ class InterquartileRange(BaseTransform):
             iqr_series = q75 - q25
             iqr_series /= 1.349  # Normalize to std dev
 
-            df[self.output_col] = iqr_series
-            return df
+            X[self.output_col] = iqr_series
+            return X
 
         else:
             raise ValueError(f"Unsupported axis: {self.axis}. Must be 'ts' (time series) or 'cs' (cross-section).")
@@ -497,8 +498,8 @@ class MedianAbsoluteDeviation(BaseTransform):
 
             # Drop multiindex level if present and assign the normalized result
             mad_result = maybe_droplevel(mad_df[self.input_col], level=0)
-            df[self.output_col] = mad_result / self._norm_factor
-            return df
+            X[self.output_col] = mad_result / self._norm_factor
+            return X
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: MAD across assets at each timestamp (group by level 0)
@@ -512,8 +513,8 @@ class MedianAbsoluteDeviation(BaseTransform):
             # median of abs dev
             mad_series = abs_dev_series.groupby(level=0).transform('median')
             # Normalize and assign
-            df[self.output_col] = mad_series / self._norm_factor
-            return df
+            X[self.output_col] = mad_series / self._norm_factor
+            return X
 
         else:
             raise ValueError(f"Unsupported axis: {self.axis}. Must be 'ts' (time series) or 'cs' (cross-section).")
@@ -640,8 +641,8 @@ class Variance(BaseTransform):
             var_df = window_op.var()
 
             # drop multiindex level if present
-            df[self.output_col] = maybe_droplevel(var_df[self.input_col], level=0)
-            return df
+            X[self.output_col] = maybe_droplevel(var_df[self.input_col], level=0)
+            return X
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: variance across assets at each timestamp (group by level 0)
@@ -650,8 +651,8 @@ class Variance(BaseTransform):
 
             # Use transform('std') to calculate variance across assets at each date,
             # ensuring the result maintains the original index structure.
-            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('var')
-            return df
+            X[self.output_col] = df.groupby(level=0)[self.input_col].transform('var')
+            return X
 
         else:
             raise ValueError(f"Unsupported axis: {self.axis}. Must be 'ts' (time series) or 'cs' (cross-section).")
@@ -734,9 +735,9 @@ class MinMax(BaseTransform):
                 else:
                     # Calculate min-max for the single time series
                     range_vals = df[self.input_col].max() - df[self.input_col].min()
-                    df[self.output_col] = range_vals
+                    X[self.output_col] = range_vals
 
-                return df
+                return X
 
             # moving window (rolling or expanding)
             g = grouped(df)
@@ -748,8 +749,8 @@ class MinMax(BaseTransform):
             range_vals = max_vals - min_vals
 
             # Drop multiindex level if present (for single asset group) and assign
-            df[self.output_col] = maybe_droplevel(range_vals, level=0)
-            return df
+            X[self.output_col] = maybe_droplevel(range_vals, level=0)
+            return X
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: MinMax across assets at each timestamp (group by level 0)
@@ -761,8 +762,8 @@ class MinMax(BaseTransform):
             min_vals = df.groupby(level=0)[self.input_col].transform('min')
             range_vals = max_vals - min_vals
 
-            df[self.output_col] = range_vals
-            return df
+            X[self.output_col] = range_vals
+            return X
 
         else:
             raise ValueError(f"Unsupported axis: {self.axis}. Must be 'ts' (time series) or 'cs' (cross-section).")
@@ -905,5 +906,5 @@ class AverageTrueRange(BaseTransform):
             raise ValueError(f"Unsupported window type: {self.window_type}")
 
         atr = maybe_droplevel(res, level=0)
-        df[self.output_col] = atr.tr
-        return df
+        X[self.output_col] = atr.tr
+        return X
