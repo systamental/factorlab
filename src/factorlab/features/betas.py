@@ -35,6 +35,7 @@ class Betas(Feature):
     def __init__(self,
                  target_col: str,
                  feature_col: str,
+                 output_col: str = 'beta',
                  model: str = 'linear',
                  window_type: str = 'rolling',
                  window_size: int = 60,
@@ -44,6 +45,7 @@ class Betas(Feature):
         self.description = 'Computes the betas from regressing target_col on feature_col.',
         self.target_col = target_col
         self.feature_col = feature_col
+        self.output_col = output_col
         self.model = model
         self.window_type = window_type
         self.window_size = window_size
@@ -114,6 +116,6 @@ class Betas(Feature):
             raise NotImplementedError(f"Model {self.model} not implemented.")
 
         # add to df
-        X[f'{self.feature_col}_beta'] = beta
+        X[self.output_col] = beta
 
         return X

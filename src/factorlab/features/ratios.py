@@ -16,6 +16,7 @@ class Ratios(Feature):
     def __init__(self,
                  numerator_col: str,
                  denominator_col: str,
+                 output_col: Optional[str] = None,
                  **kwargs):
         """
         Constructor.
@@ -34,6 +35,7 @@ class Ratios(Feature):
         self.description = 'Computes the ratio between two specified columns.',
         self.numerator_col = numerator_col
         self.denominator_col = denominator_col
+        self.output_col = output_col if output_col else f'{numerator_col}_to_{denominator_col}_ratio'
 
     @property
     def inputs(self) -> List[str]:
@@ -88,9 +90,6 @@ class Ratios(Feature):
         # compute ratio using safe_divide
         ratio = safe_divide(df[[self.numerator_col]], df[[self.denominator_col]])
 
-        # name col
-        ratio.columns = [f'{self.numerator_col}_to_{self.denominator_col}_ratio']
+        X[self.output_col] = ratio
 
-        df[ratio.columns[0]] = ratio
-
-        return df
+        return X

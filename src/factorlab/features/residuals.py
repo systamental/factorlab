@@ -40,7 +40,7 @@ class Residuals(Feature):
                  output_col: str = 'residual',
                  model: str = 'linear',
                  window_type: str = 'rolling',
-                 window_size: int = 60,
+                 window_size: int = 360,
                  **kwargs):
         super().__init__(**kwargs)
         self.name = 'Residual',
