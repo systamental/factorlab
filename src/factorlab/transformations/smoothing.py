@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas.core.groupby import DataFrameGroupBy
 from typing import Union, Optional, Any
 
 from factorlab.utils import maybe_droplevel, to_dataframe, grouped
@@ -13,7 +14,7 @@ class WindowSmoother(BaseTransform):
 
     Parameters
     ----------
-    smooth_col: str, default 'close'
+    input_col: str, default 'close'
         Column of the input DataFrame to apply smoothing to.
     window_type : str, {'rolling', 'expanding', 'ewm'}, default 'rolling'
         Type of window applied for smoothing.
@@ -32,7 +33,7 @@ class WindowSmoother(BaseTransform):
     """
 
     def __init__(self,
-                 smooth_col: str = 'close',
+                 input_col: str = 'close',
                  window_type: str = 'rolling',
                  window_size: int = 30,
                  central_tendency: str = 'mean',
@@ -42,7 +43,7 @@ class WindowSmoother(BaseTransform):
                  **kwargs):
         super().__init__(name="WindowSmoother", description="Applies rolling, expanding, or ewm smoothing.")
 
-        self.smooth_col = smooth_col
+        self.input_col = input_col
         self.window_type = window_type
         self.window_size = window_size
         self.central_tendency = central_tendency
@@ -59,7 +60,7 @@ class WindowSmoother(BaseTransform):
         self._is_fitted = True
         return self
 
-    def _get_window_op(self, g: Union[pd.DataFrame, pd.core.groupby.GroupBy]) -> Any:
+    def _get_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
         """Helper to determine and initialize the correct window operation."""
         if self.window_type == 'rolling':
             return g.rolling(window=self.window_size, win_type=self.window_fcn, **self.kwargs)
@@ -109,7 +110,7 @@ class WindowSmoother(BaseTransform):
         smooth_df = getattr(window_op, self.central_tendency)()
 
         # drop level 0 if MultiIndex to align with original df
-        smooth_series = maybe_droplevel(smooth_df[self.smooth_col], level=0)
+        smooth_series = maybe_droplevel(smooth_df[self.input_col], level=0)
 
         # lagging
         if self.lags > 0:
@@ -118,7 +119,7 @@ class WindowSmoother(BaseTransform):
             else:
                 smooth_series = smooth_series.shift(self.lags)
 
-        # 6. Accumulation Contract: Append the new feature
+        # assign to output column
         df[self.output_col] = smooth_series
 
         return df
