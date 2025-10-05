@@ -1,6 +1,6 @@
 import pandas as pd
 from pandas.core.groupby import DataFrameGroupBy
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, List
 
 from factorlab.utils import maybe_droplevel, to_dataframe, grouped
 from factorlab.core.base_transform import BaseTransform
@@ -33,21 +33,23 @@ class WindowSmoother(BaseTransform):
     """
 
     def __init__(self,
-                 input_col: str = 'close',
+                 input_cols: Union[str, List[str]] = 'close',
+                 output_cols: Union[str, List[str]] = None,
                  window_type: str = 'rolling',
                  window_size: int = 30,
                  central_tendency: str = 'mean',
-                 output_col: Optional[str] = None,
+
                  window_fcn: Optional[str] = None,
                  lags: int = 0,
                  **kwargs):
         super().__init__(name="WindowSmoother", description="Applies rolling, expanding, or ewm smoothing.")
 
-        self.input_col = input_col
+        self.input_cols = input_cols if isinstance(input_cols, list) else [input_cols]
+        self.output_cols = output_cols if output_cols is not None else \
+            [f"{col}_{window_type}_{central_tendency}_{window_size}" for col in self.input_cols]
         self.window_type = window_type
         self.window_size = window_size
         self.central_tendency = central_tendency
-        self.output_col = f'{window_type}_{window_size}_{central_tendency}' if output_col is None else output_col
         self.window_fcn = window_fcn
         self.lags = lags
         self.kwargs = kwargs
@@ -110,7 +112,7 @@ class WindowSmoother(BaseTransform):
         smooth_df = getattr(window_op, self.central_tendency)()
 
         # drop level 0 if MultiIndex to align with original df
-        smooth_series = maybe_droplevel(smooth_df[self.input_col], level=0)
+        smooth_series = maybe_droplevel(smooth_df, level=0)
 
         # lagging
         if self.lags > 0:
@@ -120,6 +122,6 @@ class WindowSmoother(BaseTransform):
                 smooth_series = smooth_series.shift(self.lags)
 
         # assign to output column
-        df[self.output_col] = smooth_series
+        df[self.output_cols] = smooth_series[self.input_cols]
 
         return df
