@@ -59,10 +59,6 @@ class Dispersion(BaseTransform):
             raise RuntimeError("Returns transformer must be fitted before transform()")
         return self._transformer.transform(X)
 
-    def compute(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
-        """Backward-compatible compute method."""
-        return super().compute(X)
-
 
 class StandardDeviation(BaseTransform):
     """
@@ -74,7 +70,7 @@ class StandardDeviation(BaseTransform):
 
     Parameters
     ----------
-    target_col: str, default 'ret'
+    input_col: str, default 'ret'
         Returns column to use when computing standard deviation.
     axis: str, {'ts', 'cs'}, default 'ts'
         Axis over which to compute the standard deviation:
@@ -90,7 +86,7 @@ class StandardDeviation(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'std',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
@@ -99,7 +95,7 @@ class StandardDeviation(BaseTransform):
         super().__init__(name="StandardDeviation",
                          description="Computes standard deviation (volatility) over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
@@ -152,10 +148,10 @@ class StandardDeviation(BaseTransform):
             if self.window_type == 'fixed':
 
                 if multiindex:
-                    fixed_std_series = df.groupby(level=1)[self.target_col].std()
+                    fixed_std_series = df.groupby(level=1)[self.input_col].std()
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_std_series)
                 else:
-                    df[self.output_col] = df[self.target_col].std()
+                    df[self.output_col] = df[self.input_col].std()
                 return df
 
             # moving window
@@ -166,14 +162,14 @@ class StandardDeviation(BaseTransform):
             std_df = window_op.std()
 
             # drop multiindex level if present
-            df[self.output_col] = maybe_droplevel(std_df[self.target_col], level=0)
+            df[self.output_col] = maybe_droplevel(std_df[self.input_col], level=0)
             return df
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Standard Deviation across assets at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional standard deviation ('cs') requires a MultiIndex DataFrame.")
-            df[self.output_col] = df.groupby(level=0)[self.target_col].transform('std')
+            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('std')
             return df
 
         else:
@@ -189,7 +185,7 @@ class Quantile(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'quantile',
                  q: float = 0.5,
                  axis: str = 'ts',
@@ -198,7 +194,7 @@ class Quantile(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="Quantile", description="Computes quantiles over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.q = q
         self.axis = axis
@@ -249,10 +245,10 @@ class Quantile(BaseTransform):
             if self.window_type == 'fixed':
 
                 if multiindex:
-                    fixed_std_series = df.groupby(level=1)[self.target_col].quantile(self.q)
+                    fixed_std_series = df.groupby(level=1)[self.input_col].quantile(self.q)
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_std_series)
                 else:
-                    df[self.output_col] = df[self.target_col].quantile(self.q)
+                    df[self.output_col] = df[self.input_col].quantile(self.q)
 
                 return df
 
@@ -264,14 +260,14 @@ class Quantile(BaseTransform):
             quant_df = window_op.quantile(self.q)
 
             # drop multiindex level if present
-            df[self.output_col] = maybe_droplevel(quant_df[self.target_col], level=0)
+            df[self.output_col] = maybe_droplevel(quant_df[self.input_col], level=0)
             return df
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Standard Deviation across assets at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional standard deviation ('cs') requires a MultiIndex DataFrame.")
-            df[self.output_col] = df.groupby(level=0)[self.target_col].transform('quantile', q=self.q)
+            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('quantile', q=self.q)
             return df
 
         else:
@@ -289,7 +285,7 @@ class InterquartileRange(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'iqr',
                  axis: str = 'ts',
                  window_type: str = 'expanding',
@@ -298,7 +294,7 @@ class InterquartileRange(BaseTransform):
         super().__init__(name="IQR",
                          description="Computes interquartile range (IQR) over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
@@ -352,15 +348,15 @@ class InterquartileRange(BaseTransform):
 
                 if multiindex:
                     # Calculate IQR for each asset (level=1)
-                    q75 = df.groupby(level=1)[self.target_col].quantile(0.75)
-                    q25 = df.groupby(level=1)[self.target_col].quantile(0.25)
+                    q75 = df.groupby(level=1)[self.input_col].quantile(0.75)
+                    q25 = df.groupby(level=1)[self.input_col].quantile(0.25)
                     iqr_series = q75 - q25
                     iqr_series /= 1.349  # Normalize
                     # Map the result back to the original index
                     df[self.output_col] = df.index.get_level_values(1).map(iqr_series)
                 else:
                     # Calculate IQR for the single time series
-                    iqr_val = df[self.target_col].quantile(0.75) - df[self.target_col].quantile(0.25)
+                    iqr_val = df[self.input_col].quantile(0.75) - df[self.input_col].quantile(0.25)
                     df[self.output_col] = (iqr_val / 1.349)  # Normalize
 
                 return df
@@ -370,8 +366,8 @@ class InterquartileRange(BaseTransform):
             window_op = self._get_ts_window_op(g)
 
             # Apply 75th and 25th quantiles
-            q75 = window_op[self.target_col].quantile(0.75)
-            q25 = window_op[self.target_col].quantile(0.25)
+            q75 = window_op[self.input_col].quantile(0.75)
+            q25 = window_op[self.input_col].quantile(0.25)
             iqr_df = q75 - q25
 
             # Normalize the IQR
@@ -387,8 +383,8 @@ class InterquartileRange(BaseTransform):
                 raise ValueError("Cross-sectional IQR ('cs') requires a MultiIndex DataFrame.")
 
             # Calculate Q75 and Q25 across assets (level 0) and subtract using transform
-            q75 = df.groupby(level=0)[self.target_col].transform('quantile', q=0.75)
-            q25 = df.groupby(level=0)[self.target_col].transform('quantile', q=0.25)
+            q75 = df.groupby(level=0)[self.input_col].transform('quantile', q=0.75)
+            q25 = df.groupby(level=0)[self.input_col].transform('quantile', q=0.25)
 
             iqr_series = q75 - q25
             iqr_series /= 1.349  # Normalize to std dev
@@ -410,7 +406,7 @@ class MedianAbsoluteDeviation(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'mad',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
@@ -419,7 +415,7 @@ class MedianAbsoluteDeviation(BaseTransform):
         super().__init__(name="MedianAbsoluteDeviation",
                          description="Computes median absolute deviation (MAD) over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
@@ -459,10 +455,10 @@ class MedianAbsoluteDeviation(BaseTransform):
 
                 if multiindex:
                     # Calculate IQR for each asset (level=1)
-                    med = df.groupby(level=1)[self.target_col].median()
+                    med = df.groupby(level=1)[self.input_col].median()
                     # Align median back to original index
                     df['__median'] = df.index.get_level_values(1).map(med)
-                    abs_dev_series = (df[self.target_col] - df['__median']).abs()
+                    abs_dev_series = (df[self.input_col] - df['__median']).abs()
                     # Calculate median of absolute deviations per asset
                     mad_series = abs_dev_series.groupby(level=1).median()
                     # Normalize and map back
@@ -471,7 +467,7 @@ class MedianAbsoluteDeviation(BaseTransform):
 
                 else:
                     # Single time series MAD
-                    abs_dev_series = (df[self.target_col] - df[self.target_col].median()).abs()
+                    abs_dev_series = (df[self.input_col] - df[self.input_col].median()).abs()
                     mad_val = abs_dev_series.median()
                     df[self.output_col] = mad_val / self._norm_factor
 
@@ -480,13 +476,13 @@ class MedianAbsoluteDeviation(BaseTransform):
             # moving window (rolling or expanding)
             g = grouped(df)
             window_op = self._get_ts_window_op(g)
-            median_windowed = window_op[self.target_col].median()
+            median_windowed = window_op[self.input_col].median()
 
             # drop level 0 and reindex the median result to the original df index
             median_realigned = maybe_droplevel(median_windowed, level=0).reindex(df.index)
 
             # abs deviation from the moving median
-            abs_dev_df = (df[self.target_col] - median_realigned).abs().to_frame(self.target_col)
+            abs_dev_df = (df[self.input_col] - median_realigned).abs().to_frame(self.input_col)
 
             # calculate the moving window median of the abs dev
             g_abs_dev = grouped(abs_dev_df)
@@ -497,7 +493,7 @@ class MedianAbsoluteDeviation(BaseTransform):
                 mad_df = g_abs_dev.expanding(min_periods=self.min_periods).median()
 
             # Drop multiindex level if present and assign the normalized result
-            mad_result = maybe_droplevel(mad_df[self.target_col], level=0)
+            mad_result = maybe_droplevel(mad_df[self.input_col], level=0)
             df[self.output_col] = mad_result / self._norm_factor
             return df
 
@@ -507,9 +503,9 @@ class MedianAbsoluteDeviation(BaseTransform):
                 raise ValueError("Cross-sectional MAD ('cs') requires a MultiIndex DataFrame.")
 
             # median per timestamp
-            median_series = df.groupby(level=0)[self.target_col].transform('median')
+            median_series = df.groupby(level=0)[self.input_col].transform('median')
             # abs dev
-            abs_dev_series = (df[self.target_col] - median_series).abs()
+            abs_dev_series = (df[self.input_col] - median_series).abs()
             # median of abs dev
             mad_series = abs_dev_series.groupby(level=0).transform('median')
             # Normalize and assign
@@ -544,7 +540,7 @@ class Variance(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'var',
                  axis: str = 'ts',
                  window_type: str = 'expanding',
@@ -552,7 +548,7 @@ class Variance(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="Variance", description="Computes variance over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
@@ -604,10 +600,10 @@ class Variance(BaseTransform):
             if self.window_type == 'fixed':
 
                 if multiindex:
-                    fixed_var_series = df.groupby(level=1)[self.target_col].var()
+                    fixed_var_series = df.groupby(level=1)[self.input_col].var()
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_var_series)
                 else:
-                    df[self.output_col] = df[self.target_col].var()
+                    df[self.output_col] = df[self.input_col].var()
 
                 return df
 
@@ -619,7 +615,7 @@ class Variance(BaseTransform):
             var_df = window_op.var()
 
             # drop multiindex level if present
-            df[self.output_col] = maybe_droplevel(var_df[self.target_col], level=0)
+            df[self.output_col] = maybe_droplevel(var_df[self.input_col], level=0)
             return df
 
         elif self.axis == 'cs':
@@ -629,7 +625,7 @@ class Variance(BaseTransform):
 
             # Use transform('std') to calculate variance across assets at each date,
             # ensuring the result maintains the original index structure.
-            df[self.output_col] = df.groupby(level=0)[self.target_col].transform('var')
+            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('var')
             return df
 
         else:
@@ -645,7 +641,7 @@ class MinMax(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'range',
                  axis: str = 'ts',
                  window_type: str = 'expanding',
@@ -653,7 +649,7 @@ class MinMax(BaseTransform):
                  min_periods: int = 1):
         super().__init__(name="Range", description="Computes range (max - min) over time series or cross-section.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
         self.window_type = window_type
@@ -705,14 +701,14 @@ class MinMax(BaseTransform):
 
                 if multiindex:
                     # Calculate IQR for each asset (level=1)
-                    max_vals = df.groupby(level=1)[self.target_col].max()
-                    min_vals = df.groupby(level=1)[self.target_col].min()
+                    max_vals = df.groupby(level=1)[self.input_col].max()
+                    min_vals = df.groupby(level=1)[self.input_col].min()
                     range_vals = max_vals - min_vals
                     # Map the result back to the original index
                     df[self.output_col] = df.index.get_level_values(1).map(range_vals)
                 else:
                     # Calculate min-max for the single time series
-                    range_vals = df[self.target_col].max() - df[self.target_col].min()
+                    range_vals = df[self.input_col].max() - df[self.input_col].min()
                     df[self.output_col] = range_vals
 
                 return df
@@ -722,8 +718,8 @@ class MinMax(BaseTransform):
             window_op = self._get_ts_window_op(g)
 
             # Apply 75th and 25th quantiles
-            max_vals = window_op[self.target_col].max()
-            min_vals = window_op[self.target_col].min()
+            max_vals = window_op[self.input_col].max()
+            min_vals = window_op[self.input_col].min()
             range_vals = max_vals - min_vals
 
             # Drop multiindex level if present (for single asset group) and assign
@@ -736,8 +732,8 @@ class MinMax(BaseTransform):
                 raise ValueError("Cross-sectional MinMax ('cs') requires a MultiIndex DataFrame.")
 
             # Calculate Q75 and Q25 across assets (level 0) and subtract using transform
-            max_vals = df.groupby(level=0)[self.target_col].transform('max')
-            min_vals = df.groupby(level=0)[self.target_col].transform('min')
+            max_vals = df.groupby(level=0)[self.input_col].transform('max')
+            min_vals = df.groupby(level=0)[self.input_col].transform('min')
             range_vals = max_vals - min_vals
 
             df[self.output_col] = range_vals
