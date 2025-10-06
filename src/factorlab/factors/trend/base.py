@@ -183,18 +183,15 @@ class TrendFactor(Factor, ABC):
 
         # compute trend
         trend_df = self._compute_trend(df)
-        print(f'Trend computed. trend df: {trend_df.tail()}')
 
         # scaling
         if self.scale:
             scaling_factor = self.scaler.compute(df)
             trend_df = safe_divide(trend_df[['trend']], scaling_factor[['scaling_factor']])
-            print(f'Scaling applied. trend df: {trend_df.tail()}')
 
         # smoothing
         if self.smooth:
             trend_df = self.smoother.transform(trend_df)
-            print(f'Smoothing applied. trend df: {trend_df.tail()}')
 
         if self.winsorize is not None:
             trend_df = trend_df.clip(-self.winsorize, self.winsorize)
