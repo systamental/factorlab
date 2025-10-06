@@ -12,7 +12,7 @@ class WeightedSum(BaseTransform):
 
     Parameters
     ----------
-    target_col : str, default 'return'
+    input_col : str, default 'return'
         The column containing the values to be aggregated (e.g., stock returns).
     weight_col : str, default 'weight'
         The column containing the corresponding weights for each item.
@@ -22,7 +22,7 @@ class WeightedSum(BaseTransform):
 
     def __init__(
             self,
-            target_col: str = "return",
+            input_col: str = "return",
             weight_col: str = "weight",
             output_col: str = "weighted_sum"
     ):
@@ -30,14 +30,14 @@ class WeightedSum(BaseTransform):
             name="WeightedSum",
             description=f"Computes the weighted sum of two series."
         )
-        self.target_col = target_col
+        self.input_col = input_col
         self.weight_col = weight_col
         self.output_col = output_col
 
     @property
     def inputs(self) -> list[str]:
         """Required input columns for this transform."""
-        return [self.target_col, self.weight_col]
+        return [self.input_col, self.weight_col]
 
     def fit(self, X: pd.DataFrame, y=None) -> 'WeightedSum':
         """Stateless fit: validates input columns and marks the transform as fitted."""
@@ -75,7 +75,7 @@ class WeightedSum(BaseTransform):
         df = X
 
         # weighted values
-        weighted_values = df[self.target_col] * df[self.weight_col]
+        weighted_values = df[self.input_col] * df[self.weight_col]
 
         # weighted sum
         df[self.output_col] = weighted_values.groupby(level=0).transform('sum')
