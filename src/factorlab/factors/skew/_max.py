@@ -61,8 +61,7 @@ class Max(SkewFactor):
         # Drop the first level of the MultiIndex
         max_df = maybe_droplevel(max_df, level=0)
 
+        # rename the column to 'skew'
         max_df['skew'] = max_df[self.return_col]
-
-        print(f'max_df: {max_df}')
 
         return max_df[['skew']]
