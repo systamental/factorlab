@@ -115,15 +115,19 @@ class ADX(TrendFactor):
         trend_df = 100 * di_diff.div(di_sum.squeeze(), axis=0)
 
         # compute ADX
-        adx = WindowSmoother(input_cols=trend_df.columns[0],
-                             output_cols='adx',
-                             window_size=self.window_size,
-                             window_type=self.window_type,
-                             central_tendency=self.central_tendency).compute(trend_df.abs())
-
         if self.signal:
-            trend_df = (trend_df / 100).clip(-1, 1)
+            adx = WindowSmoother(input_cols=trend_df.columns[0],
+                                 output_cols='trend',
+                                 window_size=self.window_size,
+                                 window_type=self.window_type,
+                                 central_tendency=self.central_tendency).compute(trend_df)
+            trend_df = (adx / 100).clip(-1, 1)
         else:
+            adx = WindowSmoother(input_cols=trend_df.columns[0],
+                                 output_cols='trend',
+                                 window_size=self.window_size,
+                                 window_type=self.window_type,
+                                 central_tendency=self.central_tendency).compute(trend_df.abs())
             trend_df = adx
 
         return trend_df
