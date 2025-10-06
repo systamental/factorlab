@@ -13,7 +13,7 @@ class Skewness(BaseTransform):
 
     Parameters
     ----------
-    target_col: str, default 'ret'
+    input_col: str, default 'ret'
         Returns column to use when computing skewness.
     axis: str, {'ts', 'cs'}, default 'ts'
         Axis over which to compute the skewness:
@@ -29,7 +29,7 @@ class Skewness(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'skew',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
@@ -38,7 +38,7 @@ class Skewness(BaseTransform):
         super().__init__(name="Skewness",
                          description="Computes the skewness of a return series.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.axis = axis
         self.window_type = window_type
         self.window_size = window_size
@@ -84,10 +84,10 @@ class Skewness(BaseTransform):
             if self.window_type == 'fixed':
 
                 if multiindex:
-                    fixed_skew_series = df.groupby(level=1)[self.target_col].skew()
+                    fixed_skew_series = df.groupby(level=1)[self.input_col].skew()
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_skew_series)
                 else:
-                    df[self.output_col] = df[self.target_col].skew()
+                    df[self.output_col] = df[self.input_col].skew()
 
                 return df
 
@@ -98,14 +98,14 @@ class Skewness(BaseTransform):
             skew_df = window_op.skew()
 
             # drop level 0 if MultiIndex to align results
-            df[self.output_col] = maybe_droplevel(skew_df[self.target_col], level=0)
+            df[self.output_col] = maybe_droplevel(skew_df[self.input_col], level=0)
             return df
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Skewness at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional skewness ('cs') requires a MultiIndex DataFrame.")
-            df[self.output_col] = df.groupby(level=0)[self.target_col].transform('skew')
+            df[self.output_col] = df.groupby(level=0)[self.input_col].transform('skew')
             return df
 
         else:
@@ -121,7 +121,7 @@ class Kurtosis(BaseTransform):
 
     Parameters
     ----------
-    target_col: str, default 'ret'
+    input_col: str, default 'ret'
         Returns column to use when computing kurtosis.
     axis: str, {'ts', 'cs'}, default 'ts'
         Axis over which to compute the kurtosis:
@@ -137,7 +137,7 @@ class Kurtosis(BaseTransform):
     """
 
     def __init__(self,
-                 target_col: str = 'ret',
+                 input_col: str = 'ret',
                  output_col: str = 'kurt',
                  axis: str = 'ts',
                  window_type: str = 'rolling',
@@ -146,7 +146,7 @@ class Kurtosis(BaseTransform):
         super().__init__(name="Kurtosis",
                          description="Computes the kurtosis of a time series.")
 
-        self.target_col = target_col
+        self.input_col = input_col
         self.axis = axis
         self.window_type = window_type
         self.window_size = window_size
@@ -197,12 +197,12 @@ class Kurtosis(BaseTransform):
 
                 if multiindex:
                     # Calculate fixed kurtosis for each group (ticker)
-                    fixed_kurt_series = df.groupby(level=1).apply(pd.DataFrame.kurt)[self.target_col]
+                    fixed_kurt_series = df.groupby(level=1).apply(pd.DataFrame.kurt)[self.input_col]
                     # Map the single kurtosis value back to every row of its corresponding group
                     df[self.output_col] = df.index.get_level_values(1).map(fixed_kurt_series)
                 else:
                     # Calculate fixed kurtosis for the whole series and replicate it
-                    df[self.output_col] = df[self.target_col].kurt()
+                    df[self.output_col] = df[self.input_col].kurt()
 
                 return df
 
@@ -213,14 +213,14 @@ class Kurtosis(BaseTransform):
             kurt_df = window_op.kurt()
 
             # Align the result by dropping level 0 if MultiIndex
-            df[self.output_col] = maybe_droplevel(kurt_df[self.target_col], level=0)
+            df[self.output_col] = maybe_droplevel(kurt_df[self.input_col], level=0)
             return df
 
         elif self.axis == 'cs':
             # Cross-Sectional (cs) logic: Kurtosis at each timestamp (group by level 0)
             if not multiindex:
                 raise ValueError("Cross-sectional kurtosis ('cs') requires a MultiIndex DataFrame.")
-            df[self.output_col] = df.groupby(level=0)[self.target_col].transform(lambda x: x.kurt())
+            df[self.output_col] = df.groupby(level=0)[self.input_col].transform(lambda x: x.kurt())
             return df
 
         else:
