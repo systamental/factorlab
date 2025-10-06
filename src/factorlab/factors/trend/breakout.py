@@ -11,7 +11,7 @@ class Breakout(TrendFactor):
     """
     def __init__(self,
                  input_col: str = 'close',
-                 output_col: str = 'breakout',
+                 output_col: str = 'trend',
                  method: str = 'min_max',
                  signal: bool = True,
                  signal_method: str = 'min_max',
