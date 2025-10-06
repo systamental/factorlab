@@ -12,7 +12,6 @@ class Divergence(TrendFactor):
     """
     def __init__(self,
                  input_col: str = 'close',
-                 output_col: str = 'trend',
                  smooth=True,
                  scale=False,
                  **kwargs):
@@ -24,7 +23,6 @@ class Divergence(TrendFactor):
         self.name = 'Divergence'
         self.description = 'Exponentially Weighted Moving Average of sign of price changes over a rolling window.'
         self.input_col = input_col
-        self.output_col = output_col
 
     def _compute_trend(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -35,6 +33,6 @@ class Divergence(TrendFactor):
         trend_df = price_transform.compute(df)
         trend_df = np.sign(trend_df)
 
-        trend_df[self.output_col] = trend_df['diff']
+        trend_df['trend'] = trend_df['diff']
 
-        return trend_df[[self.output_col]]
+        return trend_df[['trend']]
