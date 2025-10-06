@@ -12,9 +12,9 @@ class AlphaMomentum(TrendFactor):
     i.e. cross-sectional average of returns).
     """
     def __init__(self,
-                 scale: bool = False,
                  return_col: str = 'ret',
                  factor_cols: Union[str, List[str]] = 'market',
+                 scale: bool = False,
                  **kwargs):
         super().__init__(scale=scale, **kwargs)
         self.name = 'AlphaMomentum'
@@ -22,6 +22,14 @@ class AlphaMomentum(TrendFactor):
                             'of price on market returns.')
         self.return_col = return_col
         self.factor_cols = factor_cols if isinstance(factor_cols, list) else [factor_cols]
+
+    @property
+    def inputs(self) -> List[str]:
+        """
+        Required input columns.
+        Override in subclasses as needed.
+        """
+        return [self.return_col] + self.factor_cols
 
     def _compute_trend(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -35,6 +43,7 @@ class AlphaMomentum(TrendFactor):
                     window_size=self.window_size).linear_regression(output='params')
 
         # alpha
-        trend_df = alpha[['const']]
+        trend_df = alpha[['const']].copy()
+        trend_df.rename(columns={'const': 'trend'}, inplace=True)
 
         return trend_df
