@@ -11,7 +11,6 @@ class Breakout(TrendFactor):
     """
     def __init__(self,
                  input_col: str = 'close',
-                 output_col: str = 'trend',
                  method: str = 'min_max',
                  signal: bool = True,
                  signal_method: str = 'min_max',
@@ -24,8 +23,6 @@ class Breakout(TrendFactor):
         ----------
         input_col: str, default 'close'
             Column name for closing price.
-        output_col: str, default 'breakout'
-            Column name for the computed breakout values.
         method: str, {'min_max', 'percentile', 'zscore'}, default 'min-max'
             Method to use for normalizing the price series.
         signal: bool, default True
@@ -37,7 +34,6 @@ class Breakout(TrendFactor):
         self.name = 'Breakout'
         self.description = 'Measures price relative to its recent range.'
         self.input_col = input_col
-        self.output_col = output_col
         self.method = method
         self.signal = signal
         self.signal_method = signal_method
@@ -56,7 +52,9 @@ class Breakout(TrendFactor):
 
         if self.signal:
             trend_df = ScoresToSignals(input_col='scores',
-                                       output_col=self.output_col,
+                                       output_col='trend',
                                        method=self.signal_method).compute(trend_df)
+        else:
+            trend_df.rename(columns={'scores': 'trend'}, inplace=True)
 
-        return trend_df[[self.output_col]]
+        return trend_df[['trend']]
