@@ -40,7 +40,7 @@ class SkewFactor(Factor, ABC):
 
     Examples
     --------
-    >>> factor = SomeSkewFactor(return_col='returns', sign_flip=True, smooth=True, window_type='ewm', window_size=30)
+    >>> factor = Skew(return_col='returns', sign_flip=True, smooth=True, window_type='ewm', window_size=30)
     >>> factor.return_col
     'returns'
     >>> factor.sign_flip
@@ -124,9 +124,12 @@ class SkewFactor(Factor, ABC):
         """
         Generates a standardized name for the trend factor based on its parameters.
         """
-        name_parts = [self.name, self.window_size]
+        name_parts = [self.name]
 
-        # add smoothing info
+        # add window size
+        if hasattr(self, 'window_size') and self.window_size:
+            name_parts.append(str(self.window_size))
+
         if self.smooth:
             name_parts.append(f"smooth_{self.smoothing_method}_{self.smoothing_window}_{self.central_tendency}")
 
