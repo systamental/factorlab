@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pandas as pd
+
 from factorlab.factors.reversal.base import ReversalFactor
-from factorlab.transformations.returns import Difference
 from factorlab.features.residuals import Residuals
 
 
