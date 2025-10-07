@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-from typing import Optional, List, Union
+from pandas.core.groupby import DataFrameGroupBy
+from typing import Optional, List, Union, Any
 
 from factorlab.factors.base import Factor
 from factorlab.utils import to_dataframe
@@ -15,6 +16,12 @@ class LiquidityFactor(Factor, ABC):
 
     Parameters
     ----------
+    input_col : str, default 'ret'
+        Column name for return data.
+    window_type : {'rolling', 'ewm', 'expanding'}, default 'rolling'
+        Type of rolling window to use.
+    window_size : int, default 30
+        Rolling window size for calculations.
     **kwargs :
         Additional keyword arguments for specific liquidity factor implementations.
 
@@ -27,12 +34,18 @@ class LiquidityFactor(Factor, ABC):
 
     def __init__(self,
                  input_col: str = 'ret',
+                 window_type: str = "rolling",
+                 window_size: int = 30,
+                 smooth: bool = False,
                  **kwargs):
         super().__init__(name=self.__class__.__name__,
                          description='Base class for liquidity factors.',
                          category='Liquidity')
 
         self.input_col = input_col
+        self.window_type = window_type
+        self.window_size = window_size
+        self.smooth = smooth
         self.kwargs = kwargs
 
     @property
@@ -79,6 +92,21 @@ class LiquidityFactor(Factor, ABC):
         name_parts = [self.name]
 
         return "_".join(name_parts)
+
+    def _get_ts_window_op(self, g: Union[pd.DataFrame, DataFrameGroupBy]) -> Any:
+        """Helper to determine and initialize the correct window operation for time series."""
+        if self.window_type == 'ewm':
+            # Returns Rolling GroupBy object
+            return g.ewm(span=self.window_size)
+        elif self.window_type == 'rolling':
+            # Returns Rolling GroupBy object
+            return g.rolling(window=self.window_size)
+        elif self.window_type == 'expanding':
+            # Returns Expanding GroupBy object
+            return g.expanding()
+        else:
+            raise ValueError(f"Unsupported window type: {self.window_type} for axis 'ts'. "
+                             f"Must be 'rolling', 'expanding', or 'fixed'.")
 
     def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
         """
