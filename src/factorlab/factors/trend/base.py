@@ -48,6 +48,7 @@ class TrendFactor(Factor, ABC):
     True
     """
     def __init__(self,
+                 input_col: str = 'close',
                  window_type: str = "ewm",
                  window_size: int = 30,
                  scale: bool = True,
@@ -60,6 +61,7 @@ class TrendFactor(Factor, ABC):
                          description='Base class for trend factors.',
                          category='Trend')
 
+        self.input_col = input_col
         self.window_type = window_type
         self.window_size = window_size
         self.scale = scale
@@ -96,7 +98,7 @@ class TrendFactor(Factor, ABC):
         Required input columns.
         Override in subclasses as needed.
         """
-        return ['close']
+        return [self.input_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y: Optional[Union[pd.Series, pd.DataFrame]] = None):
         """
