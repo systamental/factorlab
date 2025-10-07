@@ -1,5 +1,6 @@
 from __future__ import annotations
 import pandas as pd
+
 from factorlab.factors.reversal.base import ReversalFactor
 from factorlab.factors.trend import RSI
 from factorlab.features.residuals import Residuals
