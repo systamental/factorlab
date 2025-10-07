@@ -6,6 +6,7 @@ from factorlab.factors.base import Factor
 from factorlab.factors.liquidity.amihud import Amihud
 from factorlab.factors.liquidity.edge import EDGE
 from factorlab.factors.liquidity.high_low_spread import HighLowSpreadEstimator
+from factorlab.factors.liquidity.notional_value import NotionalValue
 
 
 class Liquidity(Factor):
@@ -27,7 +28,8 @@ class Liquidity(Factor):
     _METHOD_MAP: ClassVar[Dict[str, Type[BaseTransform]]] = {
         'amihud': Amihud,
         'edge': EDGE,
-        'high_low_spread': HighLowSpreadEstimator
+        'high_low_spread': HighLowSpreadEstimator,
+        'notional_value': NotionalValue
     }
 
     @classmethod
