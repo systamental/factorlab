@@ -38,13 +38,6 @@ class SkewFactor(Factor, ABC):
     Instance variables match the parameters. Use the class constructor to set
     them, and access them directly via attributes if needed.
 
-    Examples
-    --------
-    >>> factor = Skew(return_col='returns', sign_flip=True, smooth=True, window_type='ewm', window_size=30)
-    >>> factor.return_col
-    'returns'
-    >>> factor.sign_flip
-    True
     """
 
     def __init__(self,
