@@ -3,7 +3,6 @@ import pandas as pd
 
 from factorlab.factors.reversal.base import ReversalFactor
 from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
-from factorlab.utils import to_dataframe
 
 
 class LinearDeviation(ReversalFactor):
