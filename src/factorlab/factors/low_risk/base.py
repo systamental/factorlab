@@ -14,6 +14,8 @@ class LowRiskFactor(Factor, ABC):
 
     Parameters
     ----------
+    return_col : str, default 'ret'
+        Column name for return data.
     central_tendency : {'mean', 'median'}, default 'mean'
         Central tendency measure for smoothing.
     window_type : {'rolling', 'ewm'}, default 'ewm'
@@ -149,7 +151,7 @@ class LowRiskFactor(Factor, ABC):
         pd.DataFrame
             A DataFrame containing the computed low risk factor.
         """
-        df = X
+        df = X.copy()
 
         # compute trend
         lr_df = self._compute_low_risk(df)
