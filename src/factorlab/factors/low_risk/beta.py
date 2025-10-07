@@ -71,6 +71,4 @@ class Beta(LowRiskFactor):
                         window_type='rolling',
                         window_size=self.window_size).compute(df)
 
-        print(f'beta df columns: {beta_df}')
-
         return beta_df
