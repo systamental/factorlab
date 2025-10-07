@@ -1,5 +1,6 @@
 from __future__ import annotations
 import pandas as pd
+
 from factorlab.factors.reversal.base import ReversalFactor
 from factorlab.transformations.smoothing import WindowSmoother
 from factorlab.utils import to_dataframe
