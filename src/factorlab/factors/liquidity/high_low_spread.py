@@ -49,6 +49,20 @@ class HighLowSpreadEstimator(LiquidityFactor):
         return [self.high_col, self.low_col, self.close_col]
 
     def _compute_liquidity(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Computes the high-low spread estimator.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+            The input DataFrame containing the required high, low, and close price columns.
+
+        Returns
+        -------
+        pd.Series
+            A Series with the computed high-low spread estimates in the specified output column.
+
+        """
 
         # preserve shape
         is_multi = isinstance(df.index, pd.MultiIndex)
