@@ -181,7 +181,7 @@ class Trend:
 
         Parameters
         ----------
-        method: str, {'min-max', 'percentile', 'norm'}, default 'min-max'
+        method: str, {'min-max', 'percentile', 'norm', 'logistic', 'adj_norm'}, default 'min-max'
             Method to use to normalize price series.
         signal: bool, default True
             Converts normalized price series to a signal between -1 and 1.
@@ -638,15 +638,18 @@ class Trend:
             self.short_window_size = int(np.ceil(np.sqrt(self.window_size)))  # sqrt of long-term window
 
         # smoothing
-        self.trend = Transform(self.price).smooth(self.short_window_size,
+        short_window = Transform(self.price).smooth(self.short_window_size,
                                                   window_type=self.window_type,
                                                   central_tendency=self.central_tendency,
-                                                  window_fcn=self.window_fcn) - \
-            Transform(self.price).smooth(self.window_size,
-                                         window_type=self.window_type,
-                                         central_tendency=self.central_tendency,
-                                         window_fcn=self.window_fcn,
-                                         lags=self.short_window_size)
+                                                  window_fcn=self.window_fcn)
+
+        long_window = Transform(self.price).smooth(self.window_size,
+                                                   window_type=self.window_type,
+                                                   central_tendency=self.central_tendency,
+                                                   window_fcn=self.window_fcn,
+                                                   lags=self.short_window_size)
+
+        self.trend = short_window - long_window
 
         # scale
         if self.normalize:
@@ -737,7 +740,7 @@ class Trend:
         # rename cols
         self.gen_factor_name()
 
-        # single index
+        # convert back to single index
         if isinstance(self.df.index, pd.MultiIndex) is False:
             self.trend = self.trend.iloc[:, 0].unstack()
 
@@ -861,23 +864,26 @@ class Trend:
         di_pos = 100 * dm_pos.div(tr.squeeze(), axis=0)
         di_neg = 100 * dm_neg.div(tr.squeeze(), axis=0)
 
-        # compute directional index difference
+        # compute directional index difference DX
         di_diff = di_pos.subtract(di_neg.squeeze(), axis=0)
         di_sum = di_pos.add(di_neg.squeeze(), axis=0)
         self.trend = 100 * di_diff.div(di_sum.squeeze(), axis=0)
 
-        # compute ADX
-        adx = Transform(self.trend.abs()).smooth(self.window_size,
-                                                 window_type=self.window_type,
-                                                 central_tendency=self.central_tendency,
-                                                 window_fcn=self.window_fcn)
-
         # rename cols
         self.gen_factor_name()
 
+        # compute ADX
         if signal:
-            self.trend = (self.trend / 100).clip(-1, 1)
+            adx = Transform(self.trend).smooth(self.window_size,
+                                               window_type=self.window_type,
+                                               central_tendency=self.central_tendency,
+                                               window_fcn=self.window_fcn)
+            self.trend = (adx / 100).clip(-1, 1)
         else:
+            adx = Transform(self.trend.abs()).smooth(self.window_size,
+                                                     window_type=self.window_type,
+                                                     central_tendency=self.central_tendency,
+                                                     window_fcn=self.window_fcn)
             self.trend = adx
 
         return self.trend
