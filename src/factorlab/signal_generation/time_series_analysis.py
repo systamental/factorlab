@@ -287,9 +287,9 @@ class TimeSeriesAnalysis:
         self.freq = None
         self.model = {}
         self.results = None
-        self.preprocess_data()
+        self._preprocess_data()
 
-    def preprocess_data(self) -> pd.DataFrame:
+    def _preprocess_data(self) -> pd.DataFrame:
         """
         Preprocess time series data.
 
@@ -335,7 +335,7 @@ class TimeSeriesAnalysis:
 
         return self.data
 
-    def create_lags(self) -> pd.DataFrame:
+    def _create_lags(self) -> pd.DataFrame:
         """
         Create lags for features and target.
 
@@ -353,7 +353,7 @@ class TimeSeriesAnalysis:
 
             return self.data
 
-    def add_trend(self) -> pd.DataFrame:
+    def _add_trend(self) -> pd.DataFrame:
         """
         Add intercept to time series data.
 
@@ -480,7 +480,7 @@ class TimeSeriesAnalysis:
             'pvalues': p-values of coefficients.
             'predict': predictions from linear regression fit (y_hat).
             'fittedvalues': predictions from recursive least squares regression.
-            'resid': residuals from linear regression fit (y - y_hat).
+            'resid': residuals from linear regression fit.
             'resid_recursive': residuals from recursive least squares regression.
             'rsquared': coefficient of determination, aka R-squared of linear regression. Measures goodness of fit.
             'f_pvalue': The p-value of the F-statistic.
@@ -535,10 +535,10 @@ class TimeSeriesAnalysis:
             Output from linear regression estimation.
         """
         # lags
-        self.create_lags()
+        self._create_lags()
 
         # constant and trend
-        self.add_trend()
+        self._add_trend()
 
         # fit ols
         self._fit_ols(cov_type=cov_type, cov_kwds=cov_kwds)
@@ -598,10 +598,10 @@ class TimeSeriesAnalysis:
             Output from linear regression estimation.
         """
         # lags
-        self.create_lags()
+        self._create_lags()
 
         # constant and trend
-        self.add_trend()
+        self._add_trend()
 
         # fit ols
         self._fit_recursive_ols()
@@ -699,10 +699,10 @@ class TimeSeriesAnalysis:
 
         """
         # lags
-        self.create_lags()
+        self._create_lags()
 
         # constant and trend
-        self.add_trend()
+        self._add_trend()
 
         # fit ols
         self._fit_rolling_ols(cov_type=cov_type, cov_kwds=cov_kwds)
