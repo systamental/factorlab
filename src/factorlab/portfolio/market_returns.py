@@ -49,16 +49,16 @@ class BaseWeightedMarketReturn(BaseTransform):
     Handles the core weighted sum and broadcasting to the MultiIndex (Time, AssetID).
     """
 
-    def __init__(self, ret_col: str = 'ret', weight_col: str = 'weight', output_col: str = 'market'):
+    def __init__(self, return_col: str = 'ret', weight_col: str = 'weight', output_col: str = 'market'):
         super().__init__(name="BaseWeightedMarketReturn",
                          description="Aggregates asset returns using a weight column.")
-        self.ret_col = ret_col
+        self.return_col = return_col
         self.weight_col = weight_col
         self.output_col = output_col
 
     @property
     def inputs(self) -> List[str]:
-        return [self.ret_col, self.weight_col]
+        return [self.return_col, self.weight_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'BaseWeightedMarketReturn':
         """Minimal fit implementation: validate inputs."""
@@ -75,7 +75,7 @@ class BaseWeightedMarketReturn(BaseTransform):
         self.validate_inputs(df)
 
         # Core aggregation logic
-        df['weighted_return'] = df[self.weight_col] * df[self.ret_col]
+        df['weighted_return'] = df[self.weight_col] * df[self.return_col]
 
         # Use transform('sum') to ensure alignment (broadcasting) back to the MultiIndex
         df[self.output_col] = df.groupby(level=0)['weighted_return'].transform('sum')
@@ -90,10 +90,10 @@ class EqualWeightedMarketReturn(BaseTransform):
     This is a stateless transformation.
     """
 
-    def __init__(self, ret_col: str = 'ret', output_col: str = 'market'):
+    def __init__(self, return_col: str = 'ret', output_col: str = 'market'):
 
         super().__init__(name="EqualWeightedMarketReturn", description="Calculates equal-weighted market returns.")
-        self.ret_col = ret_col
+        self.return_col = return_col
         self.output_col = output_col
 
     @property
@@ -101,7 +101,7 @@ class EqualWeightedMarketReturn(BaseTransform):
         """
         Required input columns.
         """
-        return [self.ret_col]
+        return [self.return_col]
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'EqualWeightedMarketReturn':
         """
@@ -135,6 +135,6 @@ class EqualWeightedMarketReturn(BaseTransform):
         self.validate_inputs(df)
 
         # compute mean return across assets at each time step
-        df[self.output_col] = df.groupby(level=0)[self.ret_col].transform('mean')
+        df[self.output_col] = df.groupby(level=0)[self.return_col].transform('mean')
 
         return df
