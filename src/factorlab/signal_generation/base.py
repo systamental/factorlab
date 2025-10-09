@@ -71,43 +71,43 @@ class BaseSignal(BaseTransform):
         # transform and return
         return self._transform(df_input)
 
-    def _transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
-        """
-        Applies the full TrendFactor computation pipeline.
-
-        Parameters
-        ----------
-        X : Union[pd.Series, pd.DataFrame]
-            Input data containing the required columns.
-
-        Returns
-        -------
-        pd.DataFrame
-            A DataFrame containing the computed trend factor.
-        """
+    def _transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Applies the full Signal computation pipeline."""
         df = X.copy()
 
-        # compute trend
+        # 1. Compute the raw signal (must be implemented by subclass)
         signal_df = self._compute_signal(df)
 
-        # lags
+        # 2. Apply post-processing layers
+        signal_df = self._apply_lags(signal_df)
+        signal_df = self._apply_direction(signal_df)
+        signal_df = self._apply_leverage(signal_df)
+
+        # 3. Add the final signal column to the original DataFrame
+        X[self.output_col] = signal_df[self.input_col]
+
+        return X
+
+    def _apply_lags(self, signal_df: pd.DataFrame) -> pd.DataFrame:
+        """Applies time lags to the signal column."""
         if self.lags is not None and self.lags > 0:
             if isinstance(signal_df.index, pd.MultiIndex):
-                signal_df = signal_df.groupby(level=1).shift(self.lags)
+                # Lag groups by asset (level=1)
+                return signal_df.groupby(level=1).shift(self.lags)
             else:
-                signal_df = signal_df.shift(self.lags)
+                return signal_df.shift(self.lags)
+        return signal_df
 
-        # direction filter
+    def _apply_direction(self, signal_df: pd.DataFrame) -> pd.DataFrame:
+        """Filters signals based on the 'long' or 'short' direction."""
         if self.direction == 'long':
             signal_df[signal_df < 0] = 0.0
         elif self.direction == 'short':
             signal_df[signal_df > 0] = 0.0
+        return signal_df
 
-        # leverage scaling
+    def _apply_leverage(self, signal_df: pd.DataFrame) -> pd.DataFrame:
+        """Scales the signals by the leverage factor."""
         if self.leverage is not None:
-            signal_df *= self.leverage
-
-        # add to original df
-        X[self.output_col] = signal_df[self.input_col]
-
-        return X
+            return signal_df * self.leverage
+        return signal_df
