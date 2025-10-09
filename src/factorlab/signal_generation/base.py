@@ -15,16 +15,24 @@ class BaseSignal(BaseTransform):
     def __init__(self,
                  input_col: str,
                  output_col: str = 'signal',
-                 axis: str = 'ts'
+                 axis: str = 'ts',
+                 lags: int = None,
+                 leverage: float = None,
+                 direction: str = None
                  ):
         super().__init__(name="BaseSignal", description="Generates a trading signal from a score column.")
 
         self.input_col = input_col
         self.output_col = output_col
         self.axis = axis
+        self.lags = lags
+        self.leverage = leverage
+        self.direction = direction
 
         if self.axis not in {'cs', 'ts'}:
             raise ValueError("Axis must be 'cs' (cross-sectional) or 'ts' (time-series).")
+        if self.direction is not None and self.direction not in ['long', 'short']:
+             raise ValueError("Direction must be 'long' or 'short'.")
 
     @property
     def inputs(self) -> List[str]:
@@ -81,6 +89,23 @@ class BaseSignal(BaseTransform):
 
         # compute trend
         signal_df = self._compute_signal(df)
+
+        # lags
+        if self.lags is not None and self.lags > 0:
+            if isinstance(signal_df.index, pd.MultiIndex):
+                signal_df = signal_df.groupby(level=1).shift(self.lags)
+            else:
+                signal_df = signal_df.shift(self.lags)
+
+        # direction filter
+        if self.direction == 'long':
+            signal_df[signal_df < 0] = 0.0
+        elif self.direction == 'short':
+            signal_df[signal_df > 0] = 0.0
+
+        # leverage scaling
+        if self.leverage is not None:
+            signal_df *= self.leverage
 
         # add to original df
         X[self.output_col] = signal_df[self.input_col]
