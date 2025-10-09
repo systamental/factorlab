@@ -3,7 +3,7 @@ from typing import Union, Dict, Any
 
 from factorlab.core.base_transform import BaseTransform
 from factorlab.signal_generation.discrete import DiscreteZScoreSignal, DiscreteQuantileSignal, DiscreteRankSignal
-from factorlab.signal_generation.continuous import ZScoreSignal, QuantileSignal, RankSignal
+from factorlab.signal_generation.continuous import ScoreSignal, QuantileSignal, RankSignal
 
 
 class SignalGenerator(BaseTransform):
@@ -21,7 +21,7 @@ class SignalGenerator(BaseTransform):
         self.kwargs = kwargs
 
         self._method_map: Dict[str, Any] = {
-            'zscore': ZScoreSignal,
+            'zscore': ScoreSignal,
             'quantile': QuantileSignal,
             'rank': RankSignal,
             'discrete_zscore': DiscreteZScoreSignal,
