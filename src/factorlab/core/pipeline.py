@@ -47,7 +47,7 @@ class Pipeline:
         self : Pipeline
             The fitted pipeline instance.
         """
-        Xt = X.copy()
+        Xt = X.copy(deep=True)
 
         # Iterate through all steps
         for i, (name, transformer) in enumerate(self.steps):
@@ -77,7 +77,7 @@ class Pipeline:
         pd.DataFrame
             The final transformed data.
         """
-        Xt = X.copy()
+        Xt = X.copy(deep=True)
 
         # Apply transform for all steps
         for name, transformer in self.steps:
