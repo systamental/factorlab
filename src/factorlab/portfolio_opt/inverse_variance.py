@@ -15,8 +15,8 @@ class InverseVariance(PortfolioOptimizerBase):
     W*_t = S_t * ( (1 / var_t) / sum(1 / var_t) )
     """
 
-    def __init__(self, window_size: int = 360):
-        super().__init__(window_size=window_size)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
         self.name = "InverseVolatility"
         self.description = "Portfolio optimizer using inverse volatility weighting."
@@ -34,8 +34,17 @@ class InverseVariance(PortfolioOptimizerBase):
         # drop missing returns for covariance calculation
         returns = returns.dropna(axis=1, how='all')
 
-        # weights
-        cov_matrix = RiskMetrics.covariance(returns)
+        # risk estimator function
+        try:
+            risk_func = getattr(RiskMetrics, self.risk_estimator)
+        except AttributeError:
+            raise ValueError(
+                f"RiskMetrics has no method named '{self.risk_estimator}'. "
+                "Check available estimators."
+            )
+
+        # Execute the chosen risk estimator function
+        cov_matrix = risk_func(returns, **self.risk_estimator_params)
 
         return {
             'assets': returns.columns.tolist(),
@@ -57,7 +66,7 @@ class InverseVariance(PortfolioOptimizerBase):
         ----------
         estimators : Dict[str, Any]
             Contains the calculated risk Series.
-        signal : pd.Series (S_t)
+        signals : pd.Series (S_t)
             The strategy's directional view for the period.
         current_weights : pd.Series (W*_t-1)
             The weights currently held.
