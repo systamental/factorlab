@@ -1,6 +1,6 @@
 import pandas as pd
 from abc import abstractmethod
-from typing import Dict, Any, Union
+from typing import Dict, Any
 
 from factorlab.core.base_transform import BaseTransform
 
@@ -20,15 +20,20 @@ class PortfolioOptimizerBase(BaseTransform):
         The lookback window size (in days) to use for estimating moments.
     """
 
-    def __init__(self, window_size: int = 60, leverage: float = 1.0):
+    def __init__(self,
+                 window_size: int = 360,
+                 risk_estimator: str = 'covariance',
+                 risk_estimator_params: Dict[str, Any] = {},
+                 leverage: float = 1.0):
 
         super().__init__(name="PortfolioOptimizer",
                          description="Abstract base class for portfolio optimizers.")
 
         self.window_size = window_size
-        self.leverage = 1.0  # Default leverage, can be overridden in subclasses
+        self.risk_estimator = risk_estimator
+        self.risk_estimator_params = risk_estimator_params
+        self.leverage = leverage
         self.estimators: Dict[str, Any] = {}
-        self.weights: pd.DataFrame = pd.DataFrame()
 
     @abstractmethod
     def _compute_estimators(self, returns: pd.DataFrame) -> Dict[str, Any]:
@@ -60,7 +65,7 @@ class PortfolioOptimizerBase(BaseTransform):
         if returns.empty:
             raise ValueError(f"{self.name}: Input returns for fit cannot be empty.")
 
-        # Stores the dictionary returned by the subclass's _compute_estimators
+        # stores dict returned by the subclass's _compute_estimators
         self.estimators = self._compute_estimators(returns)
         self._is_fitted = True
         return self
