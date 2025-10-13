@@ -2,7 +2,7 @@ from __future__ import annotations
 import pandas as pd
 from factorlab.factors.trend.base import TrendFactor
 from factorlab.transformations.normalization import Normalization
-from factorlab.signal_generation.continuous import ScoreSignal, QuantileSignal, RankSignal
+from factorlab.signal_generation.continuous import ScoreSignal
 
 
 class Breakout(TrendFactor):
@@ -53,7 +53,7 @@ class Breakout(TrendFactor):
         if self.signal:
             trend_df = ScoreSignal(input_col='scores',
                                    output_col='trend',
-                                   ethod=self.signal_method).compute(trend_df)
+                                   method=self.signal_method).compute(trend_df)
         else:
             trend_df.rename(columns={'scores': 'trend'}, inplace=True)
 
