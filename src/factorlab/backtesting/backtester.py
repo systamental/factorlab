@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from typing import Dict
 
 from factorlab.strategy.config import StrategyConfig
@@ -41,9 +40,13 @@ class BacktesterEngine:
         self.prices = None
         self.signals = None
         self.current_weights = None
-        self.total_returns = None
+        self.net_exposure = None
+        self.gross_exposure = None
         self.portfolio_return = None
         self.results: Dict[str, pd.DataFrame] = {}
+
+        # Frequency map for runtime checks
+        self.freq_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4}
 
         print(f"Engine ready for strategy: {self.config.name}")
 
@@ -60,7 +63,7 @@ class BacktesterEngine:
         # run the full data pipeline
         self.pipeline = self.config.data_pipeline.fit_transform(self.data)
 
-        print("--- Data pipeline computation complete. ---")
+        print("--- Data pipeline computation complete. ---\n")
 
         return self.pipeline
 
@@ -98,10 +101,39 @@ class BacktesterEngine:
 
         # tracking tables
         self.portfolio_return = pd.Series(0.0, index=self.dates)
-        self.pnl_history = pd.Series(dtype=float, index=self.dates)
-        self.value_history = pd.Series(dtype=float, index=self.dates)
-        self.weights_history = pd.DataFrame(index=self.dates, columns=self.assets, dtype=float)
-        self.cost_history = pd.Series(dtype=float, index=self.dates)
+        self.pnl = pd.Series(dtype=float, index=self.dates)
+        self.account_value = pd.Series(dtype=float, index=self.dates)
+        self.weights = pd.DataFrame(index=self.dates, columns=self.assets, dtype=float)
+        self.costs = pd.Series(dtype=float, index=self.dates)
+
+    def _is_rebalance_day(self, date_t: pd.Timestamp) -> bool:
+        """Determines if a rebalance should occur on the given date."""
+
+        freq = getattr(self.config, 'rebal_freq', 'daily')
+
+        if freq is None or freq.lower() in ['daily', '1d', 'd']:
+            return True
+        if freq.lower() in self.freq_map:
+            return date_t.dayofweek == self.freq_map[freq.lower()]
+        if freq.lower() == '15th':
+            return date_t.day == 15
+        if freq.lower() == 'month_end':
+            if date_t == self.dates[-1]:
+                return True
+            try:
+                next_date = self.dates[self.dates.get_loc(date_t) + 1]
+                return date_t.month != next_date.month
+            except IndexError:
+                return True
+        if freq.lower() == 'month_start':
+            return date_t.day == 1
+        if isinstance(freq, int) and freq > 0:
+            start_index = self.dates.get_loc(self.dates[self.config.optimizer.window_size])
+            current_index = self.dates.get_loc(date_t)
+            return (current_index - start_index) % freq == 0
+        else:
+            print(f"Warning: Unsupported rebalancing frequency '{freq}'. Defaulting to daily.")
+            return True
 
     def run_backtest(self) -> Dict[str, pd.DataFrame]:
         """
@@ -130,98 +162,117 @@ class BacktesterEngine:
             date_t_minus_1 = self.dates[i - 1]  # last period
 
             try:
-                # Returns over the current period (t-1 close to t close)
-                period_returns = self.returns.loc[date_t]  # - self.funding_rate.loc[date_t]
 
-                # retrieve signal based on data up to date_t_minus_1
+                # --- START OF TRADING DAY T ---
+
+                # signals at S_t-1
                 if date_t_minus_1 not in self.signals.index:
                     raise KeyError(f"Signal not available for previous date: {date_t_minus_1.strftime('%Y-%m-%d')}")
-
-                # signal_series vector S_t
                 signal_series = self.signals.loc[date_t_minus_1]
 
+                # weights at W_t-1
                 if self.current_weights is None:
                     self.current_weights = pd.Series(0.0, index=signal_series.index)
 
-                # Portfolio Optimization
-                # risk estimators using historical lookback
-                fit_start_index = i - self.config.optimizer.window_size
-                lookback_returns = self.returns.loc[self.dates[fit_start_index]:date_t_minus_1]
-                self.config.optimizer.fit(lookback_returns)
+                # target weights W*_t for trading day t: signals at S_t-1 and current weights W*_t-1
+                # rebalancing
+                if self._is_rebalance_day(date_t):
 
-                # compute W*_t using S_t and previous weights (W*_t-1)
-                target_weights = self.config.optimizer.transform(
-                    signal_series,
-                    self.current_weights
-                )
+                    print(f'Rebalancing on {date_t.strftime("%Y-%m-%d")}')
 
-                # execution costs
-                transaction_cost = self.config.cost_model.compute_cost(
-                    current_weights=self.current_weights,
-                    target_weights=target_weights,
-                    prices=self.prices.loc[date_t_minus_1],
-                    portfolio_value=self.market_value
-                )
+                    # --- Portfolio Optimization ---
+                    # risk estimators using historical lookback
+                    fit_start_index = i - self.config.optimizer.window_size
+                    lookback_returns = self.returns.loc[self.dates[fit_start_index]:date_t_minus_1]
+                    self.config.optimizer.fit(lookback_returns)
 
-                # update state with new weights and cost
+                    # compute target weights W*_t using S_t-1 and previous/current weights W*_t-1
+                    target_weights = self.config.optimizer.transform(signal_series, self.current_weights)
+
+                    # execution costs
+                    transaction_cost = self.config.cost_model.compute_cost(
+                        current_weights=self.current_weights,
+                        target_weights=target_weights,
+                        prices=self.prices.loc[date_t_minus_1],
+                        portfolio_value=self.market_value
+                    )
+
+                else:
+                    target_weights = self.current_weights.copy()
+                    transaction_cost = 0.0
+
+                # transaction cost
                 self.market_value -= transaction_cost
+                # update current weights to target weights
                 self.current_weights = target_weights
 
-                # P&L for period
-                # portfolio return earned over period (t-1 to t)
-                portfolio_return = (self.current_weights * period_returns).sum()
+                # --- END of TRADING DAY T ---
+                # Returns over the current period (t-1 close to t close)
+                period_returns = self.returns.loc[date_t]  # - self.funding_rate.loc[date_t]
+
+                # PNL for period t, over the period (t-1 to t)
+                portfolio_return = ((self.current_weights * period_returns).sum() -
+                                    (transaction_cost / self.market_value))
                 pnl = self.market_value * portfolio_return
                 self.market_value += pnl
 
+                # update weights for drift in market value
+                # W_drift,t = W_t-1 * (1 + R_t) / (1 + R_p,t)
+                self.current_weights = ((self.current_weights * (1 + period_returns))
+                                        / (1 + portfolio_return))
+
                 # --- record state ---
                 self.portfolio_return.loc[date_t] = portfolio_return
-                self.pnl_history.loc[date_t] = pnl
-                self.value_history.loc[date_t] = self.market_value
-                self.weights_history.loc[date_t] = target_weights
-                self.cost_history.loc[date_t] = transaction_cost
+                self.pnl.loc[date_t] = pnl
+                self.account_value.loc[date_t] = self.market_value
+                self.weights.loc[date_t] = self.current_weights
+                self.costs.loc[date_t] = transaction_cost
 
             except Exception as e:
                 # log the error but ensure the backtest doesn't crash entirely
                 print(f"\nCritical error on date {date_t}: {e}. Skipping period. State carried forward.")
-                self.value_history.loc[date_t] = self.market_value
-                self.weights_history.loc[date_t] = self.current_weights
+                self.account_value.loc[date_t] = self.market_value
+                self.weights.loc[date_t] = self.current_weights
                 self.portfolio_return.loc[date_t] = 0.0
-                self.pnl_history.loc[date_t] = 0.0
-                self.cost_history.loc[date_t] = 0.0
+                self.pnl.loc[date_t] = 0.0
+                self.costs.loc[date_t] = 0.0
 
             # console status update
             print(
-                f"Date: {date_t.strftime('%Y-%m-%d')} | "
-                f"Return: {portfolio_return:.4f} | "
-                f"Value: ${self.market_value:,.2f}",
+                f'Date: {date_t.strftime("%Y-%m-%d")} | '
+                f'Return: {portfolio_return:.4f} | '
+                f'Value: ${self.market_value:,.2f}',
                 end='\r')
 
         # store final results
-        self.results['value_history'] = self.value_history.dropna()
-        self.results['pnl_history'] = self.pnl_history.dropna()
-        self.results['weights_history'] = self.weights_history.dropna(how='all')
-        self.results['cost_history'] = self.cost_history.dropna()
+        self.results['account_value'] = self.account_value.dropna()
+        self.results['pnl'] = self.pnl.dropna()
+        self.results['weights'] = self.weights.dropna(how='all')
+        self.results['t-costs'] = self.costs.dropna()
+
+        self.gross_exposure = self.weights.abs().sum(axis=1)
+        self.net_exposure = self.weights.sum(axis=1)
 
         print("\n\nBacktest finished successfully. Summary:")
 
         return self.results
 
-    def get_summary(self):
-        """Calculates and prints key performance metrics."""
-        if 'value_history' in self.results and not self.results['value_history'].empty:
-            # Calculation of daily returns from value history
-            daily_returns = self.results['value_history'].pct_change().dropna()
-
-            # Simple metrics placeholder
-            total_return = (self.results['value_history'].iloc[-1] / self.initial_capital) - 1
-            # Assuming 252 trading days per year
-            annual_volatility = daily_returns.std() * np.sqrt(365)
-            # Assuming zero risk-free rate for simplicity
-            sharpe_ratio = (daily_returns.mean() * 365) / annual_volatility
-
-            print("\n--- Backtest Summary ---")
-            print(f"Strategy: {self.config.name}")
-            print(f"Total Return: {total_return:.2%}")
-            print(f"Annualized Sharpe Ratio: {sharpe_ratio:.2f}")
-            print(f"Total Periods Simulated: {len(self.results['value_history'])}")
-            print("------------------------")
+#     def get_summary(self):
+#         """Calculates and prints key performance metrics."""
+#         if 'value_history' in self.results and not self.results['value_history'].empty:
+#             # Calculation of daily returns from value history
+#             daily_returns = self.results['value_history'].pct_change().dropna()
+#
+#             # Simple metrics placeholder
+#             total_return = (self.results['value_history'].iloc[-1] / self.initial_capital) - 1
+#             # Assuming 252 trading days per year
+#             annual_volatility = daily_returns.std() * np.sqrt(365)
+#             # Assuming zero risk-free rate for simplicity
+#             sharpe_ratio = (daily_returns.mean() * 365) / annual_volatility
+#
+#             print("\n--- Backtest Summary ---")
+#             print(f"Strategy: {self.config.name}")
+#             print(f"Total Return: {total_return:.2%}")
+#             print(f"Annualized Sharpe Ratio: {sharpe_ratio:.2f}")
+#             print(f"Total Periods Simulated: {len(self.results['value_history'])}")
+#             print("------------------------")
