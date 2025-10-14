@@ -2,6 +2,7 @@ import pandas as pd
 from typing import Dict, Any
 
 from factorlab.portfolio_opt.base import PortfolioOptimizerBase
+from factorlab.portfolio_opt.estimators.risk import RiskMetrics
 
 
 class EqualWeighted(PortfolioOptimizerBase):
@@ -29,9 +30,22 @@ class EqualWeighted(PortfolioOptimizerBase):
         # drop missing returns to get valid asset list
         returns = returns.dropna(axis=1, how='all')
 
+        # risk estimator function
+        try:
+            risk_func = getattr(RiskMetrics, self.risk_estimator)
+        except AttributeError:
+            raise ValueError(
+                f"RiskMetrics has no method named '{self.risk_estimator}'. "
+                "Check available estimators."
+            )
+
+        # Execute the chosen risk estimator function
+        cov_matrix = risk_func(returns, **self.risk_estimator_params)
+
         # assets and date
         return {
             'assets': returns.dropna(axis=1, how='all').columns.tolist(),
+            'cov_matrix': cov_matrix
         }
 
     def _compute_weights(self,
