@@ -88,6 +88,11 @@ class PortfolioOptimizerBase(BaseTransform):
             current_weights
         )
 
+        # Ensure weights sum to 1 before applying leverage
+        target_weights /= target_weights.abs().sum()
+
+        # TODO: Future enhancement could include scaling the portfolio to target volatility
+
         # Scale to the desired leverage
         target_weights *= self.leverage
 
