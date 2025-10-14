@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from abc import abstractmethod
 from typing import Dict, Any
 
@@ -18,12 +19,25 @@ class PortfolioOptimizerBase(BaseTransform):
     ----------
     window_size : int
         The lookback window size (in days) to use for estimating moments.
+    risk_estimator : str
+        The risk estimator method to use (e.g., 'covariance', 'ewma', 'dcc').
+    risk_estimator_params : Dict[str, Any]
+        Additional parameters to pass to the risk estimator function.
+    vol_target : float, optional
+        If provided, the final target weights will be scaled such that the
+        ex-ante annual volatility of the portfolio equals this value.
+        This scaling **overrides** the 'leverage' parameter if both are set.
+        (e.g., 0.10 for 10% target vol).
+    leverage : float
+        The gross leverage constraint applied if vol_target is None.
     """
 
     def __init__(self,
                  window_size: int = 360,
                  risk_estimator: str = 'covariance',
                  risk_estimator_params: Dict[str, Any] = {},
+                 vol_target: float = None,
+                 ann_factor: int = 365,
                  leverage: float = 1.0):
 
         super().__init__(name="PortfolioOptimizer",
@@ -32,6 +46,8 @@ class PortfolioOptimizerBase(BaseTransform):
         self.window_size = window_size
         self.risk_estimator = risk_estimator
         self.risk_estimator_params = risk_estimator_params
+        self.vol_target = vol_target
+        self.ann_factor = ann_factor
         self.leverage = leverage
         self.estimators: Dict[str, Any] = {}
 
@@ -57,6 +73,36 @@ class PortfolioOptimizerBase(BaseTransform):
         Abstract method to solve the optimization problem using computed estimators.
         """
         pass
+
+    def _compute_portfolio_volatility(self, target_weights: pd.Series) -> float:
+        """
+        Calculates the ex-ante annualized volatility of the portfolio
+        using the fitted daily covariance matrix estimator.
+
+        Parameters
+        ----------
+        target_weights : pd.Series
+            The target portfolio weights W_t (should sum to 1).
+        """
+        if 'cov_matrix' not in self.estimators:
+            raise RuntimeError(
+                f"{self.name}: Cannot perform volatility targeting. "
+                "The subclass must provide 'cov_matrix' in self.estimators."
+            )
+
+        # ensure the weights vector aligns with the covariance matrix columns
+        # indexing ensures correct ordering and subsetting
+        cov_matrix = self.estimators['cov_matrix'].loc[
+            target_weights.index, target_weights.index
+        ]
+
+        # portfolio daily variance: W^T * Sigma_daily * W
+        daily_variance = target_weights.T @ cov_matrix @ target_weights
+
+        # annualized volatility: sqrt(daily_Variance * annualization Factor)
+        ann_var = daily_variance * self.ann_factor
+
+        return np.sqrt(ann_var)
 
     def fit(self, returns: pd.DataFrame, **kwargs) -> 'PortfolioOptimizerBase':
         """
@@ -88,12 +134,38 @@ class PortfolioOptimizerBase(BaseTransform):
             current_weights
         )
 
-        # Ensure weights sum to 1 before applying leverage
+        # Ensure weights sum to 1 before applying leverage or vol targeting
         target_weights /= target_weights.abs().sum()
+        final_weights = target_weights.copy()
 
-        # TODO: Future enhancement could include scaling the portfolio to target volatility
+        # vol targeting
+        if self.vol_target is not None:
+            try:
+                # Calculate the ex-ante annualized volatility of the normalized portfolio
+                current_vol = self._compute_portfolio_volatility(target_weights)
 
-        # Scale to the desired leverage
-        target_weights *= self.leverage
+                if current_vol > 1e-6:  # Check to avoid division by near zero
+                    # Calculate the required scaling factor
+                    scale_factor = self.vol_target / current_vol
+                    # Scale the weights
+                    final_weights = target_weights * scale_factor
+                else:
+                    # Fallback if volatility is negligible
+                    print(
+                        f"Warning: Current portfolio volatility is near zero. Falling back to fixed leverage scaling.")
+                    final_weights = target_weights * self.leverage
 
-        return target_weights
+            except RuntimeError as e:
+                # Handles the case where the covariance matrix is missing (subclass error)
+                print(f"Warning: {e}. Cannot scale by vol target. Falling back to fixed leverage scaling.")
+                final_weights = target_weights * self.leverage
+            except Exception as e:
+                # Handles other potential errors (e.g., matrix mismatch, bad data)
+                print(f"Error during volatility scaling: {e}. Falling back to fixed leverage scaling.")
+                final_weights = target_weights * self.leverage
+
+        # 4. Apply Simple Leverage (only if vol_target was not set)
+        elif self.leverage != 1.0:
+            final_weights = target_weights * self.leverage
+
+        return final_weights
