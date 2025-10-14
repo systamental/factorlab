@@ -39,7 +39,7 @@ class CostModelBase(ABC):
         Returns
         -------
         float
-            The total fractional cost incurred (e.g., 0.001 for 0.1% cost).
-            This cost is subtracted from the total portfolio return.
+            The total absolute dollar cost of the transaction, computed as the total fractional cost incurred
+            (e.g., 0.001 for 0.1% cost) multiplied by the portfolio value.
         """
         raise NotImplementedError
