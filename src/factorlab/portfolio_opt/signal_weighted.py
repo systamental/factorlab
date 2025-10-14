@@ -3,7 +3,6 @@ import numpy as np
 from typing import Dict, Any
 
 from factorlab.portfolio_opt.base import PortfolioOptimizerBase
-from factorlab.portfolio_opt.estimators.risk import RiskMetrics
 
 
 class SignalWeighted(PortfolioOptimizerBase):
