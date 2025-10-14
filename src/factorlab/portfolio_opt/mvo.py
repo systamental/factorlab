@@ -47,8 +47,8 @@ class MeanVarianceOptimizer(PortfolioOptimizerBase):
         # Pass base parameters to parent class
         super().__init__(**kwargs)
 
-        self.name = "MeanVarianceUtilityOptimizer"
-        self.description = "MVO maximizing Utility (Return - lambda * Risk)."
+        self.name = "MeanVarianceOptimizer"
+        self.description = "Mean variance optimizer (Return - lambda * Risk)."
 
         # MVO Utility specific parameters
         self.risk_aversion = risk_aversion
