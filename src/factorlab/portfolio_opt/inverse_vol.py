@@ -35,8 +35,17 @@ class InverseVolatility(PortfolioOptimizerBase):
         # drop missing returns for covariance calculation
         returns = returns.dropna(axis=1, how='all')
 
-        # weights
-        cov_matrix = RiskMetrics.covariance(returns)
+        # risk estimator function
+        try:
+            risk_func = getattr(RiskMetrics, self.risk_estimator)
+        except AttributeError:
+            raise ValueError(
+                f"RiskMetrics has no method named '{self.risk_estimator}'. "
+                "Check available estimators."
+            )
+
+        # Execute the chosen risk estimator function
+        cov_matrix = risk_func(returns, **self.risk_estimator_params)
 
         return {
             'assets': returns.columns.tolist(),
