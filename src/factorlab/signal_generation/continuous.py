@@ -7,6 +7,33 @@ from factorlab.signal_generation.base import BaseSignal
 from factorlab.utils import grouped
 
 
+class RawSignal(BaseSignal):
+    """
+    Uses raw scores as signals without any transformation.
+
+    Parameters
+    ----------
+    input_col : str
+        Name of the input column containing raw scores.
+    output_col : str, default 'signal'
+        Name of the output column to store the resulting signals.
+
+    """
+
+    def __init__(self,
+                 input_col: str,
+                 **kwargs):
+        super().__init__(input_col=input_col, **kwargs)
+
+        self.name = "ZScoreToSignal"
+        self.description = "Converts standardized z-scores to signals in the range [-1, 1]."
+        self.input_col = input_col
+
+    def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        """Use raw scores for signals transformation."""
+        return X[[self.input_col]].copy()
+
+
 class ScoreSignal(BaseSignal):
     """
     Converts standardized cores to signals in the range [-1, 1].
