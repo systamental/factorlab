@@ -11,9 +11,9 @@ class EqualWeighted(PortfolioOptimizerBase):
     Each asset receives an equal allocation regardless of historical returns or risk.
     """
 
-    def __init__(self, window_size: int = 60):
+    def __init__(self, window_size: int = 60, **kwargs):
+        super().__init__(window_size=window_size, **kwargs)
 
-        super().__init__(window_size=window_size)
         self.name = "EqualWeighted"
         self.description = "Allocates equal weight to all assets (1/N)."
 
@@ -58,4 +58,4 @@ class EqualWeighted(PortfolioOptimizerBase):
         # target weights
         target_weights = signals.multiply(ew, axis=0)
 
-        return target_weights
+        return target_weights.reindex(assets)
