@@ -15,8 +15,8 @@ class SignalWeighted(PortfolioOptimizerBase):
     W*_t = S_t / sum(|S_t|)
     """
 
-    def __init__(self, window_size: int = 360):
-        super().__init__(window_size=window_size)
+    def __init__(self, window_size: int = 360, **kwargs):
+        super().__init__(window_size=window_size, **kwargs)
 
         self.name = "SignalWeighted"
         self.description = "Portfolio optimizer using signal-weighted allocation."
