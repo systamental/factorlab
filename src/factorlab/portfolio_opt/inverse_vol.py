@@ -16,8 +16,8 @@ class InverseVolatility(PortfolioOptimizerBase):
     The base class handles the final normalization to the specified leverage.
     """
 
-    def __init__(self, window_size: int = 360):
-        super().__init__(window_size=window_size)
+    def __init__(self, window_size: int = 360, **kwargs):
+        super().__init__(window_size=window_size, **kwargs)
 
         self.name = "InverseVolatility"
         self.description = "Portfolio optimizer using inverse volatility weighting."
@@ -58,7 +58,7 @@ class InverseVolatility(PortfolioOptimizerBase):
         ----------
         estimators : Dict[str, Any]
             Contains the calculated risk Series.
-        signal : pd.Series (S_t)
+        signals : pd.Series (S_t)
             The strategy's directional view for the period.
         current_weights : pd.Series (W*_t-1)
             The weights currently held.
