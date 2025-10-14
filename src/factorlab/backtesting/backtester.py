@@ -48,7 +48,7 @@ class BacktesterEngine:
         # Frequency map for runtime checks
         self.freq_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4}
 
-        print(f"Engine ready for strategy: {self.config.name}")
+        print(f"Backtesting Engine ready for strategy: {self.config.name}")
 
     def _compute_pipeline(self):
         """
@@ -63,7 +63,7 @@ class BacktesterEngine:
         # run the full data pipeline
         self.pipeline = self.config.data_pipeline.fit_transform(self.data)
 
-        print("--- Data pipeline computation complete. ---\n")
+        print("--- Data pipeline complete. ---\n")
 
         return self.pipeline
 
