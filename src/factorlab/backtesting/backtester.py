@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from typing import Dict
 
 from factorlab.strategy.config import StrategyConfig
@@ -15,7 +16,8 @@ class BacktesterEngine:
     def __init__(self,
                  config: StrategyConfig,
                  data: pd.DataFrame,
-                 initial_capital: float = 1_000_000.0):
+                 initial_capital: float = 1_000_000.0,
+                 verbose: bool = True):
         """
         Initializes the Backtester Engine.
 
@@ -28,11 +30,14 @@ class BacktesterEngine:
             pipeline to transform.
         initial_capital : float, default 1,000,000.0
             The starting cash balance.
+        verbose : bool, default True
+            If True, prints progress updates to the console.
         """
 
         self.config = config
         self.data = data
         self.initial_capital = initial_capital
+        self.verbose = verbose
 
         # internal state
         self.pipeline = None
@@ -164,7 +169,6 @@ class BacktesterEngine:
             try:
 
                 # --- START OF TRADING DAY T ---
-
                 # signals at S_t-1
                 if date_t_minus_1 not in self.signals.index:
                     raise KeyError(f"Signal not available for previous date: {date_t_minus_1.strftime('%Y-%m-%d')}")
@@ -177,8 +181,6 @@ class BacktesterEngine:
                 # target weights W*_t for trading day t: signals at S_t-1 and current weights W*_t-1
                 # rebalancing
                 if self._is_rebalance_day(date_t):
-
-                    print(f'Rebalancing on {date_t.strftime("%Y-%m-%d")}')
 
                     # --- Portfolio Optimization ---
                     # risk estimators using historical lookback
@@ -208,18 +210,16 @@ class BacktesterEngine:
 
                 # --- END of TRADING DAY T ---
                 # Returns over the current period (t-1 close to t close)
-                period_returns = self.returns.loc[date_t]  # - self.funding_rate.loc[date_t]
+                period_returns = self.returns.loc[date_t] - self.funding_rate.loc[date_t]
 
                 # PNL for period t, over the period (t-1 to t)
-                portfolio_return = ((self.current_weights * period_returns).sum() -
-                                    (transaction_cost / self.market_value))
+                portfolio_return = (self.current_weights * period_returns).sum()
                 pnl = self.market_value * portfolio_return
                 self.market_value += pnl
 
                 # update weights for drift in market value
                 # W_drift,t = W_t-1 * (1 + R_t) / (1 + R_p,t)
-                self.current_weights = ((self.current_weights * (1 + period_returns))
-                                        / (1 + portfolio_return))
+                self.current_weights = ((self.current_weights * (1 + period_returns)) / (1 + portfolio_return))
 
                 # --- record state ---
                 self.portfolio_return.loc[date_t] = portfolio_return
@@ -238,11 +238,12 @@ class BacktesterEngine:
                 self.costs.loc[date_t] = 0.0
 
             # console status update
-            print(
-                f'Date: {date_t.strftime("%Y-%m-%d")} | '
-                f'Return: {portfolio_return:.4f} | '
-                f'Value: ${self.market_value:,.2f}',
-                end='\r')
+            if self.verbose:
+                print(
+                    f'Date: {date_t.strftime("%Y-%m-%d")} | '
+                    f'Return: {portfolio_return:.4f} | '
+                    f'Value: ${self.market_value:,.2f}',
+                    end='\r')
 
         # store final results
         self.results['account_value'] = self.account_value.dropna()
@@ -257,22 +258,24 @@ class BacktesterEngine:
 
         return self.results
 
-#     def get_summary(self):
-#         """Calculates and prints key performance metrics."""
-#         if 'value_history' in self.results and not self.results['value_history'].empty:
-#             # Calculation of daily returns from value history
-#             daily_returns = self.results['value_history'].pct_change().dropna()
-#
-#             # Simple metrics placeholder
-#             total_return = (self.results['value_history'].iloc[-1] / self.initial_capital) - 1
-#             # Assuming 252 trading days per year
-#             annual_volatility = daily_returns.std() * np.sqrt(365)
-#             # Assuming zero risk-free rate for simplicity
-#             sharpe_ratio = (daily_returns.mean() * 365) / annual_volatility
-#
-#             print("\n--- Backtest Summary ---")
-#             print(f"Strategy: {self.config.name}")
-#             print(f"Total Return: {total_return:.2%}")
-#             print(f"Annualized Sharpe Ratio: {sharpe_ratio:.2f}")
-#             print(f"Total Periods Simulated: {len(self.results['value_history'])}")
-#             print("------------------------")
+    def get_summary(self):
+        """Calculates and prints key performance metrics."""
+        if 'account_value' in self.results and not self.results['account_value'].empty:
+            # Calculation of daily returns from value history
+            daily_returns = self.results['account_value'].pct_change().dropna()
+
+            # Simple metrics placeholder
+            total_return = (self.results['account_value'].iloc[-1] / self.initial_capital) - 1
+            # Assuming 252 trading days per year
+            annual_volatility = daily_returns.std() * np.sqrt(365)
+            # Assuming zero risk-free rate for simplicity
+            sharpe_ratio = (daily_returns.mean() * 365) / annual_volatility
+
+            print("\n--- Backtest Summary ---")
+            print(f"Strategy: {self.config.name}")
+            print(f"Total Return: {total_return:.2%}")
+            print(f'Annualized Return: {(daily_returns.mean() * 365):.2%}')
+            print(f"Annualized Volatility: {annual_volatility:.2%}")
+            print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+            print(f"Total Periods Simulated: {len(self.results['account_value'])}")
+            print("------------------------")
