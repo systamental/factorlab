@@ -7,6 +7,33 @@ from factorlab.signal_generation.base import BaseSignal
 from factorlab.utils import grouped
 
 
+class BuyHoldSignal(BaseSignal):
+    """
+    Generates a constant buy-and-hold signal of 1.0 for all assets.
+
+    Parameters
+    ----------
+    output_col : str, default 'signal'
+        Name of the output column to store the resulting signals.
+    """
+
+    def __init__(self,
+                 input_col: str = 'ret',
+                 **kwargs):
+        super().__init__(input_col=input_col, **kwargs)
+
+        self.name = "BuyHoldSignal"
+        self.description = "Generates a constant buy-and-hold signal of 1.0 for all assets."
+        self.input_col = input_col
+
+    def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        """Generate constant buy-and-hold signals."""
+        df = X[[self.input_col]].copy()
+
+        signals = np.sign(df.abs())  # 1.0 for all non-NaN entries
+        return signals
+
+
 class RawSignal(BaseSignal):
     """
     Uses raw scores as signals without any transformation.
