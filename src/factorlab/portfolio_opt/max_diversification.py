@@ -128,6 +128,20 @@ class MaxDiversification(PortfolioOptimizerBase):
                          ) -> pd.Series:
         """
         The transform step: Solves the Max Diversification problem and scales the weights.
+
+        Parameters
+        ----------
+        estimators : Dict[str, Any]
+            Contains the calculated covariance matrix and asset info.
+        signals : pd.Series
+            The strategy's directional view for the period.
+        current_weights : pd.Series
+            The weights currently held.
+
+        Returns
+        -------
+        pd.Series
+            The target weights for the period.
         """
         # Extract estimators
         n_assets = estimators['n_assets']

@@ -56,7 +56,7 @@ class SignalWeighted(PortfolioOptimizerBase):
                          current_weights: pd.Series  # required by interface but unused here
                          ) -> pd.DataFrame:
         """
-        Calculates the signal-weighted portfolio weights.
+        Computes the signal-weighted portfolio weights.
 
         Parameters
         ----------
@@ -69,9 +69,8 @@ class SignalWeighted(PortfolioOptimizerBase):
 
         Returns
         -------
-        pd.DataFrame
-            The target portfolio weights W*_t.
-
+        pd.Series
+            The target weights for the period.
         """
         # estimators dict
         assets = estimators['assets']
@@ -79,7 +78,7 @@ class SignalWeighted(PortfolioOptimizerBase):
         if not assets:
             raise ValueError("Asset list not found in estimators.")
 
-        # absolute sum of signals
+        # target weights proportional to signal magnitude
         target_weights = signals / np.abs(signals).sum()
 
         return target_weights.reindex(assets)

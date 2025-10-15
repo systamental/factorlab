@@ -121,9 +121,19 @@ class MinVolOptimizer(PortfolioOptimizerBase):
         """
         The transform step: Solves the Minimum Volatility quadratic problem.
 
-        The optimization finds the weights (magnitude) that minimize risk.
-        The `signals` input is used afterward to apply the final directional
-        (long/short) scaling to the risk-optimized magnitude.
+        Parameters
+        ----------
+        estimators : Dict[str, Any]
+            Contains the calculated covariance matrix and asset list.
+        signals : pd.Series
+            The strategy's directional view for the period.
+        current_weights : pd.Series
+            The weights currently held (required by interface but unused here).
+
+        Returns
+        -------
+        pd.Series
+            The target weights for the period.
         """
         # Extract estimators
         n_assets = estimators['n_assets']
@@ -142,9 +152,6 @@ class MinVolOptimizer(PortfolioOptimizerBase):
             cp.sum(weights) <= self.budget,  # Budget constraint
             weights >= self.min_weight,  # Minimum weight constraint
             weights <= self.max_weight  # Maximum weight constraint
-            # Note: The sum of weights is <= budget. For MinVol, the solver will
-            # usually push the sum to the budget limit (or 1.0) unless constraints
-            # prevent it.
         ]
 
         # --- 4. Solve Problem ---

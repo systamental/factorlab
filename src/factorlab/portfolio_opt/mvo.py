@@ -123,20 +123,31 @@ class MeanVarianceOptimizer(PortfolioOptimizerBase):
                          current_weights: pd.Series
                          ) -> pd.Series:
         """
-        The transform step: Solves the quadratic MVO utility maximization problem.
+        The transform step: Solves the quadratic MVO optimization problem to maximize utility.
 
         The `signals` input is treated as the Expected Returns vector (mu).
+
+        Parameters
+        ----------
+        estimators : Dict[str, Any]
+            Dictionary containing estimators calculated from historical returns.
+        signals : pd.Series
+            The strategy's directional view for the period, treated as expected returns.
+        current_weights : pd.Series
+            The weights currently held (not used in this strategy).
+
+        Returns
+        -------
+        pd.Series
+            The target weights for the period.
         """
-        # Extract estimators
+        # extract estimators
         n_assets = estimators['n_assets']
         asset_names = estimators['assets']
         cov_matrix = estimators['cov_matrix']
 
-        # Expected Returns (mu) - sourced from the signals
+        # expected Returns (mu) - sourced from the signals
         exp_ret = signals.reindex(asset_names, fill_value=0.0).values
-
-        # Current Weights (W_t-1) - needed potentially for transaction costs (TC)
-        w_t_minus_1 = current_weights.reindex(asset_names, fill_value=0.0).values
 
         # --- 1. Define Optimization Variables ---
         weights = cp.Variable(n_assets)
@@ -146,7 +157,6 @@ class MeanVarianceOptimizer(PortfolioOptimizerBase):
         portfolio_risk_sq = cp.quad_form(weights, cov_matrix)
 
         # Objective: Maximize (Return) - lambda * (Risk)
-        # objective = cp.Maximize(portfolio_ret - self.risk_aversion * portfolio_risk_sq)
         objective = cp.Minimize(self.risk_aversion * portfolio_risk_sq - portfolio_ret)
 
         # --- 3. Define Constraints ---
@@ -163,15 +173,15 @@ class MeanVarianceOptimizer(PortfolioOptimizerBase):
         except Exception as e:
             warn(f"{self.name} failed to solve with {self.solver}. Error: {e}")
 
-        # Extract weights
+        # extract weights
         optimal_weights = weights.value
 
         if optimal_weights is None or 'optimal' not in prob.status:
             warn("Optimization failed or returned None. Falling back to equal weights.")
-            # Fallback to equal weighting if solver fails
+            # fallback to equal weighting if solver fails
             optimal_weights = np.ones(n_assets) * (self.budget / n_assets)
 
-        # --- 5. Final Formatting ---
+        # add to pd.Series
         target_weights = pd.Series(optimal_weights, index=asset_names)
 
         return target_weights
