@@ -30,29 +30,39 @@ class Rebalancer:
         # Retrieve the rebalance frequency from the configuration
         freq = getattr(self.config, 'rebal_freq', 'daily')
 
-        if freq is None or freq.lower() in ['daily', '1d', 'd']:
-            return True
-        if freq.lower() in self.freq_map:
-            return date_t.dayofweek == self.freq_map[freq.lower()]
-        if freq.lower() == '15th':
-            return date_t.day == 15
-        if freq.lower() == 'month_end':
-            # Check if current date is the last trading day of the month
-            if date_t == dates[-1]:
-                return True
-            try:
-                next_date = dates[dates.get_loc(date_t) + 1]
-                return date_t.month != next_date.month
-            except IndexError:
-                # If it's the very last day of the whole backtest, rebalance
-                return True
-        if freq.lower() == 'month_start':
-            return date_t.day == 1
         if isinstance(freq, int) and freq > 0:
             # Check for N-day frequency
             start_index = dates.get_loc(dates[self.config.optimizer.window_size])
             current_index = dates.get_loc(date_t)
             return (current_index - start_index) % freq == 0
+        elif isinstance(freq, str):
+            if freq.lower() in self.freq_map:
+                return date_t.dayofweek == self.freq_map[freq.lower()]
+            if freq.lower() == '15th':
+                return date_t.day == 15
+            if freq.lower() == 'month_start':
+                return date_t.day == 1
+            if freq.lower() == 'month_end':
+                # Check if current date is the last trading day of the month
+                if date_t == dates[-1]:
+                    return True
+                try:
+                    next_date = dates[dates.get_loc(date_t) + 1]
+                    return date_t.month != next_date.month
+                except IndexError:
+                    # If it's the very last day of the whole backtest, rebalance
+                    return True
+            if freq.lower() == 'quarter_end':
+                # Check if current date is the last trading day of the quarter
+                if date_t == dates[-1]:
+                    return True
+                try:
+                    next_date = dates[dates.get_loc(date_t) + 1]
+                    return (date_t.month in [3, 6, 9, 12]) and (date_t.month != next_date.month)
+                except IndexError:
+                    return True
+            if freq is None or freq.lower() in ['daily', '1d', 'd']:
+                return True
         else:
             print(f"Warning: Unsupported rebalancing frequency '{freq}'. Defaulting to daily.")
             return True
