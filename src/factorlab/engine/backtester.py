@@ -3,6 +3,7 @@ import numpy as np
 from typing import Dict
 
 from factorlab.strategy.config import StrategyConfig
+from factorlab.execution.rebalancer import Rebalancer
 
 
 class BacktesterEngine:
@@ -17,7 +18,8 @@ class BacktesterEngine:
                  config: StrategyConfig,
                  data: pd.DataFrame,
                  initial_capital: float = 1_000_000.0,
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 ann_factor: int = 365):
         """
         Initializes the Backtester Engine.
 
@@ -32,12 +34,15 @@ class BacktesterEngine:
             The starting cash balance.
         verbose : bool, default True
             If True, prints progress updates to the console.
+        ann_factor : int, default 365
+            The annualization factor to use for volatility calculations.
         """
 
         self.config = config
         self.data = data
         self.initial_capital = initial_capital
         self.verbose = verbose
+        self.ann_factor = ann_factor
 
         # internal state
         self.pipeline = None
@@ -166,44 +171,37 @@ class BacktesterEngine:
         for i, date_t in enumerate(trading_dates, start=min_start_index):
             date_t_minus_1 = self.dates[i - 1]  # last period
 
+            # --- START OF TRADING DAY T ---
+            # signals at S_t-1
+            if date_t_minus_1 not in self.signals.index:
+                raise KeyError(f"Signal not available for previous date: {date_t_minus_1.strftime('%Y-%m-%d')}")
+            signal_series = self.signals.loc[date_t_minus_1]
+
+            # weights at W_t-1
+            if self.current_weights is None:
+                self.current_weights = pd.Series(0.0, index=signal_series.index)
+
             try:
+                # --- REBALANCING at the OPEN of day T ---
+                rebalancer = Rebalancer(self.config)
 
-                # --- START OF TRADING DAY T ---
-                # signals at S_t-1
-                if date_t_minus_1 not in self.signals.index:
-                    raise KeyError(f"Signal not available for previous date: {date_t_minus_1.strftime('%Y-%m-%d')}")
-                signal_series = self.signals.loc[date_t_minus_1]
+                # lookback returns for risk estimators at time t-1
+                fit_start_index = i - self.config.optimizer.window_size
+                lookback_returns = self.returns.loc[self.dates[fit_start_index]:date_t_minus_1]
 
-                # weights at W_t-1
-                if self.current_weights is None:
-                    self.current_weights = pd.Series(0.0, index=signal_series.index)
-
-                # target weights W*_t for trading day t: signals at S_t-1 and current weights W*_t-1
-                # rebalancing
-                if self._is_rebalance_day(date_t):
-
-                    # --- Portfolio Optimization ---
-                    # risk estimators using historical lookback
-                    fit_start_index = i - self.config.optimizer.window_size
-                    lookback_returns = self.returns.loc[self.dates[fit_start_index]:date_t_minus_1]
-                    self.config.optimizer.fit(lookback_returns)
-
-                    # compute target weights W*_t using S_t-1 and previous/current weights W*_t-1
-                    target_weights = self.config.optimizer.transform(signal_series, self.current_weights)
-
-                    # execution costs
-                    transaction_cost = self.config.cost_model.compute_cost(
-                        current_weights=self.current_weights,
-                        target_weights=target_weights,
-                        prices=self.prices.loc[date_t_minus_1],
-                        portfolio_value=self.market_value
-                    )
-
+                # portfolio optimization: target weights W*_t for signals at S_t-1 and current weights W*_t-1
+                # execution costs based on market value at the close of t-1 (or open of t)
+                if rebalancer.is_rebalance_day(date_t, self.dates):
+                    target_weights, transaction_cost = rebalancer.rebalance(lookback_returns,
+                                                                            signal_series,
+                                                                            self.current_weights,
+                                                                            self.prices.loc[date_t_minus_1],
+                                                                            self.market_value)
                 else:
                     target_weights = self.current_weights.copy()
                     transaction_cost = 0.0
 
-                # transaction cost
+                # update market value for transaction cost
                 self.market_value -= transaction_cost
                 # update current weights to target weights
                 self.current_weights = target_weights
@@ -231,9 +229,10 @@ class BacktesterEngine:
             except Exception as e:
                 # log the error but ensure the backtest doesn't crash entirely
                 print(f"\nCritical error on date {date_t}: {e}. Skipping period. State carried forward.")
+                portfolio_return = 0.0
                 self.account_value.loc[date_t] = self.market_value
                 self.weights.loc[date_t] = self.current_weights
-                self.portfolio_return.loc[date_t] = 0.0
+                self.portfolio_return.loc[date_t] = portfolio_return
                 self.pnl.loc[date_t] = 0.0
                 self.costs.loc[date_t] = 0.0
 
@@ -267,14 +266,14 @@ class BacktesterEngine:
             # Simple metrics placeholder
             total_return = (self.results['account_value'].iloc[-1] / self.initial_capital) - 1
             # Assuming 252 trading days per year
-            annual_volatility = daily_returns.std() * np.sqrt(365)
+            annual_volatility = daily_returns.std() * np.sqrt(self.ann_factor)
             # Assuming zero risk-free rate for simplicity
-            sharpe_ratio = (daily_returns.mean() * 365) / annual_volatility
+            sharpe_ratio = (daily_returns.mean() * self.ann_factor) / annual_volatility
 
             print("\n--- Backtest Summary ---")
             print(f"Strategy: {self.config.name}")
             print(f"Total Return: {total_return:.2%}")
-            print(f'Annualized Return: {(daily_returns.mean() * 365):.2%}')
+            print(f'Annualized Return: {(daily_returns.mean() * self.ann_factor):.2%}')
             print(f"Annualized Volatility: {annual_volatility:.2%}")
             print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
             print(f"Total Periods Simulated: {len(self.results['account_value'])}")
