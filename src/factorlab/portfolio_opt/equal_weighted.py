@@ -64,6 +64,11 @@ class EqualWeighted(PortfolioOptimizerBase):
             The strategy's directional view for the period.
         current_weights : pd.Series
             The weights currently held.
+
+        Returns
+        -------
+        pd.Series
+            The target weights for the period.
         """
         # estimators dict
         assets = estimators['assets']
