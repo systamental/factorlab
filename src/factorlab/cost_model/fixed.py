@@ -4,19 +4,19 @@ from factorlab.cost_model.base import CostModelBase
 
 class FixedCommissionModel(CostModelBase):
     """
-    Calculates cost based on a fixed commission rate applied to total turnover.
+    Calculates cost based on a fixed commission or transaction rate applied to total turnover.
     """
 
-    def __init__(self, commission_rate: float = 0.001):
+    def __init__(self, rate: float = 0.001):
         """
         Parameters
         ----------
-        commission_rate : float, default 0.001
+        rate : float, default 0.001
             The fixed percentage cost applied to every dollar of absolute turnover (0.1%).
         """
         super().__init__()
         self.name = "FixedCommissionModel"
-        self.commission_rate = commission_rate
+        self.rate = rate
 
     def compute_cost(self,
                      current_weights: pd.Series,
@@ -33,7 +33,7 @@ class FixedCommissionModel(CostModelBase):
         target_weights: pd.Series
             Weights after optimization (W_t).
         prices: pd.Series
-            Prices of assets at the time of trade decision.
+            The prices (or closing prices) used for execution (not used in this model).
         portfolio_value: float
             The total dollar value of the portfolio at the time of trade decision.
 
@@ -53,9 +53,9 @@ class FixedCommissionModel(CostModelBase):
         turnover_fraction = (new_w - old_w).abs().sum()
 
         # 3. Cost as a fraction of portfolio value
-        cost_fraction = turnover_fraction * self.commission_rate
+        fractional_cost = turnover_fraction * self.rate
 
         # 4. Convert fraction to absolute dollar cost (Crucial Step)
-        transaction_cost_dollars = cost_fraction * portfolio_value
+        dollar_cost = fractional_cost * portfolio_value
 
-        return transaction_cost_dollars
+        return dollar_cost
