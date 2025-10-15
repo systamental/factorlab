@@ -10,6 +10,23 @@ class BaseSignal(BaseTransform):
     """
     Base class for all signal generation methods, discrete or continuous.
     Enforces the required input parameters and BaseTransform interface.
+
+    Parameters
+    ----------
+    input_col : str
+        The name of the input column containing the raw factor score or forecast.
+    output_col : str, default 'signal'
+        The name of the output column to store the generated signal.
+    axis : str, default 'ts'
+        The axis along which to compute the signal: 'cs' for cross-sectional,
+        'ts' for time-series.
+    lags : int, optional
+        The number of time periods to lag the signal. If None, no lag is applied.
+    leverage : float, optional
+        A scaling factor to apply to the final signal. If None, no scaling is applied.
+    direction : str, optional
+        If 'long', only positive signals are retained; if 'short', only negative
+        signals are retained. If None, both long and short signals are kept.
     """
 
     def __init__(self,
@@ -101,9 +118,9 @@ class BaseSignal(BaseTransform):
     def _apply_direction(self, signal_df: pd.DataFrame) -> pd.DataFrame:
         """Filters signals based on the 'long' or 'short' direction."""
         if self.direction == 'long':
-            signal_df[signal_df < 0] = 0.0
+            signal_df.clip(lower=0, inplace=True)
         elif self.direction == 'short':
-            signal_df[signal_df > 0] = 0.0
+            signal_df.clip(upper=0, inplace=True)
         return signal_df
 
     def _apply_leverage(self, signal_df: pd.DataFrame) -> pd.DataFrame:
