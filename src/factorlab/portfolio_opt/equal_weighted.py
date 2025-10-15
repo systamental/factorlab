@@ -52,9 +52,18 @@ class EqualWeighted(PortfolioOptimizerBase):
                          estimators: Dict[str, Any],
                          signals: pd.Series,
                          current_weights: pd.Series  # required by interface but unused here
-                         ) -> pd.DataFrame:
+                         ) -> pd.Series:
         """
-        Calculates the 1/N weights.
+        Computes the directional target weights based on equal weighting.
+
+        Parameters
+        ----------
+        estimators : Dict[str, Any]
+            Dictionary containing estimators calculated from historical returns.
+        signals : pd.Series
+            The strategy's directional view for the period.
+        current_weights : pd.Series
+            The weights currently held.
         """
         # estimators dict
         assets = estimators['assets']
