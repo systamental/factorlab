@@ -56,7 +56,7 @@ class InverseVolatility(PortfolioOptimizerBase):
                          estimators: Dict[str, Any],
                          signals: pd.Series,
                          current_weights: pd.Series  # required by interface but unused here
-                         ) -> pd.DataFrame:
+                         ) -> pd.Series:
         """
         Computes the directional target weights based on the signal and
         inverse volatility risk parity.
@@ -74,7 +74,8 @@ class InverseVolatility(PortfolioOptimizerBase):
 
         Returns
         -------
-        pd.Series: The Target Weight Vector (W*_t) *before* final leverage scaling, indexed by asset.
+        pd.Series
+            The target weights for the period.
         """
         # estimators dict
         assets = estimators['assets']
