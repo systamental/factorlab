@@ -14,9 +14,10 @@ class DiscreteZScoreSignal(BaseSignal):
                  input_col: str = 'score',
                  long_z_score: float = 1.5,
                  short_z_score: float = -1.5,
-                 output_col: str = 'signal'):
+                 output_col: str = 'signal',
+                 **kwargs):
 
-        super().__init__(input_col=input_col, output_col=output_col)
+        super().__init__(input_col=input_col, output_col=output_col, **kwargs)
         self.name = "ZScoreSignal"
         self.description = "Generates a discrete trading signal from Z-score thresholds."
         self.input_col = input_col
@@ -34,13 +35,13 @@ class DiscreteZScoreSignal(BaseSignal):
         df = X.copy()
 
         # 3. Initialize signal column to 0 (Neutral)
-        df[self.output_col] = 0
+        df[self.output_col] = 0.0
 
         # 4. Assign Long Signal (1)
-        df.loc[df[self.input_col] >= self.long_z_score, self.output_col] = 1
+        df.loc[df[self.input_col] >= self.long_z_score, self.output_col] = 1.0
 
         # 5. Assign Short Signal (-1)
-        df.loc[df[self.input_col] <= self.short_z_score, self.output_col] = -1
+        df.loc[df[self.input_col] <= self.short_z_score, self.output_col] = -1.0
 
         return df[self.output_col]
 
@@ -53,9 +54,10 @@ class DiscreteQuantileSignal(BaseSignal):
     def __init__(self,
                  input_col: str = 'quantile',
                  output_col: str = 'signal',
-                 axis: str = 'ts'):
+                 axis: str = 'ts',
+                 **kwargs):
 
-        super().__init__(input_col=input_col, output_col=output_col, axis=axis)
+        super().__init__(input_col=input_col, output_col=output_col, axis=axis, **kwargs)
         self.name = "QuantileSignal"
         self.description = "Generates a discrete trading signal from quantile thresholds."
         self.score_col = input_col
@@ -72,13 +74,13 @@ class DiscreteQuantileSignal(BaseSignal):
         bottom_quantile = df[self.input_col].min()
 
         # signal col
-        df[self.output_col] = 0
+        df[self.output_col] = 0.0
 
         # long signal
-        df.loc[df[self.input_col] == top_quantile, self.output_col] = 1
+        df.loc[df[self.input_col] == top_quantile, self.output_col] = 1.0
 
         # short signal
-        df.loc[df[self.input_col] == bottom_quantile, self.output_col] = -1
+        df.loc[df[self.input_col] == bottom_quantile, self.output_col] = -1.0
 
         return df[self.output_col]
 
@@ -105,9 +107,10 @@ class DiscreteRankSignal(BaseSignal):
                  input_col: str = 'rank',
                  n_assets: int = 10,
                  output_col: str = 'signal',
-                 axis: str = 'ts'):
+                 axis: str = 'ts',
+                 **kwargs):
 
-        super().__init__(input_col=input_col, output_col=output_col, axis=axis)
+        super().__init__(input_col=input_col, output_col=output_col, axis=axis, **kwargs)
         self.name = "RankSignal"
         self.description = "Generates a discrete trading signal from rank thresholds."
         self.score_col = input_col
