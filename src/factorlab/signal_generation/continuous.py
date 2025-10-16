@@ -28,7 +28,7 @@ class BuyHoldSignal(BaseSignal):
 
     def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
         """Generate constant buy-and-hold signals."""
-        df = X[[self.input_col]].copy()
+        df = X[self.input_col].copy()
 
         signals = np.sign(df.abs())  # 1.0 for all non-NaN entries
         return signals
@@ -58,7 +58,7 @@ class RawSignal(BaseSignal):
 
     def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
         """Use raw scores for signals transformation."""
-        return X[[self.input_col]].copy()
+        return X[self.input_col].copy()
 
 
 class ScoreSignal(BaseSignal):
