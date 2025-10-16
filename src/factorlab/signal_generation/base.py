@@ -95,13 +95,15 @@ class BaseSignal(BaseTransform):
         # compute the raw signal (must be implemented by subclass)
         signal_df = self._compute_signal(df)
 
+        print(f'signal_df head:\n{signal_df.head()}')
+
         # post-processing layers
         signal_df = self._apply_lags(signal_df)
         signal_df = self._apply_direction(signal_df)
         signal_df = self._apply_leverage(signal_df)
 
         # 3. add final signal column to the original DataFrame
-        X[self.output_col] = signal_df[self.input_col]
+        X[self.output_col] = signal_df.squeeze()
 
         return X
 
