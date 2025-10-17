@@ -2,7 +2,8 @@ import pandas as pd
 from typing import Union, Dict, Any
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.signal_generation.discrete import DiscreteZScoreSignal, DiscreteQuantileSignal, DiscreteRankSignal
+from factorlab.signal_generation.discrete import (
+    DiscreteZScoreSignal, DiscreteQuantileSignal, DiscreteRankSignal, Sign)
 from factorlab.signal_generation.continuous import ScoreSignal, QuantileSignal, RankSignal, RawSignal, BuyHoldSignal
 
 
@@ -26,6 +27,7 @@ class SignalGenerator(BaseTransform):
             'zscore': ScoreSignal,
             'quantile': QuantileSignal,
             'rank': RankSignal,
+            'sign': Sign,
             'discrete_zscore': DiscreteZScoreSignal,
             'discrete_quantile': DiscreteQuantileSignal,
             'discrete_rank': DiscreteRankSignal,
