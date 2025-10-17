@@ -5,6 +5,40 @@ from factorlab.signal_generation.base import BaseSignal
 from factorlab.utils import to_dataframe
 
 
+class Sign(BaseSignal):
+    """
+    Generates a discrete signal (-1, 0, 1) based on the sign of the input score.
+    """
+
+    def __init__(self,
+                 input_col: str = 'score',
+                 output_col: str = 'signal',
+                 **kwargs):
+
+        super().__init__(input_col=input_col, output_col=output_col, **kwargs)
+        self.name = "SignSignal"
+        self.description = "Generates a discrete trading signal from the sign of the score."
+        self.input_col = input_col
+        self.output_col = output_col
+
+    def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        """
+        Assigns a signal based on the sign of the score column.
+        """
+        df = X.copy()
+
+        # 3. Initialize signal column to 0 (Neutral)
+        df[self.output_col] = 0.0
+
+        # 4. Assign Long Signal (1)
+        df.loc[df[self.input_col] > 0, self.output_col] = 1.0
+
+        # 5. Assign Short Signal (-1)
+        df.loc[df[self.input_col] < 0, self.output_col] = -1.0
+
+        return df[self.output_col]
+
+
 class DiscreteZScoreSignal(BaseSignal):
     """
     Generates a discrete signal (-1, 0, 1) based on cross-sectional Z-score thresholds.
