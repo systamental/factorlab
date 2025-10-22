@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.strategy_backtesting.metrics import Metrics
-from factorlab.strategy_backtesting.performance import Performance
+from factorlab.analysis.metrics import Metrics
+from factorlab.analysis.performance import Performance
 
 
 @pytest.fixture
