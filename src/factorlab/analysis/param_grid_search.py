@@ -8,8 +8,7 @@ import seaborn as sns
 from PIL import Image
 from importlib import resources
 
-from factorlab.signal_generation.signal import Signal
-from factorlab.strategy_backtesting.performance import Performance
+from factorlab.analysis.performance import Performance
 
 
 def feat_partial(feature: Callable,

@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Optional, Union, Tuple, Dict
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.strategy_backtesting.metrics import Metrics
+from factorlab.analysis.metrics import Metrics
 
 
 class PortfolioSort:

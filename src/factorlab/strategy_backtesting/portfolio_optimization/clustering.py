@@ -7,7 +7,7 @@ from scipy.cluster.hierarchy import linkage, fcluster, cut_tree, dendrogram
 from scipy.spatial.distance import squareform
 
 from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
-from factorlab.strategy_backtesting.metrics import Metrics
+from factorlab.analysis.metrics import Metrics
 from factorlab.data_viz.plot import plot_bar
 
 
