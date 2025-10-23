@@ -162,6 +162,9 @@ class BacktesterEngine:
             return {}
 
         trading_dates = self.dates[min_start_index:]
+        # start date
+        start_date = self.dates[min_start_index - 1]
+        self.account_value.loc[start_date] = self.initial_capital
 
         print(
             f"Starting simulation from {trading_dates[0].strftime('%Y-%m-%d')} to "
