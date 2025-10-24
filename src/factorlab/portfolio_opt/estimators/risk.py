@@ -34,11 +34,14 @@ class RiskMetrics:
                 f"Please ensure the data is unstacked (T rows x N columns) before calling RiskMetrics.")
 
         # Ensure correct type (copy to avoid side effects on original data)
-        validated_returns = returns.astype('float64', copy=True).dropna(how='all')
+        validated_returns = returns.astype('float64', copy=True).dropna(how='all').dropna(how='all', axis=1)
 
         # Simple check for minimum data required for matrix inversion/estimation
-        if validated_returns.shape[0] < 5 or validated_returns.shape[1] < 2:
-            raise ValueError("Insufficient data (rows < 5 or columns < 2) for moment estimation.")
+        if validated_returns.shape[0] < 2:
+            raise ValueError("Insufficient data (rows < 2) for moment estimation.")
+
+        if validated_returns.shape[1] < 2:
+            raise ValueError("Insufficient data (columns < 2) for moment estimation.")
 
         return validated_returns
 
