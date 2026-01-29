@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
-import scipy
+from scipy.linalg import orth
+from scipy.optimize import linear_sum_assignment
 
-from typing import Optional, Union, Any
+from typing import Optional, Union, Any, Tuple
 from sklearn.decomposition import PCA
 
 
@@ -356,115 +357,108 @@ class PCAWrapper:
 class R2PCA:
     """
     R2-PCA principal component analysis class.
+
+    See details for R2-PCA: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4400158
+
+    Parameters
+    ----------
+    data: np.ndarray or pd.DataFrame
+        Data matrix for principal component analysis
+    n_components: int, default None
+        Number of principal components.
+    svd_solver: str, {'auto', 'full', 'arpack', 'randomized'}, default='auto'
+        SVD solver to use.
+        See sklearn.decomposition.PCA for details:
+        https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html
+    **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
+
     """
 
     def __init__(self,
-                 data: Union[np.array, pd.DataFrame],
+                 data: Union[np.ndarray, pd.DataFrame],
                  n_components: Optional[int] = None,
                  svd_solver: str = 'auto',
                  **kwargs: Any
                  ):
         """
         Initialize R2-PCA object.
-
-        See details for R2-PCA:
-        https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4400158
-
-        Parameters
-        ----------
-        data: np.array or pd.DataFrame
-            Data matrix for principal component analysis
-        n_components: int or float, default None
-            Number of principal components, or percentage of variance explained.
-        svd_solver: str, {'auto', 'full', 'arpack', 'randomized'}, default='auto'
-            SVD solver to use.
-            See sklearn.decomposition.PCA for details:
-            https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
         """
         self.raw_data = data
-        self.index = None
-        self.data = self.remove_missing()
-        self.n_components = min(self.data.shape) if n_components is None else n_components
+        self.df = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data
+        self.n_components = n_components
         self.svd_solver = svd_solver
-        self.data_window = self.data.copy()
-        self.pca = self.create_pca_instance(**kwargs)
+        self.pca_kwargs = kwargs
+
+        # Internal state
         self.eigenvecs = None
         self.expl_var_ratio = None
         self.pcs = None
 
-    def remove_missing(self) -> np.array:
+    def _get_clean_window_data(self, window_df: pd.DataFrame) -> pd.DataFrame:
         """
-        Remove missing values from data.
-
-        Returns
-        -------
-        data: np.array
-            Data matrix with missing values removed.
-        """
-        if isinstance(self.raw_data, pd.DataFrame):
-            self.index = self.raw_data.dropna().index
-            self.data = self.raw_data.dropna().to_numpy(dtype=np.float64)
-
-        elif isinstance(self.raw_data, np.ndarray):
-            self.index = None
-            self.data = self.raw_data[~np.isnan(self.raw_data).any(axis=1)].astype(np.float64)
-
-        else:
-            raise ValueError(f"Data must be pd.DataFrame or np.array.")
-
-        return self.data
-
-    def create_pca_instance(self, **kwargs: Any) -> PCA:
-        """
-        Perform PCA.
+        Filters a window to only include assets (columns) that have no
+        missing values for the duration of this specific window.
 
         Parameters
         ----------
-        **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
+        window_df : pd.DataFrame
+            DataFrame for the current rolling window.
 
         Returns
         -------
-        pca: PCA
-            PCA object.
+        clean_df : pd.DataFrame
+            Cleaned DataFrame with rows and columns with missing values removed.
         """
-        self.pca = PCA(n_components=self.n_components, **kwargs)
+        # drop missing values
+        clean_df = window_df.dropna(how='all').dropna(axis=1, how='any')
+        self.n_components = min(clean_df.shape) if self.n_components is None else self.n_components
 
-        return self.pca
+        # check if enough data
+        if clean_df.empty or clean_df.shape[1] < (self.n_components or 1):
+            raise ValueError("Not enough data after cleaning missing values for PCA computation.")
 
-    def get_eigenvectors(self) -> np.array:
-        """
-        Get eigenvectors from SVD decomposition.
+        return clean_df
 
-        Returns
-        -------
-        eigenvecs: np.array
-            Eigenvectors from SVD decomposition.
-        """
-        # eigenvecs
-        self.eigenvecs = self.pca.fit(self.data_window).components_.T
-
-        return self.eigenvecs
-
-    def correct_sign_pc1(self, pcs: np.array) -> np.array:
-        """
-        Constrain the sign of the first principal component to be consistent with the mean of the cross-section.
+    def correct_sign_pc1(self, pcs: np.ndarray, data_window: np.ndarray) -> np.ndarray:
+        """Corrects sign of first PC based on cross-sectional mean to align with market portfolio.
 
         Parameters
         ----------
-        pcs: np.array
+        pcs : np.ndarray
             Principal components.
+        data_window : np.ndarray
+            Data matrix for the current window.
 
         Returns
         -------
-        pcs: np.array
-            Principal components with first PC sign corrected.
-        """
-        # correct sign of first pc
-        if np.dot(pcs[:, 0], np.mean(self.data_window, axis=1)) < 0:
-            pcs *= -1
+        pcs : np.ndarray
+            Principal components with first PC sign corrected to match market factor convention.
 
+        """
+        if pcs.shape[1] > 0:
+            if np.dot(pcs[:, 0], np.mean(data_window, axis=1)) < 0:
+                pcs *= -1
         return pcs
+
+    def get_fixed_results(self) -> None:
+        """
+        Get PCA results for fixed data window.
+        """
+        # clean data
+        clean_df = self._get_clean_window_data(self.df)
+
+        # Fit PCA
+        pca = PCA(n_components=self.n_components, svd_solver=self.svd_solver, **self.pca_kwargs)
+        pca_transformed = pca.fit_transform(clean_df)
+
+        # eigenvectors
+        self.eigenvecs = pca.components_.T
+        # pcs, correct sign
+        self.pcs = self.correct_sign_pc1(pca_transformed, clean_df.values)
+        if isinstance(clean_df, pd.DataFrame):
+            self.pcs = pd.DataFrame(self.pcs, index=clean_df.index, columns=range(self.pcs.shape[1]))
+        # explained variance ratio
+        self.expl_var_ratio = pca.explained_variance_ratio_
 
     def get_pcs(self) -> Union[np.array, pd.DataFrame]:
         """
@@ -475,415 +469,290 @@ class R2PCA:
         pcs: np.array or pd.DataFrame
             Principal components.
         """
-        # pca
-        self.pcs = self.pca.fit_transform(self.data_window)
-
-        # correct pc1 sign
-        self.pcs = self.correct_sign_pc1(self.pcs)
-
-        # add index and cols if available
-        if self.index is not None:
-            self.pcs = pd.DataFrame(self.pcs, index=self.index[-self.pcs.shape[0]:], columns=range(self.pcs.shape[1]))
+        self.get_fixed_results()
 
         return self.pcs
 
-    def get_expl_var_ratio(self) -> np.array:
+    def get_eigenvectors(self) -> np.ndarray:
+        """
+        Get eigenvectors from SVD decomposition.
+
+        Returns
+        -------
+        eigenvecs: np.ndarray
+            Eigenvectors from SVD decomposition.
+        """
+        if self.eigenvecs is None:
+            self.get_fixed_results()
+
+        return self.eigenvecs
+
+    def get_expl_var_ratio(self) -> np.ndarray:
         """
         Get explained variance ratio from sklearn PCA implementation.
 
         Returns
         -------
-        expl_var_ratio: np.array
+        explained_var_ratio: np.ndarray
             Explained variance ratio.
         """
-        # explained variance ratio
-        self.expl_var_ratio = self.pca.fit(self.data_window).explained_variance_ratio_
+        if self.expl_var_ratio is None:
+            self.get_fixed_results()
 
         return self.expl_var_ratio
 
-    @staticmethod
-    def correct_eigenvectors(eigenvectors: np.array, ref_eigenvectors: np.array):
+    # def align_and_correct(self,
+    #                       current_ev: np.ndarray,
+    #                       clean_columns: pd.Index,
+    #                       ref_ev: Optional[np.ndarray]) -> np.ndarray:
+    #     """
+    #     Maps current eigenvectors to the full universe and corrects for
+    #     ordering and sign flips to ensure factor continuity.
+    #
+    #     Parameters
+    #     ----------
+    #     current_ev : np.ndarray
+    #         Eigenvectors from the current window (N_window x K)
+    #     clean_columns : pd.Index
+    #         The tickers present in the current window.
+    #     ref_ev : np.ndarray, optional
+    #         Reference eigenvectors from the previous window for alignment (N_total x K).
+    #
+    #     Returns
+    #     -------
+    #     aligned_ev : np.ndarray
+    #         Aligned and sign-corrected eigenvectors mapped to the full universe.
+    #     """
+    #     # map to full universe: create (N_total x K) matrix
+    #     full_ev = pd.DataFrame(0.0, index=self.df.columns, columns=range(current_ev.shape[1]))
+    #     current_ev_df = pd.DataFrame(current_ev, index=clean_columns)
+    #     full_ev.update(current_ev_df)
+    #     full_ev_np = full_ev.values
+    #
+    #     if ref_ev is None:
+    #         return full_ev_np
+    #
+    #     # ordering consistency (Hungarian Algorithm)
+    #     # compute a cost matrix based on absolute correlation to
+    #     # find the best match between current and reference vectors
+    #     corr_matrix = np.dot(full_ev_np.T, ref_ev)
+    #     cost_matrix = -np.abs(corr_matrix)
+    #     row_ind, col_ind = linear_sum_assignment(cost_matrix)
+    #
+    #     # reorder current eigenvectors to match reference
+    #     reordered_ev = full_ev_np[:, col_ind]
+    #
+    #     # sign consistency
+    #     for j in range(reordered_ev.shape[1]):
+    #         dot_prod = np.dot(reordered_ev[:, j], ref_ev[:, j])
+    #         if dot_prod < 0:
+    #             reordered_ev[:, j] *= -1
+    #
+    #     return reordered_ev
+
+    def align_and_correct(self,
+                          current_ev: np.ndarray,
+                          clean_columns: pd.Index,
+                          ref_ev: Optional[np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Correct eigenvectors for consistent ordering and signs.
-
-        Parameters
-        ----------
-        eigenvectors: np.array
-            Eigenvectors from SVD decomposition.
-        ref_eigenvectors: np.array
-            Reference eigenvectors for reordering and sign correction.
-
-        Returns
-        -------
-        eigenvectors: np.array
-            Corrected eigenvectors.
+        Maps current eigenvectors to the full universe and corrects for
+        ordering and sign flips to ensure factor continuity.
         """
-        # eigenvector idxs
-        eig_idxs = []
-        # loop through eigenvectors
-        for eig in range(eigenvectors.shape[1]):
+        # map to full universe: create (N_total x K) matrix
+        full_ev = pd.DataFrame(0.0, index=self.df.columns, columns=range(current_ev.shape[1]))
+        current_ev_df = pd.DataFrame(current_ev, index=clean_columns)
+        full_ev.update(current_ev_df)
+        full_ev_np = full_ev.values
 
-            # similarity scores
-            sim_scores = np.dot(eigenvectors[:, eig], ref_eigenvectors)
-            # find eigenvector with the highest absolute similarity score for ordering
-            max_abs_eig_idx = np.argmax(np.abs(sim_scores))
-            # store eig idx
-            eig_idxs.append(max_abs_eig_idx)
-            # correct sign flip
-            if sim_scores[max_abs_eig_idx] < 0:
-                eigenvectors[:, eig] *= -1
+        if ref_ev is None:
+            # Modified: Return identity mapping (0, 1, 2...) if no reference exists
+            return full_ev_np, np.arange(current_ev.shape[1])
 
-        # reorder eigenvectors
-        eigenvectors = eigenvectors[:, eig_idxs]
+        # ordering consistency (Hungarian Algorithm)
+        corr_matrix = np.dot(full_ev_np.T, ref_ev)
+        cost_matrix = -np.abs(corr_matrix)
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
-        return eigenvectors
+        # reorder current eigenvectors to match reference
+        # Modified: Using col_ind to ensure we track which raw PC went where
+        reordered_ev = full_ev_np[:, col_ind]
+
+        # sign consistency
+        for j in range(reordered_ev.shape[1]):
+            dot_prod = np.dot(reordered_ev[:, j], ref_ev[:, j])
+            if dot_prod < 0:
+                reordered_ev[:, j] *= -1
+
+        # Modified: Return the reordered eigenvectors AND the column indices for the variance ratio
+        return reordered_ev, col_ind
+
+    def get_rolling_results(self, window_size: int):
+        """
+        Computes rolling PCA results with cross-window consistency.
+        """
+        if window_size > len(self.df):
+            raise ValueError("Window size exceeds data length.")
+
+        all_pcs = []
+        all_ev_ratios = []
+        all_eigenvecs = []
+
+        ref_ev = None
+        dates = self.df.index[window_size - 1:]
+
+        for i in range(len(self.df) - window_size + 1):
+            window_raw = self.df.iloc[i: i + window_size]
+            clean_df = self._get_clean_window_data(window_raw)
+
+            if clean_df.empty:
+                continue
+
+            # Determine components for this window
+            n_comps = min(min(clean_df.shape), self.n_components)
+
+            # Fit PCA
+            pca = PCA(n_components=n_comps, svd_solver=self.svd_solver, **self.pca_kwargs)
+            pca.fit(clean_df)
+
+            # Align to full universe and correct ordering/sign
+            current_raw_ev = pca.components_.T  # (N_window x K)
+            corrected_ev, col_map = self.align_and_correct(current_raw_ev, clean_df.columns, ref_ev)
+
+            # Market factor alignment (PC1 correction)
+            if np.sum(corrected_ev[:, 0]) < 0:  # if sum of loadings negative, flip sign
+                corrected_ev[:, 0] *= -1
+
+            # Update reference eigenvectors for next window to ensure continuity
+            ref_ev = corrected_ev
+
+            # Compute PCs
+            last_row_full = clean_df.iloc[-1].reindex(self.df.columns, fill_value=0).values  # reindex to full universe
+            aligned_pcs_last_row = np.dot(last_row_full, corrected_ev)  # project last row
+
+            # Reorder Explained Variance Ratio
+            raw_ev_ratios = pca.explained_variance_ratio_
+            aligned_ratios = raw_ev_ratios[col_map]
+
+            # Store results
+            all_pcs.append(aligned_pcs_last_row.flatten())  # last row only
+
+            # Eigenvectors (Storing as long-format for the full universe)
+            ev_df = pd.DataFrame(corrected_ev,
+                                 index=self.df.columns,
+                                 columns=[f"EV{j + 1}" for j in range(corrected_ev.shape[1])])
+            ev_df['date'] = clean_df.index[-1]
+            all_eigenvecs.append(ev_df.reset_index().rename(columns={'index': 'ticker'}))
+
+            # EV ratio (padded to target dimension)
+            ev_ratio = np.full(self.n_components, np.nan)
+            ev_ratio[:len(aligned_ratios)] = aligned_ratios
+            all_ev_ratios.append(ev_ratio)
+
+        # format outputs
+        pc_cols = [f"PC{j + 1}" for j in range(self.n_components)]
+        self.pcs = pd.DataFrame(all_pcs, index=dates, columns=pc_cols[:len(all_pcs[0])])
+        self.expl_var_ratio = pd.DataFrame(all_ev_ratios, index=dates, columns=pc_cols)
+        self.eigenvecs = pd.concat(all_eigenvecs).set_index(['date', 'ticker']).sort_index()
+
+    def get_expanding_results(self, min_obs: int):
+        """
+        Computes expanding PCA results with cross-window consistency.
+        """
+        if min_obs > len(self.df):
+            raise ValueError("Minimum observations exceed data length.")
+
+        all_pcs = []
+        all_ev_ratios = []
+        all_eigenvecs = []
+
+        ref_ev = None
+        dates = self.df.index[min_obs - 1:]
+
+        for i in range(min_obs, len(self.df) + 1):
+            window_raw = self.df.iloc[:i]
+            clean_df = self._get_clean_window_data(window_raw)
+
+            # Determine components for this window
+            n_comps = min(min(clean_df.shape), self.n_components)
+
+            # Fit PCA
+            pca = PCA(n_components=n_comps, svd_solver=self.svd_solver, **self.pca_kwargs)
+            pca.fit(clean_df)
+
+            # Align to full universe and correct ordering/sign
+            current_raw_ev = pca.components_.T  # (N_window x K)
+            corrected_ev, col_map = self.align_and_correct(current_raw_ev, clean_df.columns, ref_ev)
+
+            # Market factor alignment (PC1 correction)
+            if np.sum(corrected_ev[:, 0]) < 0:  # Changed: Standardized PC1 sign check
+                corrected_ev[:, 0] *= -1
+
+            # Update reference for next window to ensure continuity
+            ref_ev = corrected_ev
+
+            # Compute PCs
+            last_row_full = clean_df.iloc[-1].reindex(self.df.columns, fill_value=0).values  # Reindex to full universe
+            aligned_pcs_last_row = np.dot(last_row_full, corrected_ev)  # Project last row
+
+            # Reorder Explained Variance Ratio
+            raw_ev_ratios = pca.explained_variance_ratio_
+            aligned_ratios = raw_ev_ratios[col_map]
+
+            # Store results
+            all_pcs.append(aligned_pcs_last_row.flatten())
+
+            # EV Ratio (padded to target dimension)
+            ev_ratio = np.full(self.n_components, np.nan)
+            ev_ratio[:len(aligned_ratios)] = aligned_ratios
+            all_ev_ratios.append(ev_ratio)
+
+            # Eigenvectors (Storing as long-format for the full universe)
+            ev_df = pd.DataFrame(corrected_ev,
+                                 index=self.df.columns,
+                                 columns=[f"EV{j + 1}" for j in range(corrected_ev.shape[1])])
+            ev_df['date'] = clean_df.index[-1]
+            all_eigenvecs.append(ev_df.reset_index().rename(columns={'index': 'ticker'}))
+
+        # Format outputs
+        pc_cols = [f"PC{j + 1}" for j in range(self.n_components)]
+        self.pcs = pd.DataFrame(all_pcs, index=dates, columns=pc_cols[:len(all_pcs[0])])
+        self.expl_var_ratio = pd.DataFrame(all_ev_ratios, index=dates, columns=pc_cols)
+        self.eigenvecs = pd.concat(all_eigenvecs).set_index(['date', 'ticker']).sort_index()
+
+    def get_rolling_pcs(self, window_size: int) -> pd.DataFrame:
+        """Returns the rolling principal component time series."""
+        if self.pcs is None:
+            self.get_rolling_results(window_size)
+        return self.pcs
 
     def get_rolling_eigenvectors(self, window_size: int) -> pd.DataFrame:
-        """
-        Compute rolling eigenvectors with consistent ordering and sign correction.
+        """Returns the rolling eigenvectors mapped to the full universe."""
+        if self.eigenvecs is None:
+            self.get_rolling_results(window_size)
+        return self.eigenvecs
 
-        Parameters
-        ----------
-        window_size : int
-            Size of the rolling window.
-
-        Returns
-        -------
-        pd.DataFrame
-            Stacked DataFrame of rolling eigenvectors.
-            Index = [date, tickers], Columns = ['EV1', 'EV2', ...]
-        """
-        if window_size is None:
-            raise ValueError("Window size must be specified.")
-        if window_size >= self.data.shape[0]:
-            raise ValueError(f"Window size {window_size} is too large for data length.")
-        if window_size < self.n_components:
-            self.n_components = window_size
-            self.create_pca_instance()
-
-        rolling_eigenvecs = []
-
-        # Initial reference eigenvectors
-        self.data_window = self.data[:window_size, :]
-        ref_eigenvectors = self.get_eigenvectors()
-        rolling_eigenvecs.append(ref_eigenvectors)
-
-        # Rolling loop
-        for row in range(1, self.data.shape[0] - window_size + 1):
-            self.data_window = self.data[row: row + window_size, :]
-            eigvec = self.get_eigenvectors()
-            eigvec = self.correct_eigenvectors(eigvec, ref_eigenvectors)
-            ref_eigenvectors = eigvec
-            rolling_eigenvecs.append(eigvec)
-
-        # Build stacked tidy DataFrame
-        dates = self.index[window_size - 1:]
-        assets = self.raw_data.columns
-        component_names = [f"EV{i + 1}" for i in range(self.n_components)]
-        records = []
-
-        for eigvec, date in zip(rolling_eigenvecs, dates):
-            df = pd.DataFrame(eigvec, index=assets, columns=component_names)
-            df['date'] = date
-            df['ticker'] = df.index
-            records.append(df.reset_index(drop=True))
-
-        df_long = pd.concat(records)
-        df_long = df_long.set_index(['date', 'ticker']).sort_index()
-
-        return df_long
-
-    def get_rolling_pcs(self, window_size: int) -> Union[np.array, pd.DataFrame]:
-        """
-        Get rolling principal components using R2-PCA.
-
-        See details for R2-PCA: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4400158
-
-        Parameters
-        ----------
-        window_size: int
-            Size of rolling window (number of observations).
-
-        Returns
-        -------
-        rolling_pcs: np.array or pd.DataFrame
-            Rolling principal components.
-        """
-        # window size
-        if window_size is None:
-            raise ValueError(f"Window size must be specified.")
-        if window_size >= self.data.shape[0]:
-            raise ValueError(f"Window size {window_size} is greater than the number of observations.")
-        if window_size < self.n_components:
-            self.n_components = window_size
-            self.create_pca_instance()
-
-        # set rolling window for first window
-        self.data_window = self.data[:window_size, :].copy()
-        # eigenvectors
-        eigenvectors = np.copy(self.get_eigenvectors())
-        ref_eigenvectors = np.copy(eigenvectors)
-        # pcs
-        self.get_pcs()
-        if isinstance(self.pcs, pd.DataFrame):
-            self.pcs = self.pcs.values[-1]
-        else:
-            self.pcs = self.pcs[-1]
-
-        # apply rolling pca with consistent ordering and signs
-        for row in range(1, self.data.shape[0] - window_size + 1):
-            # set rolling window
-            self.data_window = self.data[row: row + window_size, :]
-            # get eigenvectors
-            self.get_eigenvectors()
-
-            # correct eigenvectors
-            self.eigenvecs = self.correct_eigenvectors(self.eigenvecs, ref_eigenvectors)
-
-            # update ref eigenvectors
-            ref_eigenvectors = self.eigenvecs
-            # add rolling eigenvectors, expl var to array
-            eigenvectors = np.vstack([eigenvectors, self.eigenvecs[-1]])
-
-            # project data
-            rolling_pcs = np.dot(self.data_window, self.eigenvecs)
-            # correct pc1
-            rolling_pcs = self.correct_sign_pc1(rolling_pcs)
-            self.pcs = np.vstack([self.pcs, rolling_pcs[-1]])
-
-        # add index and cols if available
-        if self.index is not None:
-            self.pcs = pd.DataFrame(self.pcs, index=self.index[-self.pcs.shape[0]:])
-
-        return self.pcs
-
-    def get_rolling_expl_var_ratio(self, window_size: int) -> Union[np.array, pd.DataFrame]:
-        """
-        Get rolling explained variance ratio.
-
-        Parameters
-        ----------
-        window_size: int
-            Size of rolling window (number of observations).
-
-        Returns
-        -------
-        rolling_expl_var_ratio: np.array or pd.DataFrame
-            Rolling principal components.
-        """
-        # window size
-        if window_size is None:
-            raise ValueError(f"Window size must be specified.")
-        if window_size >= self.data.shape[0]:
-            raise ValueError(f"Window size {window_size} is greater than the number of observations.")
-        if window_size < self.n_components:
-            self.n_components = window_size
-            self.create_pca_instance()
-
-        # output
-        out = None
-
-        # get rolling window expl var
-        for row in range(self.data.shape[0] - window_size + 1):
-
-            # set rolling window
-            self.data_window = self.data[row: row + window_size, :]
-
-            # get expl var ratio
-            self.get_expl_var_ratio()
-
-            if row == 0:
-                if len(self.expl_var_ratio.shape) == 1:
-                    out = self.expl_var_ratio.reshape(1, -1)
-                else:
-                    out = self.expl_var_ratio[-1]
-            else:
-                # add output to array
-                if len(self.expl_var_ratio.shape) == 1:
-                    self.expl_var_ratio = self.expl_var_ratio.reshape(1, -1)
-                out = np.vstack([out, self.expl_var_ratio[-1]])
-
-        self.expl_var_ratio = out
-
-        # add index and cols if available
-        if self.expl_var_ratio is not None:
-            self.expl_var_ratio = pd.DataFrame(self.expl_var_ratio, index=self.index[-self.expl_var_ratio.shape[0]:])
-
+    def get_rolling_expl_var_ratio(self, window_size: int) -> pd.DataFrame:
+        """Returns the rolling explained variance ratios."""
+        if self.expl_var_ratio is None:
+            self.get_rolling_results(window_size)
         return self.expl_var_ratio
 
-    def get_expanding_eigenvectors(self, min_obs: int) -> pd.DataFrame:
-        """
-        Compute expanding eigenvectors with consistent ordering and sign correction.
-
-        Parameters
-        ----------
-        min_obs : int
-            Minimum number of observations to start computing eigenvectors.
-
-        Returns
-        -------
-        pd.DataFrame
-            Stacked DataFrame of expanding eigenvectors.
-            Index = [date, asset], Columns = ['EV1', 'EV2', ...]
-        """
-        if min_obs is None:
-            raise ValueError("Minimum observations must be specified.")
-        if min_obs >= self.data.shape[0]:
-            raise ValueError(f"Minimum observations {min_obs} is too large for data length.")
-        if min_obs < self.n_components:
-            self.n_components = min_obs
-            self.create_pca_instance()
-
-        expanding_eigenvecs = []
-
-        # Initial expanding window
-        self.data_window = self.data[:min_obs, :]
-        ref_eigenvectors = self.get_eigenvectors()
-        expanding_eigenvecs.append(ref_eigenvectors)
-
-        for row in range(min_obs + 1, self.data.shape[0] + 1):
-            self.data_window = self.data[:row, :]
-            eigvec = self.get_eigenvectors()
-            eigvec = self.correct_eigenvectors(eigvec, ref_eigenvectors)
-            ref_eigenvectors = eigvec
-            expanding_eigenvecs.append(eigvec)
-
-        # Build stacked tidy DataFrame
-        dates = self.index[min_obs - 1:]  # align to end of each window
-        assets = self.raw_data.columns
-        component_names = [f"EV{i + 1}" for i in range(self.n_components)]
-        records = []
-
-        for eigvec, date in zip(expanding_eigenvecs, dates):
-            df = pd.DataFrame(eigvec, index=assets, columns=component_names)
-            df['date'] = date
-            df['asset'] = df.index
-            records.append(df.reset_index(drop=True))
-
-        df_long = pd.concat(records)
-        df_long = df_long.set_index(['date', 'asset']).sort_index()
-
-        return df_long
-
-    def get_expanding_pcs(self, min_obs: int) -> Union[np.array, pd.DataFrame]:
-        """
-        Get rolling principal components.
-
-        Parameters
-        ----------
-        min_obs: int
-            Minimum number of observations for expanding window computation.
-
-        Returns
-        -------
-        exp_pcs: np.array or pd.DataFrame
-            Rolling principal components.
-        """
-        # min obs
-        if min_obs is None:
-            raise ValueError(f"Minimum observations must be specified.")
-        if min_obs >= self.data.shape[0]:
-            raise ValueError(f"Minimum observations {min_obs} is greater than the total number of observations.")
-        if min_obs < self.n_components:
-            self.n_components = min_obs
-            self.create_pca_instance()
-
-        # set rolling window for first window
-        self.data_window = self.data[:min_obs, :].copy()
-        # eigenvectors
-        eigenvectors = np.copy(self.get_eigenvectors())
-        ref_eigenvectors = np.copy(eigenvectors)
-        # pcs
-        self.get_pcs()
-        if isinstance(self.pcs, pd.DataFrame):
-            self.pcs = self.pcs.values[-1]
-        else:
-            self.pcs = self.pcs[-1]
-
-        # apply expanding pca with consistent ordering and signs
-        for row in range(min_obs + 1, self.data.shape[0] + 1):
-            # set expanding window
-            self.data_window = self.data[: row]
-            # get eigenvectors
-            self.get_eigenvectors()
-            # correct eigenvectors
-            self.eigenvecs = self.correct_eigenvectors(self.eigenvecs, ref_eigenvectors)
-            # update ref eigenvectors
-            ref_eigenvectors = self.eigenvecs
-            # add expanding eigenvectors to array
-            eigenvectors = np.vstack([eigenvectors, self.eigenvecs[-1]])
-
-            # project data
-            exp_pcs = np.dot(self.data_window, self.eigenvecs)
-            # correct pc1
-            exp_pcs = self.correct_sign_pc1(exp_pcs)
-            self.pcs = np.vstack([self.pcs, exp_pcs[-1]])
-
-        # add index and cols if available
-        if self.index is not None:
-            self.pcs = pd.DataFrame(self.pcs, index=self.index[-self.pcs.shape[0]:])
-
+    def get_expanding_pcs(self, min_obs: int) -> pd.DataFrame:
+        """Returns the expanding principal component time series."""
+        if self.pcs is None:
+            self.get_expanding_results(min_obs)
         return self.pcs
 
-    def get_expanding_expl_var_ratio(self, min_obs: Optional[int] = None) -> Union[np.array, pd.DataFrame]:
-        """
-        Get expanding explained variance ratio.
+    def get_expanding_eigenvectors(self, min_obs: int) -> pd.DataFrame:
+        """Returns the expanding eigenvectors mapped to the full universe."""
+        if self.eigenvecs is None:
+            self.get_expanding_results(min_obs)
+        return self.eigenvecs
 
-        Parameters
-        ----------
-        min_obs: int, default 1
-            Minimum number of observations for expanding window computation.
-
-        Returns
-        -------
-        exp_expl_var_ratio: np.array or pd.DataFrame
-            Expanding explained variance ratio.
-        """
-        # min obs
-        if min_obs is None:
-            raise ValueError(f"Minimum observations must be specified.")
-        if min_obs >= self.data.shape[0]:
-            raise ValueError(f"Minimum observations {min_obs} is greater than the total number of observations.")
-        if min_obs < self.n_components:
-            self.n_components = min_obs
-            self.create_pca_instance()
-
-        # min obs
-        if min_obs is None:
-            min_obs = min(self.data.shape)
-        if min_obs < self.n_components:
-            self.n_components = min_obs
-            self.create_pca_instance(n_components=self.n_components)
-
-        # output
-        out = None
-
-        # get expanding window expl var
-        for row in range(min_obs, self.data.shape[0] + 1):
-
-            # set expanding window
-            self.data_window = self.data[: row]
-
-            # get expl var ratio
-            self.get_expl_var_ratio()
-
-            if row == min_obs:
-                if len(self.expl_var_ratio.shape) == 1:
-                    out = self.expl_var_ratio.reshape(1, -1)
-                else:
-                    out = self.expl_var_ratio[-1]
-            else:
-                # add output to array
-                if len(self.expl_var_ratio.shape) == 1:  # reshape to 2d arr
-                    self.expl_var_ratio = self.expl_var_ratio.reshape(1, -1)
-                out = np.vstack([out, self.expl_var_ratio[-1]])
-
-        self.expl_var_ratio = out
-
-        # add index and cols if available
-        if self.index is not None:
-            self.expl_var_ratio = pd.DataFrame(self.expl_var_ratio, index=self.index[-self.expl_var_ratio.shape[0]:])
-
+    def get_expanding_expl_var_ratio(self, min_obs: int) -> pd.DataFrame:
+        """Returns the expanding explained variance ratios."""
+        if self.expl_var_ratio is None:
+            self.get_expanding_results(min_obs)
         return self.expl_var_ratio
 
 
@@ -1044,7 +913,7 @@ class PPCA:
         # initialize EM algo
         C = self.em_algo()
         # cov matrix
-        C = scipy.linalg.orth(C)
+        C = orth(C)
         cov_matrix = np.cov((self.data @ C).T)
         # eigen decomp
         eigenvals, eigenvecs = np.linalg.eig(cov_matrix)
