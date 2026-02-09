@@ -15,16 +15,16 @@ class SignalGenerator(BaseTransform):
     Delegates the work to specific signal generation classes.
     """
 
-    def __init__(self, method: str = "zscore", **kwargs):
+    def __init__(self, signal_type: str = "score", **kwargs):
         super().__init__(name="Signal",
                          description="Converts scores into trading signals.")
-        self.method = method
+        self.signal_type = signal_type
         self.kwargs = kwargs
 
-        self._method_map: Dict[str, Any] = {
+        self._type_map: Dict[str, Any] = {
             'buy_hold': BuyHoldSignal,
             'raw': RawSignal,
-            'zscore': ScoreSignal,
+            'score': ScoreSignal,
             'quantile': QuantileSignal,
             'rank': RankSignal,
             'sign': Sign,
@@ -33,11 +33,11 @@ class SignalGenerator(BaseTransform):
             'discrete_rank': DiscreteRankSignal,
         }
 
-        if self.method not in self._method_map:
-            raise ValueError(f"Invalid signal method '{self.method}', must be one of {list(self._method_map.keys())}")
+        if self.signal_type not in self._type_map:
+            raise ValueError(f"Invalid signal_type '{self.signal_type}', must be one of {list(self._type_map.keys())}")
 
         # Instantiate the specific signal transformer using Composition
-        self._transformer = self._method_map[self.method](**self.kwargs)
+        self._transformer = self._type_map[self.signal_type](**self.kwargs)
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y=None) -> 'SignalGenerator':
         """Fit the delegated signal transformer."""
