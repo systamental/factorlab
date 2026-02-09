@@ -1,9 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 import numpy as np
-from typing import List, Optional
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.smoothing import WindowSmoother
 
 
 class TripleEWMADifference(TrendFactor):
