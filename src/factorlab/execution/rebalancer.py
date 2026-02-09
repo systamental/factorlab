@@ -78,12 +78,6 @@ class Rebalancer:
 
         Parameters
         ----------
-        date_t : pd.Timestamp
-            The current trading date (the date of execution).
-        i : int
-            The index position of date_t in the full date index.
-        dates : pd.Index
-            The full date index of the simulation.
         lookback_returns : pd.DataFrame
             The returns data needed for the optimizer fit.
         signal_series : pd.Series
