@@ -67,6 +67,14 @@ class BaseTransform(ABC):
             self.fit(X)
         return self.transform(X)
 
+    def align(self, previous_params: dict) -> None:
+        """
+        Optional alignment hook for windowed transforms.
+
+        Override in subclasses that need cross-window alignment (e.g., PCA).
+        """
+        return
+
     def get_metadata(self) -> dict:
         return {
             "name": self.name,
