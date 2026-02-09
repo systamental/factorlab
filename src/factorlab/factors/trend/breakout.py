@@ -53,7 +53,7 @@ class Breakout(TrendFactor):
         if self.signal:
             trend_df = ScoreSignal(input_col='scores',
                                    output_col='trend',
-                                   method=self.signal_method).compute(trend_df)
+                                   mapping=self.signal_method).compute(trend_df)
         else:
             trend_df.rename(columns={'scores': 'trend'}, inplace=True)
 
