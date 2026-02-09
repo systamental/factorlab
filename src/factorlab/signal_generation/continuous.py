@@ -52,8 +52,8 @@ class RawSignal(BaseSignal):
                  **kwargs):
         super().__init__(input_col=input_col, **kwargs)
 
-        self.name = "ZScoreToSignal"
-        self.description = "Converts standardized z-scores to signals in the range [-1, 1]."
+        self.name = "RawSignal"
+        self.description = "Uses raw scores as signals without any transformation."
         self.input_col = input_col
 
     def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
@@ -63,7 +63,7 @@ class RawSignal(BaseSignal):
 
 class ScoreSignal(BaseSignal):
     """
-    Converts standardized cores to signals in the range [-1, 1].
+    Converts scores to bounded signals in the range [-1, 1].
 
     Parameters
     ----------
@@ -71,7 +71,8 @@ class ScoreSignal(BaseSignal):
         Name of the input column containing standardized scores.
     output_col : str, default 'signal'
         Name of the output column to store the resulting signals.
-    method : str, {'norm',  'logistic', 'adj_norm', 'tanh', 'percentile', 'min_max'}, default 'norm'
+    mapping : str, {'norm',  'logistic', 'adj_norm', 'tanh', 'percentile', 'min_max'}, default 'norm'
+        The mathematical transformation to apply for mapping scores to signals.
             norm: normal cumulative distribution function.
             logistic: logistic cumulative distribution function.
             adj_norm: adjusted normal distribution.
@@ -80,42 +81,67 @@ class ScoreSignal(BaseSignal):
             min-max: values between 0 and 1.
     """
 
-    # transformation map
-    _transformation_map: Dict[str, callable] = {
-        'norm': lambda df: pd.DataFrame(norm.cdf(df), index=df.index, columns=df.columns),
-        'logistic': lambda df: pd.DataFrame(logistic.cdf(df), index=df.index, columns=df.columns),
-        'adj_norm': lambda df: df * np.exp((-1 * df ** 2) / 4) / 0.89,
-        'tanh': np.tanh,
-        'percentile': lambda df: df,
-        'min_max': lambda df: df,
-    }
-
     def __init__(self,
                  input_col: str = 'zscore',
-                 method: str = 'norm',
+                 mapping: str = 'norm',
+                 aggression: float = 2.0,
                  **kwargs):
         super().__init__(input_col=input_col, **kwargs)
 
-        self.name = "ZScoreToSignal"
-        self.description = "Converts standardized z-scores to signals in the range [-1, 1]."
+        self.name = "ScoreToSignal"
+        self.description = "Maps scores to bounded signals in the range [-1, 1] using mathematical transforms."
         self.input_col = input_col
-        self.method = method
+        self.mapping = mapping
+        self.aggression = aggression
 
-        if self.method not in self._transformation_map:
-            raise ValueError(f"Unsupported method: {self.method}")
+        if aggression <= 0:
+            raise ValueError("Aggression parameter must be positive.")
+
+        if self.mapping not in self._transformation_map:
+            raise ValueError(f"Unsupported mapping: {self.mapping}")
+
+    # transformation map
+    _transformation_map: Dict[str, callable] = {
+        # distribution free
+        'ecdf': lambda df: 2 * df - 1,
+        'min_max': lambda df: 2 * df - 1,
+        'rank_tanh': lambda df, k: np.tanh(k * (df - 0.5)),
+
+        # distribution based
+        'norm': lambda df: pd.DataFrame(2 * norm.cdf(df) - 1, index=df.index, columns=df.columns),
+        'logistic': lambda df: pd.DataFrame(2 * logistic.cdf(df) - 1, index=df.index, columns=df.columns),
+        'adj_norm': lambda df: df * np.exp((-1 * df ** 2) / 4) / 0.89,
+        'tanh': lambda df, k: np.tanh(k * df),
+    }
 
     def _compute_signal(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
         """Apply the scores to signals transformation."""
         df = X[[self.input_col]].copy()
 
-        # signal transformation
-        signals = self._transformation_map[self.method](df)
+        # Extract min and max values directly from the series for validation
+        # This avoids using describe() and solves the FutureWarning
+        val_min = df[self.input_col].min()
+        val_max = df[self.input_col].max()
 
-        # rescale signals result in [0, 1] range to [-1, 1].
-        if self.method in {'norm', 'logistic', 'percentile', 'min_max'}:
-            signals = (signals * 2) - 1
+        transform = self._transformation_map[self.mapping]
 
-        return signals
+        # check input range for certain methods
+        if self.mapping in ['ecdf', 'min_max', 'rank_tanh']:  # requires [0, 1] input
+            if val_max > 1 or val_min < 0:
+                raise ValueError(f"Input scores for method '{self.mapping}' must be in the range [0, 1]. "
+                                 f"Found range: [{val_min}, {val_max}]")
+
+        if self.mapping in ['norm', 'logistic', 'adj_norm', 'tanh']:  # requires unbounded input
+            if val_max <= 1 and val_min >= -1:
+                raise ValueError(f"Input scores for method '{self.mapping}' should be unbounded. "
+                                 f"Found range: [{val_min}, {val_max}]")
+
+        if self.mapping in ['rank_tanh', 'tanh']:
+            signals = transform(df, self.aggression)
+        else:
+            signals = transform(df)
+
+        return signals.clip(-1, 1)
 
 
 class QuantileSignal(BaseSignal):
