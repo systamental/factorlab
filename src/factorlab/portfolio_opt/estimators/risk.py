@@ -40,7 +40,7 @@ class RiskMetrics:
         if validated_returns.shape[0] < 2:
             raise ValueError("Insufficient data (rows < 2) for moment estimation.")
 
-        if validated_returns.shape[1] < 2:
+        if validated_returns.shape[1] < 1:
             raise ValueError("Insufficient data (columns < 2) for moment estimation.")
 
         return validated_returns
