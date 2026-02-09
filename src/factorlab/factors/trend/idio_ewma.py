@@ -2,7 +2,6 @@ from __future__ import annotations
 import pandas as pd
 from typing import List, Union
 
-from factorlab.transformations.returns import Difference
 from factorlab.factors.trend.base import TrendFactor
 from factorlab.features.residuals import IdiosyncraticReturns
 
