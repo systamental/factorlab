@@ -158,28 +158,35 @@ class R2PCA(BaseTransform):
             The fitted R2PCA instance.
 
         """
+        # Ensure input is a DataFrame and store it for potential use in alignment
         df = pd.DataFrame(X) if not isinstance(X, pd.DataFrame) else X.copy()
         self._data = df
+        # Create a mapping of tickers to their column indices for later use in alignment
         self.ticker_to_idx = {ticker: i for i, ticker in enumerate(df.columns)}
 
+        # clean data for PCA fitting
         clean_df = self._get_clean_window_data(df)
         norm_df, mu, sigma = self._normalize_data(clean_df)
 
+        # number of components
         target_k = self.n_components if self.n_components is not None else df.shape[1]
         k_eff = min(min(norm_df.shape), target_k)
 
+        # fit PCA on normalized, cleaned data
         pca = PCA(n_components=k_eff, svd_solver=self.svd_solver, **self.pca_kwargs)
         pca.fit(norm_df)
 
+        # get eigenvectors and correct PC1 sign
         ev_raw = pca.components_.T
         ev_corrected = self.correct_pc1_sign(ev_raw, norm_df)
 
-        # Map to full universe
+        # map to full universe
         n_assets = df.shape[1]
         full_ev = np.zeros((n_assets, target_k))
         clean_indices = df.columns.get_indexer(clean_df.columns)
         full_ev[clean_indices, :k_eff] = ev_corrected
 
+        # store fitted parameters for transform and alignment
         self._fitted_params['mu'] = mu
         self._fitted_params['sigma'] = sigma
         self._fitted_params['clean_columns'] = clean_df.columns
@@ -190,6 +197,26 @@ class R2PCA(BaseTransform):
         self._fitted_params['expl_var_ratio_raw'] = pca.explained_variance_ratio_
         self._fitted_params['expl_var_ratio'] = self._pad_vector(pca.explained_variance_ratio_, target_k)
         self._fitted_params['alignment_scores'] = self._pad_vector(np.ones(k_eff), target_k)
+
+        # Fixed-results attributes for consistent access after fit()
+        pc_cols = [f"PC{i + 1}" for i in range(target_k)]
+        ev_cols = [f"EV{i + 1}" for i in range(target_k)]
+
+        pcs_raw = np.dot(norm_df.values, ev_corrected)
+        pcs_full = np.full((pcs_raw.shape[0], target_k), np.nan)
+        pcs_full[:, :k_eff] = pcs_raw
+        self.pcs = pd.DataFrame(pcs_full, index=norm_df.index, columns=pc_cols)
+        self.eigenvecs = pd.DataFrame(full_ev, index=df.columns, columns=ev_cols)
+        self.expl_var_ratio = pd.DataFrame(
+            np.atleast_2d(self._fitted_params['expl_var_ratio']),
+            index=[norm_df.index[-1]],
+            columns=pc_cols
+        )
+        self.alignment_scores = pd.DataFrame(
+            np.atleast_2d(self._fitted_params['alignment_scores']),
+            index=[norm_df.index[-1]],
+            columns=pc_cols
+        )
 
         self._is_fitted = True
         return self
@@ -208,37 +235,44 @@ class R2PCA(BaseTransform):
             and 'k_eff' for reference alignment.
 
         """
+        # Get current and reference eigenvectors for alignment
         curr_ev = self._fitted_params['eigenvectors_full']
         ref_ev = previous_params.get('eigenvectors_aligned', previous_params.get('eigenvectors_full'))
 
+        # If no reference eigenvectors are available, store the current ones as aligned and return
         if ref_ev is None:
             self._fitted_params['eigenvectors_aligned'] = curr_ev
             return
 
+        # Align current eigenvectors to reference
         k_eff = self._fitted_params['k_eff']
         curr_ev_eff = curr_ev[:, :k_eff]
         ref_k_eff = previous_params.get('k_eff', ref_ev.shape[1])
         ref_ev_eff = ref_ev[:, :ref_k_eff]
 
+        # Compute correlation matrix and apply Hungarian algorithm for optimal matching
         corr_matrix = np.dot(curr_ev_eff.T, ref_ev_eff)
         cost_matrix = -np.abs(corr_matrix)
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
+        # Extract similarities
         similarities = np.abs(corr_matrix[row_ind, col_ind])
-        reordered_ev = curr_ev_eff[:, col_ind]
 
+        # Reorder current eigenvectors to match reference order
+        reordered_ev = curr_ev_eff[:, col_ind]
         for j in range(reordered_ev.shape[1]):
             if np.dot(reordered_ev[:, j], ref_ev_eff[:, j]) < 0:
                 reordered_ev[:, j] *= -1
 
+        # Pad aligned eigenvectors and similarity scores to target_k
         target_k = self._fitted_params['target_k']
         aligned_full = np.zeros((curr_ev.shape[0], target_k))
         aligned_full[:, :reordered_ev.shape[1]] = reordered_ev
 
+        # store fitted parameters
         self._fitted_params['eigenvectors_aligned'] = aligned_full
         self._fitted_params['col_map'] = col_ind
         self._fitted_params['alignment_scores'] = self._pad_vector(similarities, target_k)
-
         expl = self._fitted_params['expl_var_ratio_raw']
         mapped = expl[col_ind]
         self._fitted_params['expl_var_ratio'] = self._pad_vector(mapped, target_k)
@@ -252,6 +286,7 @@ class R2PCA(BaseTransform):
         ----------
         X: Union[pd.Series, pd.DataFrame]
             Input data to transform. Should be a DataFrame of returns with shape (Observations x Assets).
+
         Returns
         -------
         pcs_df: pd.DataFrame
@@ -262,6 +297,7 @@ class R2PCA(BaseTransform):
         if not self._is_fitted:
             raise RuntimeError("Transform called before fit.")
 
+        # get fitted parameters and ensure input is DataFrame
         df = pd.DataFrame(X) if not isinstance(X, pd.DataFrame) else X
         cols = self._fitted_params['clean_columns']
         mu = self._fitted_params['mu']
@@ -271,14 +307,17 @@ class R2PCA(BaseTransform):
         k_eff = self._fitted_params['k_eff']
         ev_full = self._fitted_params.get('eigenvectors_aligned', self._fitted_params['eigenvectors_full'])
 
+        # Normalize using fitted parameters
         norm_df = (df[cols] - mu) / sigma
         clean_indices = universe_cols.get_indexer(cols)
         ev_clean = ev_full[clean_indices, :k_eff]
         pcs_k = np.dot(norm_df.values, ev_clean)
 
+        # Pad PCs to target_k and create DataFrame with appropriate column names
+        pc_cols = [f"PC{k + 1}" for k in range(target_k)]
         pcs_full = np.full((pcs_k.shape[0], target_k), np.nan)
         pcs_full[:, :k_eff] = pcs_k
-        pcs_df = pd.DataFrame(pcs_full, index=df.index, columns=[f"PC{i + 1}" for i in range(target_k)])
+        pcs = pd.DataFrame(pcs_full, index=df.index, columns=pc_cols)
 
         # Expose rolling-compatible outputs for window wrappers
         self._window_outputs = {
@@ -289,4 +328,4 @@ class R2PCA(BaseTransform):
             'universe_cols': universe_cols
         }
 
-        return pcs_df
+        return pcs
