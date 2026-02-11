@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "factorlab"
-version = "0.1.47"
+version = "0.1.48"
 # moved data to tests folder, added to gitignore
 description = "Python library which enables the discovery and analysis of alpha and risk factors used in the investment algorithm development process"
 authors = ["Systamental"]
