@@ -4,6 +4,7 @@ from sklearn.decomposition import PCA
 from typing import Optional, Union, Any, Tuple
 from scipy.optimize import linear_sum_assignment
 from factorlab.core.base_transform import BaseTransform
+from factorlab.core.window_outputs import PCAWindowOutputCollector
 
 
 class R2PCA(BaseTransform):
@@ -21,10 +22,6 @@ class R2PCA(BaseTransform):
         See sklearn.decomposition.PCA for details:
         https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html
     **kwargs: Optional keyword arguments, for PCA object. See sklearn.decomposition.PCA for details.
-
-    R2-PCA principal component analysis transform.
-
-    See details for R2-PCA: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4400158
     """
 
     def __init__(self,
@@ -36,13 +33,14 @@ class R2PCA(BaseTransform):
         self.n_components = n_components
         self.svd_solver = svd_solver
         self.pca_kwargs = kwargs
+        self.window_output_collector = PCAWindowOutputCollector()
 
         # Internal state
         self._data: Optional[pd.DataFrame] = None
         self.ticker_to_idx: dict[str, int] = {}
 
         # Results storage
-        self.pcs: Optional[pd.DataFrame] = None
+        self.output: Optional[pd.DataFrame] = None
         self.eigenvecs: Optional[pd.DataFrame] = None
         self.expl_var_ratio: Optional[Union[pd.DataFrame, np.ndarray]] = None
         self.alignment_scores: Optional[pd.DataFrame] = None
@@ -205,7 +203,7 @@ class R2PCA(BaseTransform):
         pcs_raw = np.dot(norm_df.values, ev_corrected)
         pcs_full = np.full((pcs_raw.shape[0], target_k), np.nan)
         pcs_full[:, :k_eff] = pcs_raw
-        self.pcs = pd.DataFrame(pcs_full, index=norm_df.index, columns=pc_cols)
+        self.output = pd.DataFrame(pcs_full, index=norm_df.index, columns=pc_cols)
         self.eigenvecs = pd.DataFrame(full_ev, index=df.columns, columns=ev_cols)
         self.expl_var_ratio = pd.DataFrame(
             np.atleast_2d(self._fitted_params['expl_var_ratio']),
@@ -318,6 +316,7 @@ class R2PCA(BaseTransform):
         pcs_full = np.full((pcs_k.shape[0], target_k), np.nan)
         pcs_full[:, :k_eff] = pcs_k
         pcs = pd.DataFrame(pcs_full, index=df.index, columns=pc_cols)
+        self.output = pcs
 
         # Expose rolling-compatible outputs for window wrappers
         self._window_outputs = {
@@ -329,3 +328,16 @@ class R2PCA(BaseTransform):
         }
 
         return pcs
+
+    @property
+    def pcs(self) -> Optional[pd.DataFrame]:
+        """
+        Returns the most recent PCs.
+
+        If the transform has been used inside a WindowTransform, prefer the
+        aggregated window output stored on the instance.
+        """
+        return getattr(self, "output", None)
+
+    def window_outputs(self) -> dict:
+        return self._window_outputs
