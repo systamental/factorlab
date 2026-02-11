@@ -6,6 +6,7 @@ from tqdm import tqdm
 from abc import abstractmethod
 
 from factorlab.core.base_transform import BaseTransform
+from factorlab.core.window_outputs import WindowOutputCollector
 
 
 class WindowTransform(BaseTransform):
@@ -16,7 +17,11 @@ class WindowTransform(BaseTransform):
     and transforming only the current (and optionally forward-filled) rows.
     """
 
-    def __init__(self, base_transform: BaseTransform, step: int = 1, show_progress: bool = True):
+    def __init__(self,
+                 base_transform: BaseTransform,
+                 step: int = 1,
+                 show_progress: bool = True,
+                 output_collector: Optional[WindowOutputCollector] = None):
         """
         Initialize the windowed transform wrapper.
 
@@ -36,6 +41,7 @@ class WindowTransform(BaseTransform):
         self.step = step
         self.show_progress = show_progress
         self._prev_fitted_params = None
+        self._output_collector = output_collector or getattr(base_transform, "window_output_collector", None)
 
     def fit(self, X: Union[pd.Series, pd.DataFrame], y: Any = None) -> 'WindowTransform':
         """
@@ -91,12 +97,11 @@ class WindowTransform(BaseTransform):
             raise ValueError("window_size exceeds data length.")
 
         results = []
-        expl_var_frames = []
-        align_frames = []
-        eig_frames = []
         n_obs = len(X)
         start_idx = window_size
         self._prev_fitted_params = None
+        if self._output_collector is not None:
+            self._output_collector.reset()
 
         total_steps = range(start_idx, n_obs + 1, self.step)
         pbar = tqdm(total_steps, desc="Window Computation", disable=not self.show_progress)
@@ -117,42 +122,25 @@ class WindowTransform(BaseTransform):
             res = self.base_transform.transform(target_slice)
             results.append(res)
 
-            if hasattr(self.base_transform, "_window_outputs"):
-                wo = self.base_transform._window_outputs
-                target_k = wo['target_k']
-                universe_cols = wo['universe_cols']
-                pc_cols = [f"PC{k + 1}" for k in range(target_k)]
-                ev_cols = [f"EV{k + 1}" for k in range(target_k)]
-
-                n_rows = len(target_slice)
-                evr = np.tile(wo['expl_var_ratio'], (n_rows, 1))
-                expl_var_frames.append(pd.DataFrame(evr, index=target_slice.index, columns=pc_cols))
-
-                aln = np.tile(wo['alignment_scores'], (n_rows, 1))
-                align_frames.append(pd.DataFrame(aln, index=target_slice.index, columns=pc_cols))
-
-                ev_full = wo['eigenvectors_full']
-                ev_rep = np.vstack([ev_full for _ in range(n_rows)])
-                ev_index = pd.MultiIndex.from_product([target_slice.index, universe_cols], names=['date', 'ticker'])
-                eig_frames.append(pd.DataFrame(ev_rep, index=ev_index, columns=ev_cols))
+            if self._output_collector is not None and hasattr(self.base_transform, "window_outputs"):
+                window_output = self.base_transform.window_outputs()
+                if window_output:
+                    self._output_collector.append(window_output, target_slice.index)
 
             self._prev_fitted_params = deepcopy(self.base_transform._fitted_params)
 
-        pcs = pd.concat(results)
+        output = pd.concat(results)
 
-        if expl_var_frames:
-            self.expl_var_ratio = pd.concat(expl_var_frames)
-            self.alignment_scores = pd.concat(align_frames)
-            self.eigenvecs = pd.concat(eig_frames).sort_index()
+        if self._output_collector is not None:
+            collected = self._output_collector.finalize()
+            for key, value in collected.items():
+                setattr(self, key, value)
+                setattr(self.base_transform, key, value)
 
-            self.base_transform.expl_var_ratio = self.expl_var_ratio
-            self.base_transform.alignment_scores = self.alignment_scores
-            self.base_transform.eigenvecs = self.eigenvecs
+        self.output = output
+        self.base_transform.output = output
 
-        self.pcs = pcs
-        self.base_transform.pcs = pcs
-
-        return pcs
+        return output
 
 
 class RollingTransform(WindowTransform):
@@ -165,7 +153,8 @@ class RollingTransform(WindowTransform):
                  base_transform: BaseTransform,
                  window_size: Optional[int] = None,
                  step: int = 1,
-                 show_progress: bool = True):
+                 show_progress: bool = True,
+                 output_collector: Optional[WindowOutputCollector] = None):
         """
         Initialize the rolling window transform.
 
@@ -180,7 +169,7 @@ class RollingTransform(WindowTransform):
         show_progress : bool, default True
             Whether to display a progress bar.
         """
-        super().__init__(base_transform, step, show_progress)
+        super().__init__(base_transform, step, show_progress, output_collector)
         self.window_size = window_size
         if self.window_size is None:
             raise ValueError("Provide window_size.")
@@ -211,7 +200,8 @@ class ExpandingTransform(WindowTransform):
                  base_transform: BaseTransform,
                  min_obs: int = 30,
                  step: int = 1,
-                 show_progress: bool = True):
+                 show_progress: bool = True,
+                 output_collector: Optional[WindowOutputCollector] = None):
         """
         Initialize the expanding window transform.
 
@@ -226,7 +216,7 @@ class ExpandingTransform(WindowTransform):
         show_progress : bool, default True
             Whether to display a progress bar.
         """
-        super().__init__(base_transform, step, show_progress)
+        super().__init__(base_transform, step, show_progress, output_collector)
         self.min_obs = min_obs
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
