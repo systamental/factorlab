@@ -15,7 +15,7 @@ def binance_spot():
     Fixture for crypto OHLCV prices (MultiIndex).
     """
     # read csv from datasets/data
-    df = pd.read_csv("../datasets/data/binance_spot_prices.csv",
+    df = pd.read_csv("../../datasets/data/binance_spot_prices.csv",
                      index_col=['date', 'ticker'],
                      parse_dates=['date'])
 
