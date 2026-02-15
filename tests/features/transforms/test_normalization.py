@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.transformations.normalization import (
+from factorlab.features.transforms.normalization import (
     Center,
     ZScore,
     RobustZScore,

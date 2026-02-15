@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from factorlab.transformations.unsupervised_learning import R2PCA
+from factorlab.core.estimators.r2pca import R2PCA
 from factorlab.core.wrappers import RollingTransform, ExpandingTransform
 
 

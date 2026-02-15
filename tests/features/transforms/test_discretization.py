@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.transformations.discretization import (
+from factorlab.features.transforms.discretization import (
     Quantize,
     Discretize
 )

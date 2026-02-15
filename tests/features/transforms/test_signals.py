@@ -1,10 +1,10 @@
 import pytest
 import pandas as pd
 import numpy as np
-from factorlab.transformations.returns import PctChange
-from factorlab.transformations.discretization import Quantize
-from factorlab.transformations.ranking import Rank
-from factorlab.transformations.normalization import Percentile, ZScore, MinMaxScaler
+from factorlab.features.transforms.returns import PctChange
+from factorlab.features.transforms.discretization import Quantize
+from factorlab.features.transforms.ranking import Rank
+from factorlab.features.transforms.normalization import Percentile, ZScore, MinMaxScaler
 
 from factorlab.transformations.signals import (
     ScoresToSignals,

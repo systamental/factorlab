@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 # Assuming the moments module is in the correct path
-from factorlab.transformations.moments import Skewness, Kurtosis
+from factorlab.features.transforms.moments import Skewness, Kurtosis
 
 # --- Test Parameterization Setup ---
 

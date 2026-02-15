@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.transformations.ranking import Rank
+from factorlab.features.transforms.ranking import Rank
 
 @pytest.fixture
 def binance_spot():

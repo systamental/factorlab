@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 # Assuming WindowSmoother is correctly importable from this path
-from factorlab.transformations.smoothing import WindowSmoother
+from factorlab.features.transforms.smoothing import WindowSmoother
 
 # --- Test Parameterization ---
 

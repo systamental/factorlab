@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.transformations.dispersion import (
+from factorlab.features.transforms.dispersion import (
     StandardDeviation,
     Quantile,
     InterquartileRange as IQR,
