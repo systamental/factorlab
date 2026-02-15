@@ -11,7 +11,7 @@ from factorlab.core.window_outputs import WindowOutputCollector
 
 class WindowTransform(BaseTransform):
     """
-    Base class for time-windowed transformations.
+    Base class for time-windowed transforms.
 
     This wrapper enforces a point-in-time contract by fitting on a window
     and transforming only the current (and optionally forward-filled) rows.
