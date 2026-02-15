@@ -3,7 +3,7 @@ from typing import List, Union
 
 from factorlab.factors.skew.base import SkewFactor
 from factorlab.features.residuals import IdiosyncraticReturns
-from factorlab.transformations.moments import Skewness
+from factorlab.features.transforms.moments import Skewness
 
 
 class ISkew(SkewFactor):

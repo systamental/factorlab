@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.dispersion import Dispersion
-from factorlab.transformations.returns import LogReturn
+from factorlab.features.transforms.dispersion import Dispersion
+from factorlab.features.transforms.returns import LogReturn
 
 
 class Energy(TrendFactor):

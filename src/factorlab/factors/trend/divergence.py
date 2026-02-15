@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.returns import Difference
+from factorlab.features.transforms.returns import Difference
 
 
 class Divergence(TrendFactor):

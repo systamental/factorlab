@@ -3,7 +3,7 @@ from typing import List, Union
 
 from factorlab.factors.volatility.base import VolFactor
 from factorlab.features.residuals import IdiosyncraticReturns
-from factorlab.transformations.dispersion import StandardDeviation
+from factorlab.features.transforms.dispersion import StandardDeviation
 
 
 class IVol(VolFactor):

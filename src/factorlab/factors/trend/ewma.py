@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.returns import LogReturn
+from factorlab.features.transforms.returns import LogReturn
 
 
 class EWMA(TrendFactor):

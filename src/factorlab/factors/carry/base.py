@@ -4,8 +4,8 @@ import numpy as np
 from typing import List, Optional, Union
 
 from factorlab.factors.base import Factor
-from factorlab.transformations.dispersion import Dispersion
-from factorlab.transformations.returns import LogReturn
+from factorlab.features.transforms.dispersion import Dispersion
+from factorlab.features.transforms.returns import LogReturn
 from factorlab.utils import safe_divide, to_dataframe
 
 

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from typing import List, Union, Optional
 from factorlab.factors.base import Factor
-from factorlab.transformations.smoothing import WindowSmoother
+from factorlab.features.transforms.smoothing import WindowSmoother
 from factorlab.utils import to_dataframe
 
 

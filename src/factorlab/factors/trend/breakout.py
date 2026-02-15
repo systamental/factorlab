@@ -1,8 +1,8 @@
 from __future__ import annotations
 import pandas as pd
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.normalization import Normalization
-from factorlab.signal_generation.continuous import ScoreSignal
+from factorlab.features.transforms.normalization import Normalization
+from factorlab.signals.continuous import ScoreSignal
 
 
 class Breakout(TrendFactor):

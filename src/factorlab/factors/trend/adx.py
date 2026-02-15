@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from typing import List
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.smoothing import WindowSmoother
+from factorlab.features.transforms.smoothing import WindowSmoother
 
 
 class ADX(TrendFactor):

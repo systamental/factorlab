@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from typing import Optional, List, Union
 from factorlab.factors.base import Factor
-from factorlab.transformations.dispersion import Dispersion
-from factorlab.transformations.smoothing import WindowSmoother
-from factorlab.transformations.returns import Returns
+from factorlab.features.transforms.dispersion import Dispersion
+from factorlab.features.transforms.smoothing import WindowSmoother
+from factorlab.features.transforms.returns import Returns
 from factorlab.utils import safe_divide, to_dataframe
 
 

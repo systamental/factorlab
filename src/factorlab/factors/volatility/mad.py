@@ -1,7 +1,7 @@
 import pandas as pd
 
 from factorlab.factors.volatility.base import VolFactor
-from factorlab.transformations.dispersion import MedianAbsoluteDeviation
+from factorlab.features.transforms.dispersion import MedianAbsoluteDeviation
 
 
 class MAD(VolFactor):

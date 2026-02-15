@@ -2,21 +2,22 @@ import pandas as pd
 from typing import List
 
 from factorlab.factors.volatility.base import VolFactor
-from factorlab.features.transforms.dispersion import AverageTrueRange
 
 
-class ATR(VolFactor):
+class YangZhang(VolFactor):
     """
-    Computes the volatility of an asset's returns.
+    Computes the Yang-Zhang volatility of an asset.
 
-    This factor calculates the standard deviation of asset returns over a specified
-    rolling window, providing a measure of the asset's volatility.
+    This factor calculates the volatility of an asset's returns using the
+    Yang-Zhang volatility estimator, which is based on the open, high, low, and close prices
+    of the asset over a specified window.
+
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = 'ATR'
-        self.description = 'Computes the volatility of an asset\'s returns.'
+        self.name = 'YangZhang'
+        self.description = 'Computes the volatility of an asset\'s returns using the Yang-Zhang estimator.'
 
     @property
     def inputs(self) -> List[str]:
@@ -24,11 +25,11 @@ class ATR(VolFactor):
         Required input columns.
         Override in subclasses as needed.
         """
-        return ['open', 'high', 'low', 'close']
+        return ['high', 'low', 'open', 'close']
 
     def _compute_vol(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Computes the volatility of the asset's returns.
+        Computes the Parkinson's volatility of the asset.
 
         Parameters
         ----------
@@ -45,8 +46,4 @@ class ATR(VolFactor):
         ValueError
             If the input DataFrame is missing the required columns for computation.
         """
-        vol_df = AverageTrueRange(output_col=self.output_col,
-                                  window_type=self.window_type,
-                                  window_size=self.window_size).compute(df)
-
-        return vol_df
+        # TODO: Implement the Yang-Zhang volatility calculation

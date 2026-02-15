@@ -1,7 +1,7 @@
 import pandas as pd
 
 from factorlab.factors.skew.base import SkewFactor
-from factorlab.transformations.moments import Skewness
+from factorlab.features.transforms.moments import Skewness
 
 
 class Skew(SkewFactor):

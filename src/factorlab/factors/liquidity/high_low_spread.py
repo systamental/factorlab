@@ -10,7 +10,7 @@ class HighLowSpreadEstimator(LiquidityFactor):
     Computes the high-low spread estimator from Corwin & Schultz (2011),
     which estimates bid-ask spreads using high/low price ranges over two days.
 
-    This nonparametric estimator is useful for liquidity analysis when quote data is unavailable.
+    This nonparametric estimator is useful for liquidity analytics when quote data is unavailable.
 
     See: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1106193
 

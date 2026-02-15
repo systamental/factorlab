@@ -3,7 +3,7 @@ import pandas as pd
 from typing import List, Union
 
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
+from factorlab.forecasting.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
 class AlphaMomentum(TrendFactor):

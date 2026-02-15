@@ -12,7 +12,7 @@ class ValueFactor(Factor, ABC):
     Abstract base class for all value factors in FactorLab.
 
     This class provides a common framework for value factor calculation,
-    handling repetitive tasks like log transformations, non-linear value
+    handling repetitive tasks like log transforms, non-linear value
     functions (e.g., Metcalfe), and delegates the final ratio calculation
     to subclasses.
 
@@ -100,7 +100,7 @@ class ValueFactor(Factor, ABC):
         Abstract method to be implemented by subclasses.
 
         This method must contain the unique logic for computing the value factor
-        (e.g., the specific ratio or difference) after pre-processing and transformations.
+        (e.g., the specific ratio or difference) after pre-processing and transforms.
 
         The returned DataFrame must contain only the final factor column.
         """

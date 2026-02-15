@@ -2,7 +2,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 from factorlab.factors.trend.base import TrendFactor
-from factorlab.transformations.returns import LogReturn
+from factorlab.features.transforms.returns import LogReturn
 
 
 class PriceMomentum(TrendFactor):
