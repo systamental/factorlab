@@ -235,7 +235,7 @@ def add_lags(data: Union[pd.DataFrame, pd.Series], n_lags: int) -> pd.DataFrame:
 
 class TimeSeriesAnalysis:
     """
-    Class for time series analysis.
+    Class for time series analytics.
     """
     def __init__(self,
                  target: Union[pd.DataFrame, pd.Series],

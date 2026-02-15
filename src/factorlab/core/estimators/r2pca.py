@@ -9,7 +9,7 @@ from factorlab.core.window_outputs import PCAWindowOutputCollector
 
 class R2PCA(BaseTransform):
     """
-    R2-PCA principal component analysis class.
+    R2-PCA principal component analytics class.
 
     See details for R2-PCA: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4400158
 

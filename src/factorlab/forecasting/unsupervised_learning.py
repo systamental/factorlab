@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 class PCAWrapper:
     """
-    Principal component analysis wrapper class.
+    Principal component analytics wrapper class.
     """
     def __init__(self,
                  data: Union[np.array, pd.DataFrame],
@@ -24,7 +24,7 @@ class PCAWrapper:
         Parameters
         ----------
         data: np.ndarray or pd.DataFrame
-            Data matrix for principal component analysis
+            Data matrix for principal component analytics
         n_components: int or float, default None
             Number of principal components, or percentage of variance explained.
         missing_values: str, {'drop_any_rows', 'drop_all_rows_any_cols'}, default 'drop_any_rows'
@@ -357,14 +357,14 @@ class PCAWrapper:
 
 class R2PCA:
     """
-    R2-PCA principal component analysis class.
+    R2-PCA principal component analytics class.
 
     See details for R2-PCA: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4400158
 
     Parameters
     ----------
     data: np.ndarray or pd.DataFrame
-        Data matrix for principal component analysis
+        Data matrix for principal component analytics
     n_components: int, default None
         Number of principal components.
     svd_solver: str, {'auto', 'full', 'arpack', 'randomized'}, default='auto'
@@ -920,7 +920,7 @@ class PPCA:
         Parameters
         ----------
         data: np.array or pd.DataFrame
-            Data matrix for principal component analysis
+            Data matrix for principal component analytics
         min_obs: int, default 10
             Minimum number of observations for each feature (col).
         min_feat: int, default 5
