@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Union, Optional, List
 
-from factorlab.analysis.metrics import Metrics
+from factorlab.analytics.metrics import Metrics
 
 
 class Performance:
