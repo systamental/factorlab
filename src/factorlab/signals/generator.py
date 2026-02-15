@@ -2,9 +2,9 @@ import pandas as pd
 from typing import Union, Dict, Any
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.signal_generation.discrete import (
+from factorlab.signals.discrete import (
     DiscreteZScoreSignal, DiscreteQuantileSignal, DiscreteRankSignal, Sign)
-from factorlab.signal_generation.continuous import ScoreSignal, QuantileSignal, RankSignal, RawSignal, BuyHoldSignal
+from factorlab.signals.continuous import ScoreSignal, QuantileSignal, RankSignal, RawSignal, BuyHoldSignal
 
 
 class SignalGenerator(BaseTransform):

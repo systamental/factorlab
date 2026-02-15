@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Union
 
-from factorlab.signal_generation.base import BaseSignal
+from factorlab.signals.base import BaseSignal
 from factorlab.utils import to_dataframe
 
 

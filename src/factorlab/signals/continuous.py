@@ -3,7 +3,7 @@ import numpy as np
 from typing import Union, Dict
 from scipy.stats import norm, logistic
 
-from factorlab.signal_generation.base import BaseSignal
+from factorlab.signals.base import BaseSignal
 from factorlab.utils import grouped
 
 
