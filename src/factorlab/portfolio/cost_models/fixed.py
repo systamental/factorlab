@@ -1,5 +1,5 @@
 import pandas as pd
-from factorlab.cost_model.base import CostModelBase
+from factorlab.portfolio.cost_model.base import CostModelBase
 
 
 class FixedCommissionModel(CostModelBase):
