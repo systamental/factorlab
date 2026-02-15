@@ -22,7 +22,7 @@ class Returns(BaseTransform):
     """
 
     def __init__(self, method: str = "pct", **kwargs):
-        super().__init__(name="Returns", description="Factory for various return transformations.")
+        super().__init__(name="Returns", description="Factory for various return transforms.")
 
         self.method = method
         self.kwargs = kwargs

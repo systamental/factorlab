@@ -4,21 +4,21 @@ from typing import Union, Optional
 
 from sklearn.preprocessing import power_transform
 
-from factorlab.transformations.dispersion import (
+from factorlab.features.transforms.dispersion import (
     AverageTrueRange,
     StandardDeviation,
     InterquartileRange,
     MedianAbsoluteDeviation,
     MinMax
 )
-from factorlab.transformations.returns import Difference
+from factorlab.features.transforms.returns import Difference
 from factorlab.utils import to_dataframe, grouped, maybe_droplevel
 from factorlab.core.base_transform import BaseTransform
 
 
 class Normalization(BaseTransform):
     """
-    A factory class for applying various normalization transformations.
+    A factory class for applying various normalization transforms.
     This class acts as a facade, delegating the computation to the
     appropriate, specific normalization class.
     """
@@ -831,7 +831,7 @@ class ATRScaler(BaseTransform):
 
 class PowerTransform(BaseTransform):
     """
-    Applies power transformations ('box-cox' or 'yeo-johnson') to time series or cross-sectional data.
+    Applies power transforms ('box-cox' or 'yeo-johnson') to time series or cross-sectional data.
 
     Parameters
     ----------

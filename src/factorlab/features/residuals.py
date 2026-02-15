@@ -4,7 +4,7 @@ from typing import Optional, List, Union
 
 from factorlab.features.base import Feature
 from factorlab.utils import to_dataframe
-from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
+from factorlab.forecasting.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
 class Residuals(Feature):
@@ -112,7 +112,7 @@ class IdiosyncraticReturns(Feature):
     """
     Computes the idiosyncratic returns from regressing asset returns on the market returns.
 
-    This feature is commonly used in financial analysis to isolate the portion of an asset's returns
+    This feature is commonly used in financial analytics to isolate the portion of an asset's returns
     that is not explained by market movements. It represents the asset-specific risk and return,
     independent of broader market trends used for factors like IVOL and ISKEW.
 

@@ -8,7 +8,7 @@ from factorlab.core.base_transform import BaseTransform
 
 class Dispersion(BaseTransform):
     """
-    A factory class for applying various dispersion/risk transformations.
+    A factory class for applying various dispersion/risk transforms.
     This class acts as a facade, delegating the computation to the
     appropriate, specific dispersion class.
 

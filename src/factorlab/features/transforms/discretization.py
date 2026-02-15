@@ -3,7 +3,7 @@ import numpy as np
 from typing import Union
 from factorlab.utils import to_dataframe
 from factorlab.core.base_transform import BaseTransform
-from factorlab.transformations.normalization import Percentile
+from factorlab.features.transforms.normalization import Percentile
 from sklearn.preprocessing import KBinsDiscretizer
 
 
@@ -107,7 +107,7 @@ class Discretize(BaseTransform):
 
     Supports time-series and cross-sectional discretization over rolling, expanding, or fixed windows.
     This transformation is useful for converting continuous variables into discrete categories, which can be beneficial
-    for certain types of financial analysis or modeling.
+    for certain types of financial analytics or modeling.
 
     Parameters
     ----------
