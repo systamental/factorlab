@@ -7,7 +7,7 @@ class CostModelBase(ABC):
     Abstract Base Class for calculating transaction costs (slippage, commission, etc.).
 
     This class defines the interface for all transaction cost models used in the
-    backtesting engine. It does not inherit from BaseTransform as cost calculation
+    backtesting backtesting. It does not inherit from BaseTransform as cost calculation
     is a concurrent, stateless utility function applied at the point of trade execution.
     """
 

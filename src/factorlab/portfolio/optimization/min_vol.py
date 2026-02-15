@@ -4,8 +4,8 @@ from typing import Dict, Any, List, Optional
 import cvxpy as cp
 from warnings import warn
 
-from factorlab.portfolio_opt.base import PortfolioOptimizerBase
-from factorlab.portfolio_opt.estimators.risk import RiskMetrics
+from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
+from factorlab.portfolio.optimization.estimators.risk import RiskMetrics
 
 
 class MinVolOptimizer(PortfolioOptimizerBase):

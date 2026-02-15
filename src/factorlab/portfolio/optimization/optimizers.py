@@ -1,14 +1,14 @@
 from typing import Dict
 
-from factorlab.portfolio_opt.base import PortfolioOptimizerBase
-from factorlab.portfolio_opt.equal_weighted import EqualWeighted
-from factorlab.portfolio_opt.inverse_vol import InverseVolatility
-from factorlab.portfolio_opt.inverse_variance import InverseVariance
-from factorlab.portfolio_opt.signal_weighted import SignalWeighted
-from factorlab.portfolio_opt.min_vol import MinVolOptimizer
-from factorlab.portfolio_opt.risk_parity import RiskParity
-from factorlab.portfolio_opt.max_diversification import MaxDiversification
-from factorlab.portfolio_opt.mvo import MeanVarianceOptimizer
+from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
+from factorlab.portfolio.optimization.equal_weighted import EqualWeighted
+from factorlab.portfolio.optimization.inverse_vol import InverseVolatility
+from factorlab.portfolio.optimization.inverse_variance import InverseVariance
+from factorlab.portfolio.optimization.signal_weighted import SignalWeighted
+from factorlab.portfolio.optimization.min_vol import MinVolOptimizer
+from factorlab.portfolio.optimization.risk_parity import RiskParity
+from factorlab.portfolio.optimization.max_diversification import MaxDiversification
+from factorlab.portfolio.optimization.mvo import MeanVarianceOptimizer
 
 
 class PortfolioOptimizer:

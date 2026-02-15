@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 
-from factorlab.portfolio_opt.base import PortfolioOptimizerBase
-from factorlab.portfolio_opt.estimators.risk import RiskMetrics
+from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
+from factorlab.portfolio.optimization.estimators.risk import RiskMetrics
 
 
 class InverseVariance(PortfolioOptimizerBase):
