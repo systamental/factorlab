@@ -8,8 +8,8 @@ from sklearn.linear_model import LinearRegression, Lasso, LassoCV, LassoLars, La
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
-from factorlab.signal_generation.unsupervised_learning import PCAWrapper
-from factorlab.signal_generation.time_series_analysis import add_lags
+from factorlab.forecasting.unsupervised_learning import PCAWrapper
+from factorlab.forecasting.time_series_analysis import add_lags
 
 
 class SuperviseLearning(ABC):
