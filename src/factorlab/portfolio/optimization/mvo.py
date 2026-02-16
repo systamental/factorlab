@@ -5,7 +5,7 @@ import cvxpy as cp
 from warnings import warn
 
 from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
-from factorlab.risk.estimators.metrics import RiskMetrics
+from factorlab.risk.estimators.covariance import RiskMetrics
 
 
 class MeanVarianceOptimizer(PortfolioOptimizerBase):
