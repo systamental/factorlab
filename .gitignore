@@ -1,7 +1,7 @@
 # Python cache / compiled files
-__pycache__/
+**/__pycache__/
+*.pyc
 *.py[cod]
-*$py.class
 
 
 # C extensions
@@ -129,7 +129,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-**__pycache__
 
 # PyCharm
 .idea/
