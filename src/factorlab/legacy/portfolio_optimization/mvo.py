@@ -4,7 +4,7 @@ from typing import Optional, Union, List, Any
 import cvxpy as cp
 from scipy.optimize import minimize
 
-from factorlab.risk.estimators.returns import ReturnEstimators
+from factorlab.targets.expected_returns import ReturnEstimators
 from factorlab.risk.estimators.covariance import RiskMetrics as RiskEstimators
 from factorlab.visualization.plot import plot_bar
 

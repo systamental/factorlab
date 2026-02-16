@@ -4,7 +4,7 @@ from factorlab.portfolio.cost_models.base import CostModelBase
 from typing import Union
 
 
-class StrategySpec:
+class Strategy:
     """
     Strategy Specification class that encapsulates the definition of a trading strategy.
     It defines the combination of research components (Signal, Optimizer)
