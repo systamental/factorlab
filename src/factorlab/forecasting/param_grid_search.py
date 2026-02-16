@@ -8,7 +8,7 @@ import seaborn as sns
 from PIL import Image
 from importlib import resources
 
-from factorlab.analysis.performance import Performance
+from factorlab.analytics.performance import Performance
 
 
 def feat_partial(feature: Callable,
