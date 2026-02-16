@@ -12,9 +12,9 @@ def macro_z_monthly():
     Fixture for global growth (PMI) and inflation data.
     """
     # read csv from datasets/data
-    pmi_df = pd.read_csv('datasets/data/wld_pmi_monthly.csv', index_col=['date', 'ticker'],
+    pmi_df = pd.read_csv('../../../../tests/datasets/data/wld_pmi_monthly.csv', index_col=['date', 'ticker'],
                          parse_dates=True)
-    infl_df = pd.read_csv('datasets/data/wld_infl_cpi_yoy_monthly.csv', index_col=['date'],
+    infl_df = pd.read_csv('../../../../tests/datasets/data/wld_infl_cpi_yoy_monthly.csv', index_col=['date'],
                           parse_dates=True)
     # macro df
     macro_df = pd.concat([pmi_df.unstack().actual.WL_Manuf_PMI, infl_df.actual], axis=1)

@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
+from factorlab.risk.estimators.covariance import RiskMetrics
 
 
 @pytest.fixture
@@ -10,7 +10,7 @@ def asset_returns():
     """
     Fixture for asset returns.
     """
-    df = pd.read_csv("datasets/data/asset_excess_returns_daily.csv", index_col=0)
+    df = pd.read_csv("../../../../tests/datasets/data/asset_excess_returns_daily.csv", index_col=0)
     df.index = pd.to_datetime(df.index)
     df.index.name = 'date'
 

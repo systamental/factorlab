@@ -2,8 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.feature_engineering.transformations import Transform
-from factorlab.analysis.metrics import Metrics
+from factorlab.analytics.metrics import Metrics
 
 
 @pytest.fixture
@@ -12,7 +11,7 @@ def binance_spot():
     Fixture for crypto OHLCV prices.
     """
     # read csv from datasets/data
-    df = pd.read_csv("datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
+    df = pd.read_csv("../../../../tests/datasets/data/binance_spot_prices.csv", index_col=['date', 'ticker'],
                      parse_dates=['date']).loc[:, : 'close']
 
     return df
@@ -29,7 +28,7 @@ def crypto_log_returns(binance_spot):
     drop_tickers_list = obs[obs < 365].index.to_list()
     df = binance_spot.drop(drop_tickers_list, level=1, axis=0)
 
-    ret = Transform(df).returns().close.unstack()
+    ret = np.log(df.close.unstack()).diff().dropna()
 
     return ret
 
@@ -44,7 +43,7 @@ def crypto_simple_returns(binance_spot):
     drop_tickers_list = obs[obs < 365].index.to_list()
     df = binance_spot.drop(drop_tickers_list, level=1, axis=0)
 
-    ret = Transform(df).returns(method='simple').close.unstack()
+    ret = df.close.unstack().pct_change().dropna()
 
     return ret
 
@@ -55,7 +54,7 @@ def risk_free_rates():
     Fixture for US real rates data.
     """
     # read csv from datasets/data
-    return pd.read_csv("datasets/data/us_real_rates_10y_monthly.csv", index_col=['date'],
+    return pd.read_csv("../../../../tests/datasets/data/us_real_rates_10y_monthly.csv", index_col=['date'],
                        parse_dates=['date']).loc[:, 'US_Rates_3M'] / 100
 
 
