@@ -4,7 +4,7 @@ import statsmodels
 
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
-from factorlab.strategy_analysis.factor_models import FactorModel
+from factorlab.analytics.factor_models import FactorModel
 
 
 @pytest.fixture
