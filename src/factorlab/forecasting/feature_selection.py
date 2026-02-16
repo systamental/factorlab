@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.signal_generation.time_series_analysis import TimeSeriesAnalysis as TSA
+from factorlab.forecasting.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
 class FeatureSelection:
