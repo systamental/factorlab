@@ -5,12 +5,12 @@ from statsmodels.api import OLS
 from statsmodels.tsa.tsatools import add_trend
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.signal_generation.time_series_analysis import rolling_window, expanding_window
+from factorlab.forecasting.time_series_analysis import rolling_window, expanding_window
 
 
 class FactorModel:
     """
-    Factor model for the analysis for alpha or risk factors.
+    Factor model for the analytics for alpha or risk factors.
     """
     def __init__(self,
                  ret: Union[pd.DataFrame, pd.Series, np.array],
