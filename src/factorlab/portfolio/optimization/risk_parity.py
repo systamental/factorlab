@@ -5,7 +5,7 @@ import cvxpy as cp
 from warnings import warn
 
 from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
-from factorlab.portfolio.optimization.estimators.risk import RiskMetrics
+from factorlab.risk.estimators.metrics import RiskMetrics
 
 
 class RiskParity(PortfolioOptimizerBase):

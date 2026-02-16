@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Dict, Any
 
 from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
-from factorlab.portfolio.optimization.estimators.risk import RiskMetrics
+from factorlab.risk.estimators.metrics import RiskMetrics
 
 
 class EqualWeighted(PortfolioOptimizerBase):
