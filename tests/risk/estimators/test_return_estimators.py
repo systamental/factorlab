@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.risk.estimators.returns import ReturnEstimators
+from factorlab.targets.expected_returns import ReturnEstimators
 
 
 @pytest.fixture
