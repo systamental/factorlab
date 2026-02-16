@@ -1,13 +1,11 @@
 import pandas as pd
 import numpy as np
-from typing import Optional, Union, Any
-from statsmodels.api import OLS
-from statsmodels.tsa.tsatools import add_trend
+from typing import Optional, Union
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.signal_generation.time_series_analysis import rolling_window, expanding_window
+from factorlab.forecasting.time_series_analysis import rolling_window, expanding_window
 
-from factorlab.signal_generation.supervised_learning import SPCA
+from factorlab.forecasting.supervised_learning import SPCA
 
 
 class FMP:
@@ -262,7 +260,7 @@ class FMP:
 
 class PortfolioAnalysis:
     """
-    Factor models for the analysis for alpha or risk factors.
+    Factor models for the analytics for alpha or risk factors.
     """
     def __init__(self,
                  returns: Union[pd.DataFrame, pd.Series, np.array],
