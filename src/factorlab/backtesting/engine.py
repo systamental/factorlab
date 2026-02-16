@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 
-from factorlab.conf.strategy.config import StrategyConfig
+from factorlab.strategy.strategy_spec import StrategyConfig
 from factorlab.execution.rebalancer import Rebalancer
 
 

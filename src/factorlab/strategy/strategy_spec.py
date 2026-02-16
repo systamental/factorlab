@@ -4,9 +4,9 @@ from factorlab.portfolio.cost_models.base import CostModelBase
 from typing import Union
 
 
-class StrategyConfig:
+class StrategySpec:
     """
-    Configuration container for a specific trading strategy.
+    Strategy Specification class that encapsulates the definition of a trading strategy.
     It defines the combination of research components (Signal, Optimizer)
     and the execution parameters (rebalance frequency).
 
