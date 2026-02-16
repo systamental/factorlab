@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.signal_generation.supervised_learning import LinearModel, SPCA
+from factorlab.forecasting.supervised_learning import LinearModel, SPCA
 
 
 @pytest.fixture
