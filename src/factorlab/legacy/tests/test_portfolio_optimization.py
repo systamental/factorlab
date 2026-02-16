@@ -3,11 +3,11 @@ import pandas as pd
 import numpy as np
 
 from factorlab.feature_engineering.factors.trend import Trend
-from factorlab.signal_generation.signal import Signal
-from factorlab.strategy_backtesting.portfolio_optimization._portfolio_optimization import PortfolioOptimization
+from factorlab.signals.signal import Signal
+from factorlab.legacy.portfolio_optimization._portfolio_optimization import PortfolioOptimization
 from factorlab.strategy_backtesting.portfolio_optimization.naive import NaiveOptimization
-from factorlab.strategy_backtesting.portfolio_optimization.mvo import MVO
-from factorlab.strategy_backtesting.portfolio_optimization.clustering import HRP, HERC
+from factorlab.legacy.portfolio_optimization.mvo import MVO
+from factorlab.legacy.portfolio_optimization.clustering import HRP, HERC
 
 
 @pytest.fixture

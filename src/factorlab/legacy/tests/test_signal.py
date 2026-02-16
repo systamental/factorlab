@@ -4,7 +4,7 @@ import numpy as np
 
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
-from factorlab.signal_generation.signal import Signal
+from factorlab.signals.signal import Signal
 
 
 @pytest.fixture

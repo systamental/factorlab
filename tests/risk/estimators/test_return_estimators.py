@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.strategy_backtesting.portfolio_optimization.return_estimators import ReturnEstimators
+from factorlab.risk.estimators.returns import ReturnEstimators
 
 
 @pytest.fixture
@@ -139,7 +139,6 @@ class TestReturnEstimators:
         # dtypes
         assert isinstance(self.default_ret_est_instance.exp_returns.iloc[0],  np.float64)
         assert self.default_ret_est_instance.exp_returns.dtypes == 'float64'
-
 
     def test_ewma(self) -> None:
         """

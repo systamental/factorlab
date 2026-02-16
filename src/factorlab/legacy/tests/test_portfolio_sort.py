@@ -4,7 +4,7 @@ import numpy as np
 
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
-from factorlab.strategy_analysis.portfolio_sort import PortfolioSort
+from factorlab.analytics.portfolio_sort import PortfolioSort
 
 
 @pytest.fixture
