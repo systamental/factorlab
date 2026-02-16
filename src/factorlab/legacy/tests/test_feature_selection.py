@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from factorlab.strategy_analysis.feature_selection import FeatureSelection
+from factorlab.forecasting.feature_selection import FeatureSelection
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
 
