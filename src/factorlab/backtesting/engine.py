@@ -2,13 +2,13 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 
-from factorlab.strategy.config import StrategyConfig
+from factorlab.conf.strategy.config import StrategyConfig
 from factorlab.execution.rebalancer import Rebalancer
 
 
-class BacktesterEngine:
+class BacktestEngine:
     """
-    The main execution engine for running a time-series simulation (backtest).
+    The main execution backtesting for running a time-series simulation (backtest).
 
     It consumes a StrategyConfig object and iterates over historical data,
     managing the simulation clock, rebalancing, and P&L accounting.
