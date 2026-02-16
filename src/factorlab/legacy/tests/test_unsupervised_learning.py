@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.signal_generation.unsupervised_learning import PCAWrapper, R2PCA, PPCA
+from factorlab.forecasting.unsupervised_learning import PCAWrapper, R2PCA, PPCA
 
 
 @pytest.fixture

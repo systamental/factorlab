@@ -4,7 +4,7 @@ import numpy as np
 
 import statsmodels
 
-from factorlab.signal_generation.time_series_analysis import add_lags, rolling_window, expanding_window, \
+from factorlab.forecasting.time_series_analysis import add_lags, rolling_window, expanding_window, \
     TimeSeriesAnalysis as TSA
 from factorlab.feature_engineering.transformations import Transform
 from factorlab.feature_engineering.factors.trend import Trend
@@ -228,7 +228,7 @@ def test_create_lags_param_errors(spot_ret, n_lags=0) -> None:
 # noinspection PyUnresolvedReferences
 class TestTimeSeriesAnalysis:
     """
-    Test class for time series analysis methods.
+    Test class for time series analytics methods.
     """
     @pytest.fixture(autouse=True)
     def tsa_setup_default(self, price_mom, spot_ret):
