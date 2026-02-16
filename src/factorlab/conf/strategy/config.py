@@ -1,6 +1,6 @@
 from factorlab.core.pipeline import Pipeline
-from factorlab.portfolio_opt.base import PortfolioOptimizerBase
-from factorlab.cost_model.base import CostModelBase
+from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
+from factorlab.portfolio.cost_models.base import CostModelBase
 from typing import Union
 
 
