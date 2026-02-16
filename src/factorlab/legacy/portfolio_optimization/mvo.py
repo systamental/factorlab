@@ -4,9 +4,9 @@ from typing import Optional, Union, List, Any
 import cvxpy as cp
 from scipy.optimize import minimize
 
-from factorlab.strategy_backtesting.portfolio_optimization.return_estimators import ReturnEstimators
-from factorlab.strategy_backtesting.portfolio_optimization.risk_estimators import RiskEstimators
-from factorlab.data_viz.plot import plot_bar
+from factorlab.risk.estimators.returns import ReturnEstimators
+from factorlab.risk.estimators.covariance import RiskMetrics as RiskEstimators
+from factorlab.visualization.plot import plot_bar
 
 
 class MVO:

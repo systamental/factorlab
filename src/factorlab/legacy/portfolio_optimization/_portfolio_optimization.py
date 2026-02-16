@@ -5,7 +5,7 @@ from typing import Optional, Union, Any, List
 from factorlab.strategy_backtesting.portfolio_optimization.naive import NaiveOptimization
 from factorlab.strategy_backtesting.portfolio_optimization.mvo import MVO
 from factorlab.strategy_backtesting.portfolio_optimization.clustering import HRP, HERC
-from factorlab.data_viz.plot import plot_bar, plot_series
+from factorlab.visualization.plot import plot_bar, plot_series
 
 from joblib import Parallel, delayed
 from tqdm import tqdm
