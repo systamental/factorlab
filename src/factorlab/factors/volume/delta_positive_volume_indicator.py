@@ -25,12 +25,11 @@ class DeltaPositiveVolumeIndicator(VolumeFactor):
         prev_volume = self._shift_by_asset(volume, 1)
         filtered = rel_change.where(volume > prev_volume, 0.0)
 
-        avg_change = self._rolling_stat(filtered, window=self.hist_length, stat="mean")
+        avg_change = self._rolling_mean(filtered, window=self.hist_length)
         norm_window = max(2 * self.hist_length, 250)
-        std_change = self._rolling_stat(
+        std_change = self._rolling_std(
             rel_change,
             window=norm_window,
-            stat="std",
             min_periods=self.hist_length,
         ).replace(0, np.nan)
         pvi = avg_change / std_change

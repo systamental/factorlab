@@ -24,6 +24,6 @@ class VolumeWeightedMAOverMA(VolumeFactor):
         vwma = self._rolling_stat(pv, window=self.hist_length, stat="sum") / self._rolling_stat(
             volume, window=self.hist_length, stat="sum"
         ).replace(0, np.nan)
-        ma = self._rolling_stat(close, window=self.hist_length, stat="mean")
+        ma = self._rolling_mean(close, window=self.hist_length)
 
         return self._safe_log(vwma / ma.replace(0, np.nan))

@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 
 from factorlab.factors.base import Factor
+from factorlab.features.transforms.dispersion import Dispersion
+from factorlab.features.transforms.returns import Difference, Returns
+from factorlab.features.transforms.smoothing import WindowSmoother
 from factorlab.utils import to_dataframe
 
 
@@ -81,20 +84,78 @@ class VolumeFactor(Factor, ABC):
     def _safe_log(self, series: pd.Series) -> pd.Series:
         return np.log(series.where(series > 0, np.nan))
 
+    def _series_frame(self, series: pd.Series, col: str = "value") -> pd.DataFrame:
+        return series.astype("float64").to_frame(col)
+
     def _shift_by_asset(self, series: pd.Series, periods: int) -> pd.Series:
         if self._is_multiindex(series):
             return series.groupby(level=1).shift(periods)
         return series.shift(periods)
 
     def _pct_change_by_asset(self, series: pd.Series, periods: int = 1) -> pd.Series:
-        if self._is_multiindex(series):
-            return series.groupby(level=1).pct_change(periods=periods, fill_method=None)
-        return series.pct_change(periods=periods, fill_method=None)
+        df = self._series_frame(series)
+        ret = Returns(method="pct", input_col="value", output_col="ret", lags=periods).compute(df)
+        return ret["ret"]
 
     def _diff_by_asset(self, series: pd.Series, periods: int = 1) -> pd.Series:
-        if self._is_multiindex(series):
-            return series.groupby(level=1).diff(periods=periods)
-        return series.diff(periods=periods)
+        df = self._series_frame(series)
+        diff = Difference(input_col="value", output_col="diff", lags=periods).compute(df)
+        return diff["diff"]
+
+    def _rolling_mean(
+        self,
+        series: pd.Series,
+        window: int,
+        min_periods: Optional[int] = None,
+    ) -> pd.Series:
+        min_periods = window if min_periods is None else min_periods
+        df = self._series_frame(series)
+        smoothed = WindowSmoother(
+            input_cols="value",
+            output_cols="mean",
+            window_type="rolling",
+            window_size=window,
+            central_tendency="mean",
+            min_periods=min_periods,
+        ).compute(df)
+        return smoothed["mean"]
+
+    def _rolling_median(
+        self,
+        series: pd.Series,
+        window: int,
+        min_periods: Optional[int] = None,
+    ) -> pd.Series:
+        min_periods = window if min_periods is None else min_periods
+        df = self._series_frame(series)
+        smoothed = WindowSmoother(
+            input_cols="value",
+            output_cols="median",
+            window_type="rolling",
+            window_size=window,
+            central_tendency="median",
+            min_periods=min_periods,
+        ).compute(df)
+        return smoothed["median"]
+
+    def _rolling_std(
+        self,
+        series: pd.Series,
+        window: int,
+        min_periods: Optional[int] = None,
+    ) -> pd.Series:
+        min_periods = 2 if min_periods is None else min_periods
+        df = self._series_frame(series)
+        dispersion = Dispersion(
+            method="std",
+            input_col="value",
+            output_col="std",
+            axis="ts",
+            window_type="rolling",
+            window_size=window,
+            min_periods=min_periods,
+        ).compute(df)
+        return dispersion["std"]
 
     def _rolling_stat(
         self,
@@ -116,10 +177,9 @@ class VolumeFactor(Factor, ABC):
         return getattr(series.rolling(window=window, min_periods=min_periods), stat)(**kwargs)
 
     def _compress(self, raw: pd.Series) -> pd.Series:
-        robust_scale = self._rolling_stat(
+        robust_scale = self._rolling_median(
             raw.abs(),
             window=self.compression_window,
-            stat="median",
             min_periods=self.compression_min_periods,
         ).replace(0, np.nan)
 

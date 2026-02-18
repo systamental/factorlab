@@ -29,10 +29,9 @@ class ProductPriceVolume(VolumeFactor):
         volume = df[self.volume_col]
 
         prior_volume = self._shift_by_asset(volume, 1)
-        median_volume = self._rolling_stat(
+        median_volume = self._rolling_median(
             prior_volume,
             window=self.norm_lookback,
-            stat="median",
             min_periods=self.norm_min_periods,
         ).replace(0, np.nan)
         normalized_volume = volume / median_volume
@@ -41,10 +40,9 @@ class ProductPriceVolume(VolumeFactor):
         price_change = self._diff_by_asset(log_close, 1)
         prior_change = self._shift_by_asset(price_change, 1)
 
-        median_change = self._rolling_stat(
+        median_change = self._rolling_median(
             prior_change,
             window=self.norm_lookback,
-            stat="median",
             min_periods=self.norm_min_periods,
         )
         q75 = self._rolling_stat(
@@ -69,4 +67,4 @@ class ProductPriceVolume(VolumeFactor):
     def _compute_volume(self, df: pd.DataFrame) -> pd.Series:
         normalized_volume, normalized_change = self._normalized_volume_and_price_change(df)
         precursor = normalized_volume * normalized_change
-        return self._rolling_stat(precursor, window=self.hist_length, stat="mean")
+        return self._rolling_mean(precursor, window=self.hist_length)

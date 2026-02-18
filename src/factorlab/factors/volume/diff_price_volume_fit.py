@@ -24,10 +24,10 @@ class DiffPriceVolumeFit(VolumeFactor):
         x = self._safe_log(volume)
         y = self._safe_log(close)
 
-        mean_x = self._rolling_stat(x, window=hist_length, stat="mean")
-        mean_y = self._rolling_stat(y, window=hist_length, stat="mean")
-        mean_xy = self._rolling_stat(x * y, window=hist_length, stat="mean")
-        mean_x2 = self._rolling_stat(x * x, window=hist_length, stat="mean")
+        mean_x = self._rolling_mean(x, window=hist_length)
+        mean_y = self._rolling_mean(y, window=hist_length)
+        mean_xy = self._rolling_mean(x * y, window=hist_length)
+        mean_x2 = self._rolling_mean(x * x, window=hist_length)
 
         cov_xy = mean_xy - (mean_x * mean_y)
         var_x = mean_x2 - (mean_x * mean_x)

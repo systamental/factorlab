@@ -20,7 +20,7 @@ class DeltaVolumeMomentum(VolumeFactor):
 
     def _compute_volume(self, df: pd.DataFrame) -> pd.Series:
         volume = df[self.volume_col]
-        short_ma = self._rolling_stat(volume, window=self.hist_length, stat="mean")
-        long_ma = self._rolling_stat(volume, window=self.hist_length * self.multiplier, stat="mean")
+        short_ma = self._rolling_mean(volume, window=self.hist_length)
+        long_ma = self._rolling_mean(volume, window=self.hist_length * self.multiplier)
         vmom = self._safe_log(short_ma / long_ma.replace(0, np.nan))
         return vmom - self._shift_by_asset(vmom, self.delta_len)
