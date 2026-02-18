@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from factorlab.factors.volume.base import VolumeFactor
@@ -16,4 +17,17 @@ class PriceVolumeFit(VolumeFactor):
         return self.output_col or f"{self.name}_{self.hist_length}"
 
     def _compute_volume(self, df: pd.DataFrame) -> pd.Series:
-        return self._raw_price_volume_fit(df, self.hist_length)
+        close = df[self.price_col]
+        volume = df[self.volume_col]
+
+        x = self._safe_log(volume)
+        y = self._safe_log(close)
+
+        mean_x = self._rolling_stat(x, window=self.hist_length, stat="mean")
+        mean_y = self._rolling_stat(y, window=self.hist_length, stat="mean")
+        mean_xy = self._rolling_stat(x * y, window=self.hist_length, stat="mean")
+        mean_x2 = self._rolling_stat(x * x, window=self.hist_length, stat="mean")
+
+        cov_xy = mean_xy - (mean_x * mean_y)
+        var_x = mean_x2 - (mean_x * mean_x)
+        return cov_xy / var_x.replace(0, np.nan)

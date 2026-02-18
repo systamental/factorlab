@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from factorlab.factors.volume.base import VolumeFactor
@@ -17,5 +18,21 @@ class DeltaNegativeVolumeIndicator(VolumeFactor):
         return self.output_col or f"{self.name}_{self.hist_length}_{self.delta_dist}"
 
     def _compute_volume(self, df: pd.DataFrame) -> pd.Series:
-        nvi = self._raw_negative_volume_indicator(df, self.hist_length)
+        close = df[self.price_col]
+        volume = df[self.volume_col]
+
+        rel_change = self._pct_change_by_asset(close, periods=1)
+        prev_volume = self._shift_by_asset(volume, 1)
+        filtered = rel_change.where(volume < prev_volume, 0.0)
+
+        avg_change = self._rolling_stat(filtered, window=self.hist_length, stat="mean")
+        norm_window = max(2 * self.hist_length, 250)
+        std_change = self._rolling_stat(
+            rel_change,
+            window=norm_window,
+            stat="std",
+            min_periods=self.hist_length,
+        ).replace(0, np.nan)
+        nvi = avg_change / std_change
+
         return nvi - self._shift_by_asset(nvi, self.delta_dist)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from factorlab.factors.volume.base import VolumeFactor
@@ -17,4 +18,8 @@ class VolumeMomentum(VolumeFactor):
         return self.output_col or f"{self.name}_{self.hist_length}_{self.multiplier}"
 
     def _compute_volume(self, df: pd.DataFrame) -> pd.Series:
-        return self._raw_volume_momentum(df, self.hist_length, self.multiplier)
+        volume = df[self.volume_col]
+        short_ma = self._rolling_stat(volume, window=self.hist_length, stat="mean")
+        long_ma = self._rolling_stat(volume, window=self.hist_length * self.multiplier, stat="mean")
+        ratio = short_ma / long_ma.replace(0, np.nan)
+        return self._safe_log(ratio)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from factorlab.factors.volume.base import VolumeFactor
@@ -16,4 +17,13 @@ class OnBalanceVolume(VolumeFactor):
         return self.output_col or f"{self.name}_{self.hist_length}"
 
     def _compute_volume(self, df: pd.DataFrame) -> pd.Series:
-        return self._raw_on_balance_volume(df, self.hist_length)
+        close = df[self.price_col]
+        volume = df[self.volume_col]
+
+        close_diff = self._diff_by_asset(close, 1)
+        signed_volume = volume * np.sign(close_diff)
+
+        signed_sum = self._rolling_stat(signed_volume, window=self.hist_length, stat="sum")
+        total_sum = self._rolling_stat(volume, window=self.hist_length, stat="sum")
+
+        return signed_sum / total_sum.replace(0, np.nan)
