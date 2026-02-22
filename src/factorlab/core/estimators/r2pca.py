@@ -4,7 +4,7 @@ from sklearn.decomposition import PCA
 from typing import Optional, Union, Any, Tuple
 from scipy.optimize import linear_sum_assignment
 from factorlab.core.base_transform import BaseTransform
-from factorlab.core.window_outputs import PCAWindowOutputCollector
+from factorlab.core.time_series.window_outputs import PCAWindowOutputCollector
 
 
 class R2PCA(BaseTransform):
