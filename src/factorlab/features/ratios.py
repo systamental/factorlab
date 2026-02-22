@@ -2,7 +2,7 @@ from __future__ import annotations
 import pandas as pd
 from typing import Optional, List, Union
 from factorlab.features.base import Feature
-from factorlab.utils import safe_divide, to_dataframe
+from factorlab.core.utils.utils import safe_divide, to_dataframe
 
 
 class Ratios(Feature):

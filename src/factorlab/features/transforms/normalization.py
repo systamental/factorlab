@@ -12,7 +12,7 @@ from factorlab.features.transforms.dispersion import (
     MinMax
 )
 from factorlab.features.transforms.returns import Difference
-from factorlab.utils import to_dataframe, grouped, maybe_droplevel
+from factorlab.core.utils.utils import to_dataframe, grouped, maybe_droplevel
 from factorlab.core.base_transform import BaseTransform
 
 

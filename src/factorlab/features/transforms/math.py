@@ -3,7 +3,7 @@ import numpy as np
 from typing import Union, Optional, List
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.utils import to_dataframe
+from factorlab.core.utils.utils import to_dataframe
 
 
 class Log(BaseTransform):

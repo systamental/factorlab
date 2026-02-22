@@ -2,7 +2,7 @@ import pandas as pd
 from pandas.core.groupby import DataFrameGroupBy
 from typing import Union, Optional, Any, List
 
-from factorlab.utils import maybe_droplevel, to_dataframe, grouped
+from factorlab.core.utils.utils import maybe_droplevel, to_dataframe, grouped
 from factorlab.core.base_transform import BaseTransform
 
 

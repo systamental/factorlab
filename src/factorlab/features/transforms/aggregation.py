@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Union
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.utils import to_dataframe
+from factorlab.core.utils.utils import to_dataframe
 
 
 class WeightedSum(BaseTransform):

@@ -3,8 +3,8 @@ import pandas as pd
 from typing import Optional, List, Union
 
 from factorlab.features.base import Feature
-from factorlab.utils import to_dataframe
-from factorlab.forecasting.time_series_analysis import TimeSeriesAnalysis as TSA
+from factorlab.core.utils.utils import to_dataframe
+from factorlab.learning.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
 class Residuals(Feature):
