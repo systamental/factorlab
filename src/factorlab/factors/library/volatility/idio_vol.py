@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import List, Union
 
-from factorlab.factors.volatility.base import VolFactor
+from factorlab.factors.library.volatility.base import VolFactor
 from factorlab.features.residuals import IdiosyncraticReturns
 from factorlab.features.transforms.dispersion import StandardDeviation
 

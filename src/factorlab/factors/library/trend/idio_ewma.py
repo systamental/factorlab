@@ -2,7 +2,7 @@ from __future__ import annotations
 import pandas as pd
 from typing import List, Union
 
-from factorlab.factors.trend.base import TrendFactor
+from factorlab.factors.library.trend.base import TrendFactor
 from factorlab.features.residuals import IdiosyncraticReturns
 
 

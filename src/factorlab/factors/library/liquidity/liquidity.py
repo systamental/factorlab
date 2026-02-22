@@ -3,10 +3,10 @@ from typing import Optional, Union, Dict, Type, ClassVar
 
 from factorlab.core.base_transform import BaseTransform
 from factorlab.factors.base import Factor
-from factorlab.factors.liquidity.amihud import Amihud
-from factorlab.factors.liquidity.edge import EDGE
-from factorlab.factors.liquidity.high_low_spread import HighLowSpreadEstimator
-from factorlab.factors.liquidity.notional_value import NotionalValue
+from factorlab.factors.library.liquidity.amihud import Amihud
+from factorlab.factors.library.liquidity.edge import EDGE
+from factorlab.factors.library.liquidity.high_low_spread import HighLowSpreadEstimator
+from factorlab.factors.library.liquidity.notional_value import NotionalValue
 
 
 class Liquidity(Factor):

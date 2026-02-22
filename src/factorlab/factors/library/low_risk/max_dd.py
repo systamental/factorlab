@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import List
 
-from factorlab.factors.low_risk.base import LowRiskFactor
+from factorlab.factors.library.low_risk.base import LowRiskFactor
 
 
 class MaxDD(LowRiskFactor):

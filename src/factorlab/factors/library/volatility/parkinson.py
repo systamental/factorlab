@@ -3,7 +3,7 @@ import numpy as np
 from typing import List
 
 from factorlab.core.utils.utils import grouped, maybe_droplevel
-from factorlab.factors.volatility.base import VolFactor
+from factorlab.factors.library.volatility.base import VolFactor
 
 
 class Parkinson(VolFactor):

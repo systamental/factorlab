@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import List
 
-from factorlab.factors.low_risk.base import LowRiskFactor
+from factorlab.factors.library.low_risk.base import LowRiskFactor
 from factorlab.features.betas import Betas
 
 

@@ -2,10 +2,10 @@ import pandas as pd
 from typing import Optional, Union, Dict, Type, ClassVar
 from factorlab.core.base_transform import BaseTransform
 from factorlab.factors.base import Factor
-from factorlab.factors.reversal.mw_deviation import MWDeviation
-from factorlab.factors.reversal.linear_deviation import LinearDeviation
-from factorlab.factors.reversal.idio_deviation import IdiosyncraticDeviation
-from factorlab.factors.reversal.rsi_detrended import RSIDetrended
+from factorlab.factors.library.reversal.mw_deviation import MWDeviation
+from factorlab.factors.library.reversal.linear_deviation import LinearDeviation
+from factorlab.factors.library.reversal.idio_deviation import IdiosyncraticDeviation
+from factorlab.factors.library.reversal.rsi_detrended import RSIDetrended
 
 
 class Reversal(Factor):

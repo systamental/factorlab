@@ -1,11 +1,11 @@
 import pandas as pd
 from typing import Optional, Union
 from factorlab.factors.base import Factor
-from factorlab.factors.skew.skewness import Skew as SkewnessFactor
-from factorlab.factors.skew._max import Max
-from factorlab.factors.skew._min import Min
-from factorlab.factors.skew.max_min import MaxMin
-from factorlab.factors.skew.idio_skew import ISkew
+from factorlab.factors.library.skew.skewness import Skew as SkewnessFactor
+from factorlab.factors.library.skew._max import Max
+from factorlab.factors.library.skew._min import Min
+from factorlab.factors.library.skew.max_min import MaxMin
+from factorlab.factors.library.skew.idio_skew import ISkew
 
 
 class Skew(Factor):

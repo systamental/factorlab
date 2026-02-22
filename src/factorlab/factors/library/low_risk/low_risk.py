@@ -3,8 +3,8 @@ from typing import Optional, Union, Dict, Type, ClassVar
 
 from factorlab.core.base_transform import BaseTransform
 from factorlab.factors.base import Factor
-from factorlab.factors.low_risk.beta import Beta
-from factorlab.factors.low_risk.max_dd import MaxDD
+from factorlab.factors.library.low_risk.beta import Beta
+from factorlab.factors.library.low_risk.max_dd import MaxDD
 
 
 class LowRisk(Factor):

@@ -1,8 +1,8 @@
 import pandas as pd
 from typing import Optional, Union
 from factorlab.factors.base import Factor
-from factorlab.factors.carry.carry_yield import Yield
-from factorlab.factors.carry.carry_vol import CarryVol
+from factorlab.factors.library.carry.carry_yield import Yield
+from factorlab.factors.library.carry.carry_vol import CarryVol
 
 
 class Carry(Factor):

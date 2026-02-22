@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 
-from factorlab.factors.trend.base import TrendFactor
+from factorlab.factors.library.trend.base import TrendFactor
 from factorlab.features.transforms.smoothing import WindowSmoother
 from factorlab.core.utils.utils import to_dataframe
 

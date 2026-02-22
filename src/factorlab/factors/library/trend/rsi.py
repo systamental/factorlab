@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pandas as pd
-from factorlab.factors.trend.base import TrendFactor
+from factorlab.factors.library.trend.base import TrendFactor
 from factorlab.features.transforms.returns import LogReturn
 from factorlab.features.transforms.smoothing import WindowSmoother
 from factorlab.core.utils.utils import to_dataframe

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from factorlab.factors.volatility.base import VolFactor
+from factorlab.factors.library.volatility.base import VolFactor
 from factorlab.features.transforms.dispersion import StandardDeviation
 
 

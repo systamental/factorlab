@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pandas as pd
-from factorlab.factors.trend.base import TrendFactor
+from factorlab.factors.library.trend.base import TrendFactor
 from factorlab.learning.time_series_analysis import TimeSeriesAnalysis as TSA
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 from factorlab.features.ratios import Ratios
-from factorlab.factors.value.base import ValueFactor
+from factorlab.factors.library.value.base import ValueFactor
 
 
 class ValueRatio(ValueFactor):

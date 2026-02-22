@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import List, Union
 
-from factorlab.factors.skew.base import SkewFactor
+from factorlab.factors.library.skew.base import SkewFactor
 from factorlab.features.residuals import IdiosyncraticReturns
 from factorlab.features.transforms.moments import Skewness
 

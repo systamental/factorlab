@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pandas as pd
 from factorlab.features.residuals import Residuals
-from factorlab.factors.value.base import ValueFactor
+from factorlab.factors.library.value.base import ValueFactor
 
 
 class ValueResidual(ValueFactor):

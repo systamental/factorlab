@@ -1,6 +1,4 @@
-from factorlab.factors.carry.carry_yield import Yield
-from factorlab.factors.carry.carry_vol import CarryVol
-
+from factorlab.factors.library.carry.carry_yield import Yield
 
 __all__ = ["Yield", "CarryVol"]
 

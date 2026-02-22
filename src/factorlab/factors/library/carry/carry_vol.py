@@ -1,6 +1,6 @@
 import pandas as pd
 
-from factorlab.factors.carry.base import CarryFactor
+from factorlab.factors.library.carry.base import CarryFactor
 
 
 class CarryVol(CarryFactor):

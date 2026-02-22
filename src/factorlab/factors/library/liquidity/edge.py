@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import warnings
 
-from factorlab.factors.liquidity.base import LiquidityFactor
+from factorlab.factors.library.liquidity.base import LiquidityFactor
 from factorlab.core.utils.utils import to_dataframe, grouped
 
 

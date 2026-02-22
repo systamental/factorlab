@@ -1,6 +1,4 @@
-from factorlab.factors.value.value_ratio import ValueRatio
-from factorlab.factors.value.value_residual import ValueResidual
-
+from factorlab.factors.library.value.value_ratio import ValueRatio
 
 __all__ = [
     "ValueRatio",

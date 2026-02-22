@@ -3,7 +3,7 @@ import numpy as np
 from typing import Optional
 from factorlab.core.utils.utils import grouped, maybe_droplevel
 
-from factorlab.factors.skew.base import SkewFactor
+from factorlab.factors.library.skew.base import SkewFactor
 
 
 class MaxMin(SkewFactor):
