@@ -3,7 +3,7 @@ from typing import Union, List
 from sklearn.base import BaseEstimator
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.utils import to_dataframe
+from factorlab.core.utils.utils import to_dataframe
 
 
 class SKLearnWrapper(BaseTransform):
