@@ -4,7 +4,7 @@ from typing import Union, Dict
 from scipy.stats import norm, logistic
 
 from factorlab.signals.base import BaseSignal
-from factorlab.utils import grouped
+from factorlab.core.utils.utils import grouped
 
 
 class BuyHoldSignal(BaseSignal):

@@ -3,7 +3,7 @@ from abc import abstractmethod
 from typing import Union, List
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.utils import to_dataframe
+from factorlab.core.utils.utils import to_dataframe
 
 
 class BaseSignal(BaseTransform):
