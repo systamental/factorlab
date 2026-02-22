@@ -8,7 +8,7 @@ from statsmodels.api import OLS, RecursiveLS
 from statsmodels.regression.rolling import RollingOLS
 from statsmodels.tsa.stattools import adfuller, grangercausalitytests
 
-from factorlab.feature_engineering.transformations import Transform
+# from factorlab.feature_engineering.transformations import Transform
 
 
 def rolling_window(callable_obj: Callable,
@@ -302,17 +302,17 @@ class TimeSeriesAnalysis:
         if isinstance(self.features, pd.Series):
             self.features = self.features.to_frame()
 
-        # log
-        if self.log:
-            self.target = Transform(self.target).log()
-            if self.features is not None:
-                self.features = Transform(self.features).log()
-
-        # diff
-        if self.diff:
-            self.target = Transform(self.target).diff().dropna()
-            if self.features is not None:
-                self.features = Transform(self.features).diff().dropna()
+        # # log
+        # if self.log:
+        #     self.target = Transform(self.target).log()
+        #     if self.features is not None:
+        #         self.features = Transform(self.features).log()
+        #
+        # # diff
+        # if self.diff:
+        #     self.target = Transform(self.target).diff().dropna()
+        #     if self.features is not None:
+        #         self.features = Transform(self.features).diff().dropna()
 
         # concat features and target
         self.data = pd.concat([self.target, self.features], axis=1).dropna()
