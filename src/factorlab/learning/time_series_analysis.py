@@ -1,14 +1,20 @@
 import pandas as pd
 import numpy as np
-from typing import Optional, Union, Any, Callable, Dict
+from contextlib import redirect_stdout
+from io import StringIO
+from typing import Optional, Union, Any, Callable, Dict, List, Sequence
 import inspect
 import statsmodels
+import statsmodels.api as sm
 from statsmodels.tsa.tsatools import add_trend
 from statsmodels.api import OLS, RecursiveLS
 from statsmodels.regression.rolling import RollingOLS
 from statsmodels.tsa.stattools import adfuller, grangercausalitytests
 
-# from factorlab.feature_engineering.transformations import Transform
+from factorlab.core.base_transform import BaseTransform
+from factorlab.learning.base import SupervisedLearner
+from factorlab.learning.utils import resolve_feature_columns
+from factorlab.core.utils.utils import to_dataframe
 
 
 def rolling_window(callable_obj: Callable,
@@ -190,7 +196,12 @@ def expanding_window(callable_obj: Callable, data: Union[pd.DataFrame, np.ndarra
     return out
 
 
-def add_lags(data: Union[pd.DataFrame, pd.Series], n_lags: int) -> pd.DataFrame:
+def add_lags(
+    data: Union[pd.DataFrame, pd.Series],
+    n_lags: int,
+    group_level: int = 1,
+    include_original: bool = True,
+) -> pd.DataFrame:
     """
     Adds lags to time series data.
 
@@ -200,6 +211,10 @@ def add_lags(data: Union[pd.DataFrame, pd.Series], n_lags: int) -> pd.DataFrame:
         DataFrame or Series with time series data.
     n_lags: int
         Number of lags to include in the model.
+    group_level: int, default 1
+        Group level for MultiIndex panel data.
+    include_original: bool, default True
+        Include the unlagged input columns.
 
     Returns
     -------
@@ -214,21 +229,16 @@ def add_lags(data: Union[pd.DataFrame, pd.Series], n_lags: int) -> pd.DataFrame:
     if isinstance(data, pd.Series):
         data = data.to_frame()
 
-    # create emtpy list for lagged columns
-    lagged_cols_list = []
-
-    # loop through each column
-    for col in data.columns:
+    parts = [data.copy(deep=True)] if include_original else []
+    for lag in range(1, int(n_lags) + 1):
         if isinstance(data.index, pd.MultiIndex):
-            lagged_cols = [data.groupby(level=1)[col].shift(lag).rename(f"{str(col)}_L{str(lag)}")
-                           for lag in range(1, n_lags + 1)]
+            lagged = data.groupby(level=group_level, observed=True).shift(lag)
         else:
-            lagged_cols = [data[col].shift(lag).rename(f"{str(col)}_L{str(lag)}")
-                           for lag in range(1, n_lags + 1)]
-        lagged_cols_list.extend(lagged_cols)
+            lagged = data.shift(lag)
+        lagged.columns = [f"{col}_L{lag}" for col in data.columns]
+        parts.append(lagged)
 
-    # concat data and lagged values
-    new_df = pd.concat([data] + lagged_cols_list, axis=1)
+    new_df = pd.concat(parts, axis=1)
 
     return new_df
 
@@ -302,17 +312,17 @@ class TimeSeriesAnalysis:
         if isinstance(self.features, pd.Series):
             self.features = self.features.to_frame()
 
-        # # log
-        # if self.log:
-        #     self.target = Transform(self.target).log()
-        #     if self.features is not None:
-        #         self.features = Transform(self.features).log()
-        #
-        # # diff
-        # if self.diff:
-        #     self.target = Transform(self.target).diff().dropna()
-        #     if self.features is not None:
-        #         self.features = Transform(self.features).diff().dropna()
+        # log
+        if self.log:
+            self.target = np.log(self.target.clip(lower=1e-12))
+            if self.features is not None:
+                self.features = np.log(self.features.clip(lower=1e-12))
+
+        # diff
+        if self.diff:
+            self.target = self.target.diff().dropna()
+            if self.features is not None:
+                self.features = self.features.diff().dropna()
 
         # concat features and target
         self.data = pd.concat([self.target, self.features], axis=1).dropna()
@@ -944,3 +954,241 @@ class TimeSeriesAnalysis:
                     self.results.loc[f"{feature}_L{i}", 'p-val'] = res[i][0][test][1]
 
         return self.results.astype(float).round(decimals=4).sort_values(by=test, ascending=False)
+
+
+class LagFeatures(BaseTransform):
+    """
+    Pipeline transform for creating lagged feature columns.
+    """
+
+    def __init__(
+        self,
+        input_cols: Optional[Sequence[str]] = None,
+        n_lags: int = 1,
+        include_original: bool = True,
+        group_level: int = 1,
+    ):
+        super().__init__(
+            name=f"LagFeatures(L{n_lags})",
+            description="Create lagged feature columns with panel-aware grouping.",
+        )
+        if n_lags < 1:
+            raise ValueError("n_lags must be >= 1.")
+        self.input_cols = list(input_cols) if input_cols is not None else None
+        self.n_lags = int(n_lags)
+        self.include_original = bool(include_original)
+        self.group_level = int(group_level)
+        self._resolved_input_cols: list[str] = []
+
+    @property
+    def inputs(self) -> List[str]:
+        return list(self.input_cols or [])
+
+    def fit(
+        self,
+        X: Union[pd.Series, pd.DataFrame],
+        y: Optional[Union[pd.Series, pd.DataFrame]] = None,
+    ) -> "LagFeatures":
+        df = to_dataframe(X).copy(deep=True)
+        self._resolved_input_cols = resolve_feature_columns(
+            df=df,
+            feature_cols=self.input_cols,
+            exclude_cols=[],
+            require_numeric=True,
+        )
+        self._is_fitted = True
+        return self
+
+    def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        if not self._is_fitted:
+            raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform().")
+        df = to_dataframe(X).copy(deep=True)
+        missing = set(self._resolved_input_cols) - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing input columns for LagFeatures transform: {missing}")
+
+        lagged = add_lags(
+            data=df[self._resolved_input_cols],
+            n_lags=self.n_lags,
+            group_level=self.group_level,
+            include_original=self.include_original,
+        )
+        keep_cols = [c for c in lagged.columns if c not in df.columns]
+        if keep_cols:
+            df = pd.concat([df, lagged[keep_cols]], axis=1)
+        return df
+
+
+class StatsmodelsOLSLearner(SupervisedLearner):
+    """
+    OLS learner using statsmodels, exposed with fit/transform pipeline interface.
+    """
+
+    def __init__(
+        self,
+        feature_cols: Optional[Sequence[str]] = None,
+        target_col: Optional[str] = None,
+        output_col: str = "forecast",
+        exclude_cols: Optional[Sequence[str]] = None,
+        add_intercept: bool = True,
+    ):
+        super().__init__(
+            name="StatsmodelsOLSLearner",
+            description="Fit statsmodels OLS and append point predictions.",
+        )
+        self.feature_cols = list(feature_cols) if feature_cols is not None else None
+        self.target_col = target_col
+        self.output_col = output_col
+        self.exclude_cols = list(exclude_cols) if exclude_cols is not None else []
+        self.add_intercept = bool(add_intercept)
+
+        self._resolved_feature_cols: list[str] = []
+        self._model_result = None
+
+    @property
+    def inputs(self) -> List[str]:
+        required = list(self.feature_cols or [])
+        if self.target_col is not None:
+            required.append(self.target_col)
+        return required
+
+    def _prepare_target(
+        self,
+        df: pd.DataFrame,
+        y: Optional[Union[pd.Series, pd.DataFrame]],
+    ) -> pd.Series:
+        if y is not None:
+            y_df = to_dataframe(y).copy(deep=True)
+            if y_df.shape[1] != 1:
+                raise ValueError("y must contain exactly one target column.")
+            return y_df.iloc[:, 0].reindex(df.index)
+        if self.target_col is None:
+            raise ValueError("target_col must be provided when fit(..., y=None).")
+        if self.target_col not in df.columns:
+            raise ValueError(f"target_col '{self.target_col}' not found in input columns.")
+        return df[self.target_col]
+
+    def fit(
+        self,
+        X: Union[pd.Series, pd.DataFrame],
+        y: Optional[Union[pd.Series, pd.DataFrame]] = None,
+    ) -> "StatsmodelsOLSLearner":
+        df = to_dataframe(X).copy(deep=True)
+        self._resolved_feature_cols = resolve_feature_columns(
+            df=df,
+            feature_cols=self.feature_cols,
+            exclude_cols=self.exclude_cols + [self.target_col, self.output_col],
+            require_numeric=True,
+        )
+        target = self._prepare_target(df=df, y=y)
+        X_fit = df[self._resolved_feature_cols]
+        valid = X_fit.notna().all(axis=1) & target.notna()
+        if int(valid.sum()) == 0:
+            raise ValueError("No valid non-NaN rows available for OLS fit.")
+
+        Xv = X_fit.loc[valid]
+        yv = target.loc[valid]
+        if self.add_intercept:
+            Xv = sm.add_constant(Xv, has_constant="add")
+        self._model_result = sm.OLS(yv, Xv).fit()
+        self._is_fitted = True
+        return self
+
+    def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        if not self._is_fitted:
+            raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform().")
+        df = to_dataframe(X).copy(deep=True)
+        missing = set(self._resolved_feature_cols) - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing feature columns for OLS transform: {missing}")
+
+        X_pred = df[self._resolved_feature_cols]
+        valid = X_pred.notna().all(axis=1)
+        pred = pd.Series(np.nan, index=df.index, dtype=float)
+        if int(valid.sum()) > 0:
+            Xv = X_pred.loc[valid]
+            if self.add_intercept:
+                Xv = sm.add_constant(Xv, has_constant="add")
+            pred.loc[valid] = self._model_result.predict(Xv)
+        df[self.output_col] = pred
+        return df
+
+    @property
+    def model_result(self):
+        return self._model_result
+
+
+class TimeSeriesDiagnostics:
+    """
+    Time-series diagnostics helpers for ADF and Granger causality tests.
+    """
+
+    @staticmethod
+    def adf_test(
+        data: Union[pd.Series, pd.DataFrame],
+        regression: str = "c",
+        autolag: Optional[str] = "AIC",
+    ) -> pd.DataFrame:
+        df = to_dataframe(data).copy(deep=True)
+        rows: list[dict[str, float]] = []
+        for col in df.columns:
+            s = df[col].dropna()
+            if s.empty:
+                rows.append(
+                    {
+                        "series": col,
+                        "adf_stat": np.nan,
+                        "p_value": np.nan,
+                        "used_lag": np.nan,
+                        "n_obs": np.nan,
+                    }
+                )
+                continue
+            stat = adfuller(s, regression=regression, autolag=autolag)
+            rows.append(
+                {
+                    "series": col,
+                    "adf_stat": float(stat[0]),
+                    "p_value": float(stat[1]),
+                    "used_lag": int(stat[2]),
+                    "n_obs": int(stat[3]),
+                }
+            )
+        return pd.DataFrame(rows).set_index("series")
+
+    @staticmethod
+    def granger_causality(
+        target: Union[pd.Series, pd.DataFrame],
+        features: Union[pd.Series, pd.DataFrame],
+        max_lag: int = 4,
+        test: str = "ssr_ftest",
+        verbose: bool = False,
+    ) -> pd.DataFrame:
+        y = to_dataframe(target).copy(deep=True)
+        X = to_dataframe(features).copy(deep=True)
+        if y.shape[1] != 1:
+            raise ValueError("target must contain exactly one column.")
+        target_col = y.columns[0]
+
+        rows: list[dict[str, float]] = []
+        for feat in X.columns:
+            pair = pd.concat([y, X[[feat]]], axis=1).dropna()
+            if len(pair) <= max_lag + 1:
+                rows.append({"feature": feat, "min_p_value": np.nan, "best_lag": np.nan})
+                continue
+
+            if verbose:
+                out = grangercausalitytests(pair[[target_col, feat]], maxlag=max_lag, verbose=True)
+            else:
+                with redirect_stdout(StringIO()):
+                    out = grangercausalitytests(pair[[target_col, feat]], maxlag=max_lag)
+            pvals = {lag: float(res[0][test][1]) for lag, res in out.items()}
+            best_lag = min(pvals, key=pvals.get)
+            rows.append(
+                {
+                    "feature": feat,
+                    "min_p_value": pvals[best_lag],
+                    "best_lag": int(best_lag),
+                }
+            )
+        return pd.DataFrame(rows).set_index("feature")

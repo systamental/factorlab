@@ -5,7 +5,7 @@ from statsmodels.api import OLS
 from statsmodels.tsa.tsatools import add_trend
 
 from factorlab.feature_engineering.transformations import Transform
-from factorlab.forecasting.time_series_analysis import rolling_window, expanding_window
+from factorlab.learning.time_series_analysis import rolling_window, expanding_window
 
 
 class FactorModel:

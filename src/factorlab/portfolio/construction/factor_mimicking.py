@@ -1,11 +1,11 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Union
+from sklearn.linear_model import LinearRegression
 
-from factorlab.feature_engineering.transformations import Transform
-from factorlab.forecasting.time_series_analysis import rolling_window, expanding_window
-
-from factorlab.forecasting.supervised_learning import SPCA
+from factorlab.learning.selectors import FeatureSelector
+from factorlab.learning.time_series_analysis import add_lags
+from factorlab.learning.unsupervised.unsupervised_learning import PCAWrapper
 
 
 class FMP:
@@ -42,6 +42,109 @@ class FMP:
         self.factor_cols = None
         self.return_cols = None
 
+    @staticmethod
+    def _orthogonalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Orthogonalize factor columns via sequential residualization.
+        """
+        out = pd.DataFrame(index=df.index, columns=df.columns, dtype=float)
+        cols = list(df.columns)
+        for i, col in enumerate(cols):
+            y = df[col].astype(float)
+            if i == 0:
+                out[col] = y
+                continue
+
+            X_prev = out.iloc[:, :i]
+            valid = X_prev.notna().all(axis=1) & y.notna()
+            if int(valid.sum()) <= i:
+                out[col] = y
+                continue
+
+            beta = np.linalg.lstsq(X_prev.loc[valid].to_numpy(), y.loc[valid].to_numpy(), rcond=None)[0]
+            pred = pd.Series(np.nan, index=df.index, dtype=float)
+            pred.loc[valid] = X_prev.loc[valid].to_numpy() @ beta
+            out[col] = y - pred
+        return out
+
+    @staticmethod
+    def _target_vol(df: pd.DataFrame, ann_vol: float, ann_factor: int) -> pd.DataFrame:
+        """
+        Scale each series to the target annualized volatility.
+        """
+        if ann_factor is None or ann_factor <= 0:
+            return df
+        vol = df.std(ddof=0) * np.sqrt(float(ann_factor))
+        scale = pd.Series(1.0, index=df.columns, dtype=float)
+        valid = vol > 0
+        scale.loc[valid] = float(ann_vol) / vol.loc[valid]
+        return df.mul(scale, axis=1)
+
+    @staticmethod
+    def _expanding_linear_prediction(
+        target: pd.Series,
+        features: pd.DataFrame,
+        min_obs: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """
+        Generate expanding-window one-step-ahead predictions.
+        """
+        df = pd.concat([target.rename("target"), features], axis=1).dropna()
+        if df.empty:
+            return pd.DataFrame(columns=["pred"], index=target.index, dtype=float)
+
+        if min_obs is None:
+            min_obs = max(2, features.shape[1] + 1)
+        min_obs = max(2, int(min_obs))
+        if min_obs > len(df):
+            return pd.DataFrame(columns=["pred"], index=df.index, dtype=float)
+
+        pred = pd.Series(np.nan, index=df.index, dtype=float)
+        for row in range(min_obs, len(df) + 1):
+            train = df.iloc[:row]
+            X_train = train.iloc[:, 1:]
+            y_train = train.iloc[:, 0]
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+            pred.iloc[row - 1] = float(model.predict(X_train.iloc[[-1]])[0])
+
+        return pred.to_frame(name="pred")
+
+    @staticmethod
+    def _supervised_expanding_pcs(
+        target: pd.Series,
+        features: pd.DataFrame,
+        n_feat: int = 30,
+        method: str = "lasso",
+    ) -> pd.DataFrame:
+        """
+        Select top predictive features and compute expanding PCs.
+        """
+        target_name = target.name if target.name is not None else "target"
+        df = pd.concat([features, target.rename(target_name)], axis=1).dropna()
+        if df.empty:
+            return pd.DataFrame(index=features.index)
+
+        selector = FeatureSelector(
+            method=method,
+            feature_cols=list(features.columns),
+            target_col=target_name,
+            n_features=min(int(n_feat), int(features.shape[1])),
+            drop_unselected=True,
+        )
+        selector.fit(df)
+        selected = selector.transform(df).drop(columns=[target_name], errors="ignore")
+        if selected.empty:
+            return pd.DataFrame(index=df.index)
+
+        n_components = max(1, min(selected.shape[0], selected.shape[1]))
+        min_obs = max(2, n_components)
+        pcs = PCAWrapper(selected, n_components=n_components).get_expanding_pcs(min_obs=min_obs)
+        if isinstance(pcs, np.ndarray):
+            pcs = pd.DataFrame(pcs, index=selected.index[-pcs.shape[0]:])
+        pcs.columns = [f"PC{i + 1}" for i in range(pcs.shape[1])]
+        return pcs
+
     def orthogonalize_factors(self, window_type: str = 'fixed', min_obs: int = 12, window_size: int = 36) -> None:
         """
         Orthogonalize factors.
@@ -55,12 +158,32 @@ class FMP:
         window_size: int, default=36
             Window size for rolling window.
         """
+        factors_df = self.factors.copy(deep=True) if isinstance(self.factors, pd.DataFrame) else pd.DataFrame(self.factors)
+
         if window_type == 'rolling':
-            self.factors = rolling_window(Transform, self.factors, method='orthogonalize', window_size=window_size)
+            if window_size < 1 or window_size > len(factors_df):
+                raise ValueError("window_size must be within [1, len(factors)].")
+            rows = []
+            idx = []
+            for row in range(window_size, len(factors_df) + 1):
+                window_df = factors_df.iloc[row - window_size: row]
+                orth_window = self._orthogonalize_dataframe(window_df)
+                rows.append(orth_window.iloc[-1])
+                idx.append(window_df.index[-1])
+            self.factors = pd.DataFrame(rows, index=idx, columns=factors_df.columns)
         elif window_type == 'expanding':
-            self.factors = expanding_window(Transform, self.factors, method='orthogonalize', min_obs=min_obs)
+            if min_obs < 1 or min_obs > len(factors_df):
+                raise ValueError("min_obs must be within [1, len(factors)].")
+            rows = []
+            idx = []
+            for row in range(min_obs, len(factors_df) + 1):
+                window_df = factors_df.iloc[:row]
+                orth_window = self._orthogonalize_dataframe(window_df)
+                rows.append(orth_window.iloc[-1])
+                idx.append(window_df.index[-1])
+            self.factors = pd.DataFrame(rows, index=idx, columns=factors_df.columns)
         else:
-            self.factors = Transform(self.factors).orthogonalize()
+            self.factors = self._orthogonalize_dataframe(factors_df)
 
     def adj_factor_vol(self, ann_vol: int = 0.15) -> pd.DataFrame:
         """
@@ -79,21 +202,29 @@ class FMP:
         # ann factor
         self.get_ann_factor()
         # adj to target vol`
-        self.factors = Transform(self.factors).target_vol(ann_vol=ann_vol, ann_factor=self.ann_factor)
+        factors_df = self.factors.copy(deep=True) if isinstance(self.factors, pd.DataFrame) else pd.DataFrame(self.factors)
+        self.factors = self._target_vol(factors_df, ann_vol=ann_vol, ann_factor=int(self.ann_factor))
 
     def preprocess_data(self) -> None:
         """
         Preprocess data.
         """
-        if isinstance(self.returns, pd.Series) or isinstance(self.returns, pd.DataFrame) and \
-                isinstance(self.factors, pd.DataFrame):
-            self.data = pd.concat([self.returns, self.factors], axis=1).dropna()
+        if isinstance(self.returns, (pd.Series, pd.DataFrame)) and isinstance(self.factors, pd.DataFrame):
+            returns_df = self.returns.to_frame() if isinstance(self.returns, pd.Series) else self.returns.copy(deep=True)
+            factors_df = self.factors.copy(deep=True)
+            self.return_cols = list(returns_df.columns)
+            self.factor_cols = list(factors_df.columns)
+
+            self.data = pd.concat([returns_df, factors_df], axis=1).dropna()
             self.index = self.data.index
-            self.factors = self.data.iloc[:, 1:]
-            self.returns = self.data.iloc[:, 0]
+            self.returns = self.data.loc[:, self.return_cols]
+            self.factors = self.data.loc[:, self.factor_cols]
         elif isinstance(self.returns, np.ndarray) and isinstance(self.factors, np.ndarray):
             n = min(self.returns.shape[0], self.factors.shape[0])
-            self.data = np.concatenate([self.returns[:n].reshape(-1, 1), self.factors[:n].reshape(-1, 1)], axis=1)
+            factors_arr = self.factors[:n]
+            if factors_arr.ndim == 1:
+                factors_arr = factors_arr.reshape(-1, 1)
+            self.data = np.concatenate([self.returns[:n].reshape(-1, 1), factors_arr], axis=1)
             self.factors = self.data[:, 1:]
             self.returns = self.data[:, 0]
         else:
@@ -108,9 +239,9 @@ class FMP:
         ann_factor: int
             Annualization factor.
         """
-        if self.ann_factor is None and isinstance(self.returns, pd.DataFrame) or isinstance(self.returns, pd.Series):
+        if self.ann_factor is None and isinstance(self.returns, (pd.DataFrame, pd.Series)):
             # infer freq
-            if isinstance(self.returns, pd.MultiIndex):
+            if isinstance(self.returns.index, pd.MultiIndex):
                 freq = pd.infer_freq(self.returns.index.levels[0])
             else:
                 freq = pd.infer_freq(self.returns.index)
@@ -149,8 +280,8 @@ class FMP:
         n_lags: int, default=24
             Number of lags to add to pct changes.
         """
-        # convert to pct chg
-        self.convert_to_pct_chg()
+        if self.pct_chg is None:
+            self.convert_to_pct_chg()
         self.pct_chg = add_lags(self.pct_chg, n_lags=n_lags)
 
     def predict_factors(self,
@@ -176,6 +307,9 @@ class FMP:
         fwd: int, default=0
             Number of periods to shift returns forward.
         """
+        # align and clean data
+        self.preprocess_data()
+
         # orthogonalize factors
         self.orthogonalize_factors(window_type=window_type)
         # adj factors to target vol
@@ -187,12 +321,22 @@ class FMP:
 
         # iterate over factors
         for factor in self.factors.columns:
-            # targeted pca
-            pcs = SPCA(self.factors[factor].shift(fwd*-1), self.pct_chg, n_feat=30).get_expanding_pcs()
-            # predict factor
-            pred = linear_reg(self.factors[factor].shift(fwd*-1), pcs, window_type='expanding')
-            # add to df
-            self.factors_pred = pd.concat([self.factors_pred, pred.rename(columns={'pred': factor})], axis=1)
+            target = self.factors[factor].shift(-int(fwd)) if int(fwd) > 0 else self.factors[factor]
+            pcs = self._supervised_expanding_pcs(
+                target=target,
+                features=self.pct_chg,
+                n_feat=30,
+                method="lasso",
+            )
+            if pcs.empty:
+                continue
+
+            pred = self._expanding_linear_prediction(
+                target=target.reindex(pcs.index),
+                features=pcs,
+                min_obs=max(2, pcs.shape[1] + 1),
+            )
+            self.factors_pred = pd.concat([self.factors_pred, pred.rename(columns={"pred": factor})], axis=1)
 
     def factor_exposures(self) -> pd.DataFrame:
         """
@@ -205,8 +349,15 @@ class FMP:
         betas_df = pd.DataFrame(index=idx, columns=factor_cols)
         # iterate over ret columns
         for col in self.returns.columns:
-            betas = linear_reg(self.returns[col], self.factors_pred, output='coef')
-            betas_df.loc[(date, col), :] = betas.values.T
+            df = pd.concat([self.returns[col].rename("ret"), self.factors_pred], axis=1).dropna()
+            if df.empty:
+                continue
+            X = df.iloc[:, 1:]
+            y = df.iloc[:, 0]
+            model = LinearRegression()
+            model.fit(X, y)
+            betas_df.loc[(date, col), self.factors_pred.columns] = model.coef_
+            betas_df.loc[(date, col), "const"] = model.intercept_
         # set betas
         self.betas = betas_df
 

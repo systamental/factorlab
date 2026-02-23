@@ -3,9 +3,14 @@ import numpy as np
 from scipy.linalg import orth
 from scipy.optimize import linear_sum_assignment
 
-from typing import Optional, Union, Any, Tuple
+from typing import Optional, Union, Any, Tuple, Sequence, List
 from sklearn.decomposition import PCA
 from tqdm import tqdm
+
+from factorlab.core.base_transform import BaseTransform
+from factorlab.core.estimators.r2pca import R2PCA as CoreR2PCA
+from factorlab.learning.utils import resolve_feature_columns
+from factorlab.core.utils.utils import to_dataframe
 
 
 class PCAWrapper:
@@ -1134,3 +1139,329 @@ class PPCA:
         self.expl_var_ratio = self.eigenvals / np.sum(self.eigenvals)
 
         return self.expl_var_ratio[: self.n_components]
+
+
+class PCATransform(BaseTransform):
+    """
+    Pipeline-native PCA transform built on top of `PCAWrapper`.
+
+    Notes
+    -----
+    For rolling/expanding point-in-time behavior, wrap this transform with:
+    - `factorlab.core.wrappers.RollingTransform`
+    - `factorlab.core.wrappers.ExpandingTransform`
+    """
+
+    def __init__(
+        self,
+        input_cols: Optional[Sequence[str]] = None,
+        n_components: Optional[int] = None,
+        missing_values: str = "drop_rows",
+        output_prefix: str = "PC",
+        append: bool = True,
+        exclude_cols: Optional[Sequence[str]] = None,
+        **pca_kwargs: Any,
+    ):
+        super().__init__(
+            name="PCATransform",
+            description="Fit PCA on training rows and append component scores.",
+        )
+        self.input_cols = list(input_cols) if input_cols is not None else None
+        self.n_components = n_components
+        self.missing_values = missing_values
+        self.output_prefix = output_prefix
+        self.append = append
+        self.exclude_cols = list(exclude_cols) if exclude_cols is not None else []
+        self.pca_kwargs = pca_kwargs
+
+        self._resolved_input_cols: list[str] = []
+        self._output_cols: list[str] = []
+        self._sign: float = 1.0
+        self._pca_wrapper: Optional[PCAWrapper] = None
+        self.eigenvectors_: Optional[pd.DataFrame] = None
+        self.explained_variance_ratio_: Optional[pd.Series] = None
+
+    @property
+    def inputs(self) -> List[str]:
+        return list(self.input_cols or [])
+
+    def fit(
+        self,
+        X: Union[pd.Series, pd.DataFrame],
+        y: Optional[Union[pd.Series, pd.DataFrame]] = None,
+    ) -> "PCATransform":
+        df = to_dataframe(X).copy(deep=True)
+        self._resolved_input_cols = resolve_feature_columns(
+            df=df,
+            feature_cols=self.input_cols,
+            exclude_cols=self.exclude_cols,
+            require_numeric=True,
+        )
+        X_fit = df[self._resolved_input_cols]
+        self._pca_wrapper = PCAWrapper(
+            data=X_fit,
+            n_components=self.n_components,
+            missing_values=self.missing_values,
+            **self.pca_kwargs,
+        )
+        clean = self._pca_wrapper.data
+        if clean.size == 0 or clean.shape[0] == 0:
+            raise ValueError("No valid rows available for PCA fit after missing-value handling.")
+
+        self._pca_wrapper.pca.fit(clean)
+        train_pcs = self._pca_wrapper.pca.transform(clean)
+        self._sign = 1.0
+        if train_pcs.shape[1] > 0 and np.dot(train_pcs[:, 0], np.mean(clean, axis=1)) < 0:
+            self._sign = -1.0
+
+        n_out = int(train_pcs.shape[1])
+        self._output_cols = [f"{self.output_prefix}{i + 1}" for i in range(n_out)]
+        eig = self._pca_wrapper.pca.components_.T * self._sign
+        self.eigenvectors_ = pd.DataFrame(eig, index=self._resolved_input_cols, columns=self._output_cols)
+        self.explained_variance_ratio_ = pd.Series(
+            self._pca_wrapper.pca.explained_variance_ratio_,
+            index=self._output_cols,
+            name="explained_variance_ratio",
+        )
+
+        self._is_fitted = True
+        return self
+
+    def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        if not self._is_fitted:
+            raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform().")
+        if self._pca_wrapper is None:
+            raise RuntimeError("PCA internal state is not initialized.")
+
+        df = to_dataframe(X).copy(deep=True)
+        missing = set(self._resolved_input_cols) - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing input columns for PCATransform: {missing}")
+
+        X_eval = df[self._resolved_input_cols]
+        valid = X_eval.notna().all(axis=1)
+        pcs_df = pd.DataFrame(np.nan, index=df.index, columns=self._output_cols, dtype=float)
+        if int(valid.sum()) > 0:
+            pcs = self._pca_wrapper.pca.transform(X_eval.loc[valid].to_numpy(dtype=float)) * self._sign
+            pcs_df.loc[valid, self._output_cols] = pcs
+
+        if self.append:
+            out = df.copy(deep=True)
+            out.loc[:, self._output_cols] = pcs_df
+            return out
+        return pcs_df
+
+
+class PPCATransform(BaseTransform):
+    """
+    Pipeline-native probabilistic PCA transform built on top of `PPCA`.
+    """
+
+    def __init__(
+        self,
+        input_cols: Optional[Sequence[str]] = None,
+        n_components: Optional[int] = None,
+        min_obs: int = 10,
+        min_feat: int = 5,
+        thresh: float = 1e-4,
+        output_prefix: str = "PC",
+        append: bool = True,
+        exclude_cols: Optional[Sequence[str]] = None,
+    ):
+        super().__init__(
+            name="PPCATransform",
+            description="Fit probabilistic PCA and append component scores.",
+        )
+        self.input_cols = list(input_cols) if input_cols is not None else None
+        self.n_components = n_components
+        self.min_obs = int(min_obs)
+        self.min_feat = int(min_feat)
+        self.thresh = float(thresh)
+        self.output_prefix = output_prefix
+        self.append = append
+        self.exclude_cols = list(exclude_cols) if exclude_cols is not None else []
+
+        self._resolved_input_cols: list[str] = []
+        self._selected_input_cols: list[str] = []
+        self._output_cols: list[str] = []
+        self._feature_means: Optional[pd.Series] = None
+        self._eigenvectors: Optional[np.ndarray] = None
+        self._ppca_model: Optional[PPCA] = None
+        self.eigenvectors_: Optional[pd.DataFrame] = None
+        self.explained_variance_ratio_: Optional[pd.Series] = None
+
+    @property
+    def inputs(self) -> List[str]:
+        return list(self.input_cols or [])
+
+    def fit(
+        self,
+        X: Union[pd.Series, pd.DataFrame],
+        y: Optional[Union[pd.Series, pd.DataFrame]] = None,
+    ) -> "PPCATransform":
+        df = to_dataframe(X).copy(deep=True)
+        self._resolved_input_cols = resolve_feature_columns(
+            df=df,
+            feature_cols=self.input_cols,
+            exclude_cols=self.exclude_cols,
+            require_numeric=True,
+        )
+        X_fit = df[self._resolved_input_cols]
+        arr = X_fit.to_numpy(dtype=np.float64)
+        valid_cols = np.sum(~np.isnan(arr), axis=0) >= self.min_obs
+        self._selected_input_cols = [c for c, keep in zip(self._resolved_input_cols, valid_cols) if keep]
+        if len(self._selected_input_cols) == 0:
+            raise ValueError("No columns satisfy PPCA minimum-observation requirements.")
+
+        self._ppca_model = PPCA(
+            data=X_fit[self._selected_input_cols],
+            min_obs=self.min_obs,
+            min_feat=self.min_feat,
+            n_components=self.n_components,
+            thresh=self.thresh,
+        )
+        eig = self._ppca_model.get_eigenvectors()
+        if eig.ndim == 1:
+            eig = eig.reshape(-1, 1)
+        n_out = int(min(self._ppca_model.n_components, eig.shape[1]))
+        eig = eig[:, :n_out]
+        self._eigenvectors = eig
+
+        means = np.asarray(self._ppca_model.feature_means, dtype=float)
+        if means.shape[0] != len(self._selected_input_cols):
+            means = np.nanmean(X_fit[self._selected_input_cols].to_numpy(dtype=float), axis=0)
+        self._feature_means = pd.Series(means, index=self._selected_input_cols, dtype=float)
+
+        self._output_cols = [f"{self.output_prefix}{i + 1}" for i in range(n_out)]
+        self.eigenvectors_ = pd.DataFrame(
+            self._eigenvectors,
+            index=self._selected_input_cols,
+            columns=self._output_cols,
+        )
+        evr = np.asarray(self._ppca_model.get_expl_var_ratio(), dtype=float).reshape(-1)[:n_out]
+        self.explained_variance_ratio_ = pd.Series(
+            evr,
+            index=self._output_cols,
+            name="explained_variance_ratio",
+        )
+
+        self._is_fitted = True
+        return self
+
+    def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        if not self._is_fitted:
+            raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform().")
+        if self._eigenvectors is None or self._feature_means is None:
+            raise RuntimeError("PPCA internal state is not initialized.")
+
+        df = to_dataframe(X).copy(deep=True)
+        missing = set(self._selected_input_cols) - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing input columns for PPCATransform: {missing}")
+
+        X_eval = df[self._selected_input_cols]
+        centered = X_eval.sub(self._feature_means, axis=1).fillna(0.0)
+        pcs = centered.to_numpy(dtype=float) @ self._eigenvectors
+        pcs_df = pd.DataFrame(pcs, index=df.index, columns=self._output_cols)
+
+        if self.append:
+            out = df.copy(deep=True)
+            out.loc[:, self._output_cols] = pcs_df
+            return out
+        return pcs_df
+
+
+class R2PCATransform(BaseTransform):
+    """
+    Pipeline-native transform wrapper over core `R2PCA` estimator.
+    """
+
+    def __init__(
+        self,
+        input_cols: Optional[Sequence[str]] = None,
+        n_components: Optional[int] = None,
+        output_prefix: str = "PC",
+        append: bool = True,
+        exclude_cols: Optional[Sequence[str]] = None,
+        **r2_kwargs: Any,
+    ):
+        super().__init__(
+            name="R2PCATransform",
+            description="Fit R2PCA and append component scores.",
+        )
+        self.input_cols = list(input_cols) if input_cols is not None else None
+        self.n_components = n_components
+        self.output_prefix = output_prefix
+        self.append = append
+        self.exclude_cols = list(exclude_cols) if exclude_cols is not None else []
+        self.r2_kwargs = r2_kwargs
+
+        self._resolved_input_cols: list[str] = []
+        self._output_cols: list[str] = []
+        self._r2_model: Optional[CoreR2PCA] = None
+        self.eigenvectors_: Optional[pd.DataFrame] = None
+        self.explained_variance_ratio_: Optional[pd.Series] = None
+
+    @property
+    def inputs(self) -> List[str]:
+        return list(self.input_cols or [])
+
+    def fit(
+        self,
+        X: Union[pd.Series, pd.DataFrame],
+        y: Optional[Union[pd.Series, pd.DataFrame]] = None,
+    ) -> "R2PCATransform":
+        df = to_dataframe(X).copy(deep=True)
+        self._resolved_input_cols = resolve_feature_columns(
+            df=df,
+            feature_cols=self.input_cols,
+            exclude_cols=self.exclude_cols,
+            require_numeric=True,
+        )
+        X_fit = df[self._resolved_input_cols]
+
+        self._r2_model = CoreR2PCA(n_components=self.n_components, **self.r2_kwargs)
+        self._r2_model.fit(X_fit)
+
+        n_out = int(self._r2_model.output.shape[1]) if self._r2_model.output is not None else int(
+            self.n_components or X_fit.shape[1]
+        )
+        self._output_cols = [f"{self.output_prefix}{i + 1}" for i in range(n_out)]
+
+        if self._r2_model.eigenvecs is not None:
+            eig = self._r2_model.eigenvecs.copy(deep=True)
+            eig.columns = self._output_cols[: eig.shape[1]]
+            self.eigenvectors_ = eig
+        if self._r2_model.expl_var_ratio is not None:
+            if isinstance(self._r2_model.expl_var_ratio, pd.DataFrame):
+                vals = self._r2_model.expl_var_ratio.iloc[-1].to_numpy(dtype=float)
+            else:
+                vals = np.asarray(self._r2_model.expl_var_ratio, dtype=float).reshape(-1)
+            self.explained_variance_ratio_ = pd.Series(
+                vals[: len(self._output_cols)],
+                index=self._output_cols,
+                name="explained_variance_ratio",
+            )
+
+        self._is_fitted = True
+        return self
+
+    def transform(self, X: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
+        if not self._is_fitted:
+            raise RuntimeError(f"Transform '{self.name}' must be fitted before calling transform().")
+        if self._r2_model is None:
+            raise RuntimeError("R2PCA internal state is not initialized.")
+
+        df = to_dataframe(X).copy(deep=True)
+        missing = set(self._resolved_input_cols) - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing input columns for R2PCATransform: {missing}")
+
+        pcs = self._r2_model.transform(df[self._resolved_input_cols]).copy(deep=True)
+        pcs.columns = self._output_cols[: pcs.shape[1]]
+
+        if self.append:
+            out = df.copy(deep=True)
+            out.loc[:, pcs.columns] = pcs
+            return out
+        return pcs

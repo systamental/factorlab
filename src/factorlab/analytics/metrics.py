@@ -3,7 +3,7 @@ import pandas as pd
 import inspect
 
 from typing import Union, Optional, List
-from factorlab.forecasting.time_series_analysis import TimeSeriesAnalysis as TSA
+from factorlab.learning.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
 class Metrics:
