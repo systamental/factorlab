@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from factorlab.targets import ForwardTargetSpec
+from factorlab.targets import ForwardDirectionTarget, ForwardTargetSpec
 
 
 def _make_panel(n_days: int = 15, tickers: tuple[str, ...] = ("BTC", "ETH"), seed: int = 9) -> pd.DataFrame:
@@ -34,3 +34,23 @@ def test_forward_target_spec_trainable_mask_excludes_labels_past_train_end():
         & (pd.DatetimeIndex(label_end.values) > train_end)
     )
     assert not mask[leaky_rows].any()
+
+
+def test_forward_direction_target_preserves_nan_tail_labels():
+    X = _make_panel(n_days=8, tickers=("BTC",))
+    target = ForwardDirectionTarget(
+        input_col="close",
+        output_col="direction",
+        horizon=2,
+        threshold=0.0,
+        group_level=1,
+    )
+    target.fit(X)
+    out = target.transform(X)["direction"]
+
+    unique_dates = out.index.get_level_values("date").unique().sort_values()
+    tail_dates = unique_dates[-2:]
+    tail_mask = out.index.get_level_values("date").isin(tail_dates)
+
+    assert out[tail_mask].isna().all()
+    assert out[~tail_mask].notna().any()

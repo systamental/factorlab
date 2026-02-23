@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from factorlab.portfolio.construction.factor_mimicking import FMP
 
@@ -47,3 +48,14 @@ def test_factor_mimicking_predict_and_exposure_runs():
     assert fmp.betas is not None
     assert "const" in fmp.betas.columns
     assert set(factors.columns).issubset(set(fmp.betas.columns))
+
+
+def test_expanding_linear_prediction_is_strictly_one_step_ahead():
+    idx = pd.date_range("2020-01-01", periods=10, freq="D")
+    features = pd.DataFrame({"x": np.arange(len(idx), dtype=float)}, index=idx)
+    target = pd.Series(np.arange(len(idx), dtype=float), index=idx, name="target")
+
+    pred = FMP._expanding_linear_prediction(target=target, features=features, min_obs=3)["pred"]
+
+    assert pd.isna(pred.iloc[2])
+    assert pred.iloc[3] == pytest.approx(3.0)

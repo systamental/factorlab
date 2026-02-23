@@ -96,17 +96,18 @@ class FMP:
         if min_obs is None:
             min_obs = max(2, features.shape[1] + 1)
         min_obs = max(2, int(min_obs))
-        if min_obs > len(df):
+        if min_obs >= len(df):
             return pd.DataFrame(columns=["pred"], index=df.index, dtype=float)
 
         pred = pd.Series(np.nan, index=df.index, dtype=float)
-        for row in range(min_obs, len(df) + 1):
+        for row in range(min_obs, len(df)):
             train = df.iloc[:row]
             X_train = train.iloc[:, 1:]
             y_train = train.iloc[:, 0]
+            X_next = df.iloc[[row], 1:]
             model = LinearRegression()
             model.fit(X_train, y_train)
-            pred.iloc[row - 1] = float(model.predict(X_train.iloc[[-1]])[0])
+            pred.iloc[row] = float(model.predict(X_next)[0])
 
         return pred.to_frame(name="pred")
 

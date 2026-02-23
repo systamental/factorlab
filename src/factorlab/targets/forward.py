@@ -111,7 +111,10 @@ class ForwardDirectionTarget(ForwardReturnTarget):
 
     def _compute_target(self, df: pd.DataFrame) -> pd.Series:
         fwd_ret = super()._compute_target(df)
-        return (fwd_ret > self.threshold).astype(float)
+        out = pd.Series(np.nan, index=fwd_ret.index, dtype=float)
+        valid = fwd_ret.notna()
+        out.loc[valid] = (fwd_ret.loc[valid] > self.threshold).astype(float)
+        return out
 
 
 @dataclass(frozen=True)

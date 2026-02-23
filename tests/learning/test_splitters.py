@@ -86,3 +86,27 @@ def test_splitter_rejects_unsorted_index():
     )
     with pytest.raises(ValueError, match="index must be sorted"):
         _ = list(splitter.split(X_unsorted, y_unsorted))
+
+
+def test_splitter_indices_align_to_original_rows_after_nan_drop():
+    X, y = _make_xy(n_days=140, n_assets=3)
+    y = y.copy()
+    drop_dates = X.index.get_level_values("date").unique()[:8]
+    drop_mask = X.index.get_level_values("date").isin(drop_dates)
+    y.loc[drop_mask] = np.nan
+
+    splitter = ExpandingIncrementPanelSplit(
+        train_intervals=10,
+        test_size=5,
+        min_train_periods=40,
+        lookahead=1,
+        embargo=0,
+        drop_nas=True,
+    )
+
+    valid_rows = y.notna().to_numpy()
+    splits = list(splitter.split(X, y))
+    assert len(splits) > 0
+    for train_idx, test_idx in splits:
+        selected = np.concatenate([train_idx, test_idx])
+        assert valid_rows[selected].all()

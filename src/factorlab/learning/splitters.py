@@ -42,7 +42,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         self,
         X: pd.DataFrame,
         y: Optional[Union[pd.Series, pd.DataFrame]],
-    ) -> tuple[pd.DataFrame, pd.DatetimeIndex, pd.DatetimeIndex]:
+    ) -> tuple[pd.DataFrame, np.ndarray, pd.DatetimeIndex, pd.DatetimeIndex]:
         validate_panel_xy(X=X, y=y, date_level=self.date_level, require_multiindex=True)
 
         if y is None:
@@ -56,9 +56,13 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 Xy = Xy.dropna(subset=y_df.columns)
                 Xy = Xy.dropna(subset=X.columns, how="all")
 
+        row_positions = X.index.get_indexer(Xy.index)
+        if np.any(row_positions < 0):
+            raise RuntimeError("Failed to map filtered split rows back to original X index positions.")
+
         dates = extract_dates(Xy.index, date_level=self.date_level)
         unique_dates = unique_sorted_dates(Xy.index, date_level=self.date_level)
-        return Xy, dates, unique_dates
+        return Xy, row_positions, dates, unique_dates
 
     @abstractmethod
     def split(
@@ -93,7 +97,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
     def split(self, X, y=None, groups=None):
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
-        Xy, dates, unique_dates = self._prepare_xy(X=X, y=y)
+        _, row_positions, dates, unique_dates = self._prepare_xy(X=X, y=y)
 
         intervals = np.array_split(unique_dates, self.n_splits + 1)
         for i in range(self.n_splits):
@@ -111,8 +115,8 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
             if len(train_dates) == 0:
                 continue
 
-            train_idx = np.where(mask_from_dates(dates, train_dates))[0]
-            test_idx = np.where(mask_from_dates(dates, pd.DatetimeIndex(test_dates)))[0]
+            train_idx = row_positions[mask_from_dates(dates, train_dates)]
+            test_idx = row_positions[mask_from_dates(dates, pd.DatetimeIndex(test_dates))]
             if len(test_idx) == 0:
                 continue
             yield train_idx, test_idx
@@ -132,7 +136,7 @@ class RollingKFoldPanelSplit(BasePanelSplit):
     def split(self, X, y=None, groups=None):
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
-        _, dates, unique_dates = self._prepare_xy(X=X, y=y)
+        _, row_positions, dates, unique_dates = self._prepare_xy(X=X, y=y)
         intervals = np.array_split(unique_dates, self.n_splits)
 
         for i in range(self.n_splits):
@@ -151,8 +155,8 @@ class RollingKFoldPanelSplit(BasePanelSplit):
             if len(train_dates) == 0:
                 continue
 
-            train_idx = np.where(mask_from_dates(dates, train_dates))[0]
-            test_idx = np.where(mask_from_dates(dates, test_dates))[0]
+            train_idx = row_positions[mask_from_dates(dates, train_dates)]
+            test_idx = row_positions[mask_from_dates(dates, test_dates)]
             if len(test_idx) == 0:
                 continue
             yield train_idx, test_idx
@@ -189,7 +193,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
     def split(self, X, y=None, groups=None):
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
-        _, dates, unique_dates = self._prepare_xy(X=X, y=y)
+        _, row_positions, dates, unique_dates = self._prepare_xy(X=X, y=y)
         n_dates = len(unique_dates)
 
         train_end = self.min_train_periods
@@ -209,8 +213,8 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             if len(train_dates) == 0 or len(test_dates) == 0:
                 break
 
-            train_idx = np.where(mask_from_dates(dates, train_dates))[0]
-            test_idx = np.where(mask_from_dates(dates, test_dates))[0]
+            train_idx = row_positions[mask_from_dates(dates, train_dates)]
+            test_idx = row_positions[mask_from_dates(dates, test_dates)]
             if len(test_idx) > 0:
                 yield train_idx, test_idx
 
@@ -256,7 +260,7 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
     def split(self, X, y=None, groups=None):
         if groups is not None:
             raise ValueError("groups is not supported by this splitter.")
-        _, dates, unique_dates = self._prepare_xy(X=X, y=y)
+        _, row_positions, dates, unique_dates = self._prepare_xy(X=X, y=y)
 
         exp_offset = self._FREQ_MAP[self.expansion_freq]
         test_offset = self._FREQ_MAP[self.test_freq]
@@ -284,8 +288,8 @@ class ExpandingFrequencyPanelSplit(BasePanelSplit):
             if len(test_dates) == 0:
                 break
 
-            train_idx = np.where(mask_from_dates(dates, train_dates))[0]
-            test_idx = np.where(mask_from_dates(dates, test_dates))[0]
+            train_idx = row_positions[mask_from_dates(dates, train_dates)]
+            test_idx = row_positions[mask_from_dates(dates, test_dates)]
             if len(test_idx) > 0:
                 yield train_idx, test_idx
 
