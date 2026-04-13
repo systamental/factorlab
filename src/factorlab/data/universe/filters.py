@@ -1,8 +1,8 @@
 import pandas as pd
 
 from factorlab.core.base_transform import BaseTransform
-from factorlab.factors.liquidity.notional_value import NotionalValue
-from factorlab.utils import to_dataframe
+from factorlab.factors.library.liquidity import NotionalValue
+from factorlab.core.utils.utils import to_dataframe
 
 
 class LiquidityFilter(BaseTransform):
