@@ -2,7 +2,7 @@ from __future__ import annotations
 import pandas as pd
 
 from factorlab.factors.library.reversal.base import ReversalFactor
-from factorlab.forecasting.time_series_analysis import TimeSeriesAnalysis as TSA
+from factorlab.learning.time_series_analysis import TimeSeriesAnalysis as TSA
 
 
 class LinearDeviation(ReversalFactor):
