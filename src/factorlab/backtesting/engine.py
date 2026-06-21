@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 
-from factorlab.strategy.strategy import Strategy
+from factorlab.strategy.strategy import StrategySpec
+from factorlab.core.walk_forward_runner import WalkForwardRunner
 from factorlab.execution.rebalancer import Rebalancer
 
 
@@ -15,7 +16,7 @@ class BacktestEngine:
     """
 
     def __init__(self,
-                 config: StrategyConfig,
+                 config: StrategySpec,
                  data: pd.DataFrame,
                  initial_capital: float = 1_000_000.0,
                  verbose: bool = True,
@@ -54,6 +55,7 @@ class BacktestEngine:
         self.gross_exposure = None
         self.portfolio_return = None
         self.results: Dict[str, pd.DataFrame] = {}
+        self.walk_forward_runner = None
 
         # Frequency map for runtime checks
         self.freq_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4}
@@ -70,8 +72,27 @@ class BacktestEngine:
         """
         print("--- Computing data pipeline... ---")
 
-        # run the full data pipeline
-        self.pipeline = self.config.data_pipeline.fit_transform(self.data)
+        learning_spec = getattr(self.config, "learning_spec", None)
+        if learning_spec is None:
+            # run the full data pipeline
+            self.pipeline = self.config.data_pipeline.fit_transform(self.data)
+        else:
+            y = learning_spec.y
+            if isinstance(y, str):
+                if y not in self.data.columns:
+                    raise ValueError(f"learning_spec.y='{y}' is not a column in input data.")
+                y = self.data[y]
+
+            self.walk_forward_runner = WalkForwardRunner(
+                pipeline=self.config.data_pipeline,
+                splitter=learning_spec.splitter,
+                y=y,
+                target_spec=learning_spec.target_spec,
+                strict_temporal=learning_spec.strict_temporal,
+                date_level=learning_spec.date_level,
+                show_progress=learning_spec.show_progress,
+            )
+            self.pipeline = self.walk_forward_runner.run(self.data)
 
         print("--- Data pipeline complete. ---\n")
 

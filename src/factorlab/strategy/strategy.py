@@ -1,10 +1,28 @@
 from factorlab.core.pipeline import Pipeline
+from factorlab.learning.splitters import BasePanelSplit
 from factorlab.portfolio.optimization.base import PortfolioOptimizerBase
 from factorlab.portfolio.cost_models.base import CostModelBase
-from typing import Union
+from factorlab.targets.forward import ForwardTargetSpec
+from typing import Optional, Union
+from dataclasses import dataclass
+import pandas as pd
 
 
-class Strategy:
+@dataclass
+class LearningSpec:
+    """
+    Optional walk-forward learning configuration for strategy-level orchestration.
+    """
+
+    splitter: BasePanelSplit
+    y: Optional[Union[str, pd.Series, pd.DataFrame]] = None
+    target_spec: Optional[ForwardTargetSpec] = None
+    strict_temporal: bool = True
+    date_level: int = 0
+    show_progress: bool = False
+
+
+class StrategySpec:
     """
     Strategy Specification class that encapsulates the definition of a trading strategy.
     It defines the combination of research components (Signal, Optimizer)
@@ -19,6 +37,7 @@ class Strategy:
                  data_pipeline: Pipeline,
                  optimizer: PortfolioOptimizerBase,
                  cost_model: CostModelBase,
+                 learning_spec: Optional[LearningSpec] = None,
                  rebal_freq: Union[str, int] = 'd'):
         """
         Parameters
@@ -41,9 +60,14 @@ class Strategy:
         self.data_pipeline = data_pipeline
         self.optimizer = optimizer
         self.cost_model = cost_model
+        self.learning_spec = learning_spec
         self.rebal_freq = rebal_freq
 
         # add other global constraints here, like max_leverage,
         # max_turnover, etc., as the strategy becomes more complex.
 
         print(f"Strategy Config '{self.name}' created.")
+
+
+# Backward-compat alias — remove after notebooks updated to StrategySpec
+Strategy = StrategySpec
